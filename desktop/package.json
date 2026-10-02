@@ -1,0 +1,22 @@
+{
+  "name": "devone-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DevOne desktop app (Electron shell around the Next.js server).",
+  "license": "MIT",
+  "author": "Sean Gulliver Doctora",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imnotseanwtf/devone.git"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "prepare-server": "node prepare-server.mjs",
+    "dist": "node prepare-server.mjs && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.0.12"
+  }
+}
