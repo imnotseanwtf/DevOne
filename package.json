@@ -69,7 +69,7 @@
     "dotenv": "^17.4.2",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
-    "kbar": "^0.1.0-beta.48",
+    "kbar": "^1.0.0",
     "mammoth": "^1.12.3",
     "marked": "^18.0.12",
     "mysql2": "^3.24.4",
