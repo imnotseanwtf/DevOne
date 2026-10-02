@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in DevOne isn't working as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project
+        2. Go to Board
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DevOne version or commit
+      placeholder: e.g. v0.1.0 or c60d13f
+  - type: dropdown
+    id: hosting
+    attributes:
+      label: How do you run DevOne?
+      options:
+        - Docker Compose
+        - Vercel
+        - Local development (bun run dev)
+        - Other
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove tokens, passwords and other secrets before pasting.

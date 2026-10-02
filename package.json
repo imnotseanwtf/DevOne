@@ -2,6 +2,17 @@
   "name": "dev-one",
   "version": "1.0.0",
   "private": true,
+  "description": "Self-hosted developer workspace: board, Git, databases, API client, docs, drawings, pipelines and SSH terminal in one place.",
+  "homepage": "https://github.com/imnotseanwtf/devone",
+  "bugs": {
+    "url": "https://github.com/imnotseanwtf/devone/issues"
+  },
+  "license": "MIT",
+  "author": "Sean Gulliver Doctora",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imnotseanwtf/devone.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

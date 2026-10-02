@@ -68,4 +68,18 @@ back to `false` and restart the web service. New-user registration is disabled b
 Open [http://localhost:3000](http://localhost:3000). Use TLS in production so secure session
 cookies cannot travel over plaintext connections.
 
-The project is based on the MIT-licensed [Next Shadcn Dashboard Starter](https://github.com/Kiranism/next-shadcn-dashboard-starter).
+## Contributing
+
+Contributions are welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and open pull requests against the `dev` branch.
+
+| Branch | Purpose |
+|---|---|
+| `dev` | Day-to-day development; pull requests go here |
+| `staging` | Release candidates, tested before they ship |
+| `main` | Released, production-ready code |
+
+Found a security problem? Please report it privately; see [SECURITY.md](SECURITY.md). Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+DevOne is released under the [MIT License](LICENSE). It began from the MIT-licensed [Next Shadcn Dashboard Starter](https://github.com/Kiranism/next-shadcn-dashboard-starter).
