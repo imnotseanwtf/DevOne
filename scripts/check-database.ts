@@ -519,6 +519,12 @@ try {
     process.env.DEVONE_DEMO_MODE = 'true';
     const first = await createDemoAccount();
     const second = await createDemoAccount();
+    // Visitors can't pull each other in: every demo account is called "demo".
+    const { addProjectMemberByUsername } = await import('../src/features/projects/service');
+    await assert.rejects(
+      () => addProjectMemberByUsername(first.userId, first.projectId, 'demo'),
+      /public demo/
+    );
     delete process.env.DEVONE_DEMO_MODE;
     assert.notEqual(first.projectId, second.projectId);
 

@@ -1,5 +1,6 @@
 'use server';
 
+import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import {
   getRepositoryFile,
   getRepositoryTree,
@@ -45,6 +46,7 @@ export async function linkRepositoryAction(input: unknown): Promise<GitActionRes
   const user = await requireUser();
   const parsed = linkSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Select a repository to link' };
+  if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
 
   try {
     await linkRepositoryToProject(
@@ -106,6 +108,7 @@ export async function linkRepositoryToNewProjectAction(input: unknown): Promise<
   const parsed = linkNewProjectSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Select a repository to link' };
 
+  if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
   try {
     const { project, joined } = await linkRepositoryToNewProject(
       user.id,

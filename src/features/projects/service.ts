@@ -1,4 +1,5 @@
 import { IssueFieldKind, Prisma, ProjectRole } from '@/generated/prisma/client';
+import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { getPrisma } from '@/lib/db/prisma';
 import { toProjectSlug, withSlugSuffix } from '@/lib/projects/slug';
 import { toIssuePrefix, withPrefixSuffix } from '@/lib/issues/keys';
@@ -129,6 +130,8 @@ export async function addProjectMemberByUsername(
   username: string,
   role: ProjectRole = ProjectRole.MEMBER
 ) {
+  // Every demo account is called "demo": adding one would pull in another visitor.
+  if (isDemoMode()) throw new ProjectAccessError(DEMO_DISABLED_MESSAGE);
   await requireProjectOwner(userId, projectId);
   const target = await getPrisma().user.findFirst({
     where: { username: { equals: username.trim(), mode: 'insensitive' } },

@@ -187,6 +187,8 @@ export async function linkRepositoryToProject(
   connectionId: string,
   providerRepositoryId: string
 ) {
+  // Demo visitors share one sample repository; linking it could join another visitor's project.
+  if (isDemoMode()) throw new RepositoryAccessError();
   await requireProjectMembership(userId, projectId);
   const connection = await requireConnection(userId, connectionId);
 
@@ -260,6 +262,7 @@ export async function linkRepositoryToNewProject(
   providerRepositoryId: string,
   projectName?: string
 ) {
+  if (isDemoMode()) throw new RepositoryAccessError();
   const connection = await requireConnection(userId, connectionId);
 
   const token = await connectionToken(connection);
