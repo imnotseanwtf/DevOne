@@ -1766,7 +1766,9 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
 {
   const { isDemoMode, DEMO_DISABLED_MESSAGE } = await import('../src/lib/demo');
   assert.equal(isDemoMode({ DEVONE_DEMO_MODE: 'true' }), true);
-  assert.equal(isDemoMode({ DEVONE_DEMO_MODE: '1' }), false);
+  assert.equal(isDemoMode({ DEVONE_DEMO_MODE: '1' }), true);
+  assert.equal(isDemoMode({ DEVONE_DEMO_MODE: ' True ' }), true);
+  assert.equal(isDemoMode({ DEVONE_DEMO_MODE: 'false' }), false);
   assert.equal(isDemoMode({}), false);
 
   const { providerIsEnabled } = await import('../src/features/auth/service');
@@ -1797,4 +1799,5 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
   assert.equal(showLandingPage({ DEVONE_LANDING_PAGE: 'true' }), true);
   assert.equal(showLandingPage({ DEVONE_DEMO_MODE: 'true' }), true);
   assert.equal(showLandingPage({ DEVONE_LANDING_PAGE: 'false' }), false);
+  assert.equal(showLandingPage({ DEVONE_LANDING_PAGE: 'TRUE' }), true);
 }
