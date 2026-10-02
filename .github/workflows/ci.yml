@@ -18,7 +18,7 @@ jobs:
     name: Type check, lint, format, unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
@@ -48,7 +48,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://devone:devone@localhost:5432/devone
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
