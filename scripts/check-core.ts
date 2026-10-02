@@ -1789,3 +1789,12 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
     delete process.env.DEVONE_DEMO_MODE;
   }
 }
+
+// The landing page is opt-in: self-hosted installs go straight to sign-in.
+{
+  const { showLandingPage } = await import('../src/lib/site');
+  assert.equal(showLandingPage({}), false);
+  assert.equal(showLandingPage({ DEVONE_LANDING_PAGE: 'true' }), true);
+  assert.equal(showLandingPage({ DEVONE_DEMO_MODE: 'true' }), true);
+  assert.equal(showLandingPage({ DEVONE_LANDING_PAGE: 'false' }), false);
+}

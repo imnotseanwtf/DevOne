@@ -49,6 +49,12 @@ that environment points at. To deploy `staging` or `dev` later, give that branch
 `DATABASE_URL` and `DEVONE_ENCRYPTION_KEY` in Vercel first, then remove it from
 `git.deploymentEnabled`.
 
+## Landing page
+
+Signed-out visitors to `/` go straight to the sign-in page. The marketing landing page (with the
+product tour) is only for DevOne's own website: set `DEVONE_LANDING_PAGE=true` to show it. A
+public demo (below) shows it automatically.
+
 ## Public demo
 
 Set `DEVONE_DEMO_MODE=true` to run a public demo that anyone can try without signing up. Run it
