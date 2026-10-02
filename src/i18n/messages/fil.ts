@@ -348,12 +348,22 @@ export const fil: MessageShape<typeof en> = {
     admin_user_disable: 'nag-disable ng user',
     admin_user_enable: 'nag-enable ng user'
   },
+  demo: {
+    banner:
+      'Nasa demo ka ng DevOne. Mabubura ang sample project mo sa loob ng {hours} oras, at naka-off ang lahat ng kumokonekta sa ibang machine.',
+    selfHost: 'I-self-host ang DevOne',
+    title: 'Subukan ang DevOne',
+    body: 'Magkaroon ng sariling sample project na masusubukan sa loob ng 24 oras. Walang sign-up, walang ii-install.',
+    start: 'Simulan ang demo',
+    note: 'Pampublikong demo ito, kaya naka-off ang pag-sign in gamit ang GitHub o GitLab.'
+  },
   landing: {
     nav: {
       features: 'Mga feature',
       security: 'Seguridad',
       selfHost: 'Self-host',
-      signIn: 'Mag-sign in'
+      signIn: 'Mag-sign in',
+      github: 'DevOne sa GitHub'
     },
     hero: {
       eyebrow: 'Self-hosted na workspace para sa developer',
@@ -361,6 +371,7 @@ export const fil: MessageShape<typeof en> = {
       titleAccent: 'Iisang lugar.',
       body: 'Pinagsasama ng DevOne ang board, Git, database, API client, docs, drawings, pipeline at server mo sa iisang project, kaya isang click lang ang kailangan mong konteksto.',
       primary: 'Magsimula',
+      tryDemo: 'Subukan ang demo',
       secondary: 'I-self-host'
     },
     demo: { label: 'Demo ng DevOne', play: 'I-play ang demo', pause: 'I-pause ang demo' },
@@ -436,6 +447,6 @@ export const fil: MessageShape<typeof en> = {
       body: 'Mag-sign in gamit ang GitHub o GitLab at buksan ang una mong project.',
       button: 'Magsimula'
     },
-    footer: { tagline: 'Lahat ng tool. Iisang lugar.' }
+    footer: { tagline: 'Lahat ng tool. Iisang lugar.', github: 'I-star sa GitHub' }
   }
 };

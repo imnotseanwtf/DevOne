@@ -4,6 +4,7 @@ import Header from '@/components/layout/header';
 import { InfoSidebar } from '@/components/layout/info-sidebar';
 import { InfobarProvider } from '@/components/ui/infobar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { DemoBanner } from '@/features/demo/components/demo-banner';
 import { listProjectsForUser } from '@/features/projects/service';
 import { requireUser } from '@/lib/auth/session';
 import { cookies } from 'next/headers';
@@ -31,6 +32,7 @@ export default async function DashboardShell({ children }: { children: React.Rea
         </a>
         <AppSidebar projects={switcherProjects} />
         <SidebarInset id='main-content' tabIndex={-1} className='scroll-mt-16'>
+          {user.demoExpiresAt && <DemoBanner expiresAt={user.demoExpiresAt} />}
           <Header
             username={user.username}
             isAdmin={user.role === 'ADMIN'}

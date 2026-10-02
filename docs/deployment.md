@@ -49,6 +49,26 @@ that environment points at. To deploy `staging` or `dev` later, give that branch
 `DATABASE_URL` and `DEVONE_ENCRYPTION_KEY` in Vercel first, then remove it from
 `git.deploymentEnabled`.
 
+## Public demo
+
+Set `DEVONE_DEMO_MODE=true` to run a public demo that anyone can try without signing up. Run it
+as a **separate deployment with its own database and encryption key**, never on the instance your
+team uses.
+
+In demo mode:
+
+- The sign-in page shows **Start the demo** instead of the sign-in form. Each visitor gets a
+  throwaway account with their own sample project ("Acme web app": tasks, docs and saved API
+  requests), so nobody can change what another visitor sees.
+- Demo accounts expire after 24 hours. Expired accounts and everything in them are deleted
+  automatically whenever someone starts a new demo.
+- Everything that connects to other machines is refused on the server: SSH terminals, database
+  connections, sending API requests, importing from URLs, and signing in with or connecting GitHub
+  and GitLab accounts. This stops anyone from using the demo to reach or attack other systems, and
+  means no one enters real credentials.
+- Starting demos is rate-limited per visitor (set `DEVONE_TRUST_PROXY=true` behind a proxy such as
+  Vercel's so the visitor's address is known) and capped at 300 an hour overall.
+
 ## Pooled databases (Neon, PgBouncer)
 
 `prisma migrate deploy` takes a session-level advisory lock, which a pooled connection can't hold

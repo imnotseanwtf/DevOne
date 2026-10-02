@@ -1,4 +1,5 @@
 import { GitProvider, Prisma } from '@/generated/prisma/client';
+import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { readPreferences, type UserPreferences } from '@/features/account/preferences';
 import { recordAudit } from '@/lib/audit/record';
 import { getPrisma } from '@/lib/db/prisma';
@@ -118,6 +119,7 @@ export async function connectAccount(
   userId: string,
   input: { provider: GitProviderId; token: string; gitlabBaseUrl?: string }
 ) {
+  if (isDemoMode()) throw new AccountError(DEMO_DISABLED_MESSAGE);
   const identity = await identify(input.provider, input.token, input.gitlabBaseUrl);
   const provider = input.provider === 'github' ? GitProvider.GITHUB : GitProvider.GITLAB;
   const existing = await getPrisma().gitConnection.findUnique({

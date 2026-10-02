@@ -1,4 +1,5 @@
 import { deflateSync, inflateSync } from 'node:zlib';
+import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 
 /**
  * Reads drawings out of Excalidraw's own links, so they can be imported into DevOne.
@@ -131,6 +132,7 @@ export async function compressData(data: Uint8Array, key: string, metadata: unkn
 }
 
 async function download(url: string, what: string): Promise<Uint8Array | null> {
+  if (isDemoMode()) throw new ExcalidrawImportError(DEMO_DISABLED_MESSAGE);
   let response: Response;
   try {
     response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), cache: 'no-store' });

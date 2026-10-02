@@ -13,10 +13,19 @@
   <a href="https://github.com/imnotseanwtf/devone/pkgs/container/devone"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Docker image" /></a>
 </p>
 
-<p align="center"><a href="docs/demo.mp4">Watch the demo</a> · every tool in under a minute</p>
+<p align="center">
+  <a href="https://github.com/imnotseanwtf/devone">GitHub</a> ·
+  <a href="docs/deployment.md">Docs</a> ·
+  <a href="docs/demo.mp4">Demo video (MP4)</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
 <p align="center">
   <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fimnotseanwtf%2Fdevone&project-name=devone&repository-name=devone&env=DATABASE_URL,DEVONE_ENCRYPTION_KEY&envDescription=A%20PostgreSQL%20connection%20string%20and%20an%20encryption%20key%20from%20%60openssl%20rand%20-base64%2032%60&envLink=https%3A%2F%2Fgithub.com%2Fimnotseanwtf%2Fdevone%2Fblob%2Fmain%2Fdocs%2Fdeployment.md%23vercel"><img src="https://vercel.com/button" alt="Deploy with Vercel" /></a>
+</p>
+
+<p align="center">
+  <a href="docs/demo.mp4"><img src="docs/demo.gif" width="800" alt="DevOne demo: the board, Git, database, API client, docs, drawings, pipelines and SSH terminal in under a minute" /></a>
 </p>
 
 DevOne is a self-hosted developer workspace that connects project work, Git activity, databases, APIs, documentation, and deployments in one project context.

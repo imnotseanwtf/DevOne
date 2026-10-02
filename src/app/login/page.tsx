@@ -2,6 +2,8 @@ import { DevOneMark } from '@/components/brand/devone-mark';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoginForm } from '@/features/auth/components/login-form';
 import { oauthSignInProviders } from '@/features/auth/service';
+import { StartDemoCard } from '@/features/demo/components/start-demo-card';
+import { isDemoMode } from '@/lib/demo';
 import { getCurrentUser } from '@/lib/auth/session';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
@@ -15,6 +17,13 @@ interface LoginPageProps {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   if (await getCurrentUser()) redirect('/');
   const { error } = await searchParams;
+  if (isDemoMode()) {
+    return (
+      <main className='bg-muted/30 flex min-h-svh items-center justify-center p-4'>
+        <StartDemoCard error={typeof error === 'string' ? error.slice(0, 300) : undefined} />
+      </main>
+    );
+  }
 
   return (
     <main className='bg-muted/30 flex min-h-svh items-center justify-center p-4'>

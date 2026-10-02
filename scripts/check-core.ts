@@ -1761,3 +1761,31 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
   );
   assert.deepEqual(describeUserAgent(null), { browser: 'Unknown browser', os: 'Unknown OS' });
 }
+
+// Public demo mode: everything that connects to other machines is refused.
+{
+  const { isDemoMode, DEMO_DISABLED_MESSAGE } = await import('../src/lib/demo');
+  assert.equal(isDemoMode({ DEVONE_DEMO_MODE: 'true' }), true);
+  assert.equal(isDemoMode({ DEVONE_DEMO_MODE: '1' }), false);
+  assert.equal(isDemoMode({}), false);
+
+  const { providerIsEnabled } = await import('../src/features/auth/service');
+  const { createAdapter } = await import('../src/lib/database/adapter');
+  const { openShell } = await import('../src/lib/ssh/connection');
+  assert.equal(providerIsEnabled('github'), true);
+
+  process.env.DEVONE_DEMO_MODE = 'true';
+  try {
+    const refused = new RegExp(DEMO_DISABLED_MESSAGE.slice(0, 20));
+    await assert.rejects(
+      () => assertSafeRequestUrl('https://example.com', async () => ['93.184.216.34']),
+      refused
+    );
+    assert.equal(providerIsEnabled('github'), false);
+    assert.equal(providerIsEnabled('gitlab'), false);
+    assert.throws(() => createAdapter(DatabaseProvider.POSTGRES, {} as never), refused);
+    await assert.rejects(() => openShell({} as never, { cols: 80, rows: 24 }), refused);
+  } finally {
+    delete process.env.DEVONE_DEMO_MODE;
+  }
+}

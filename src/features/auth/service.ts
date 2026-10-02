@@ -1,4 +1,5 @@
 import { GitProvider, UserRole } from '@/generated/prisma/client';
+import { isDemoMode } from '@/lib/demo';
 import type { LoginResult } from '@/features/auth/schema';
 import { getAppUrl, getOAuthConfig } from '@/lib/auth/oauth';
 import { createSession } from '@/lib/auth/session';
@@ -16,6 +17,8 @@ import {
 } from '@/lib/git/provider';
 
 export function providerIsEnabled(provider: GitProviderId): boolean {
+  // The public demo signs people in with throwaway accounts only.
+  if (isDemoMode()) return false;
   const enabled = (process.env.DEVONE_AUTH_PROVIDERS ?? 'github,gitlab')
     .split(',')
     .map((value) => value.trim().toLowerCase());

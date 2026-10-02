@@ -1,6 +1,7 @@
 import { DevOneMark } from '@/components/brand/devone-mark';
 import { Icons } from '@/components/icons';
 import { FeatureDemo } from '@/features/landing/components/feature-demo';
+import { isDemoMode } from '@/lib/demo';
 import type { TKey } from '@/i18n/messages';
 import { getT } from '@/i18n/server';
 import Link from 'next/link';
@@ -55,6 +56,8 @@ const SECURITY: { icon: IconName; title: TKey; body: TKey }[] = [
   { icon: 'history', title: 'landing.security.audit.title', body: 'landing.security.audit.body' }
 ];
 
+const GITHUB_URL = 'https://github.com/imnotseanwtf/devone';
+
 const GRID_BACKGROUND = {
   backgroundImage:
     'linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px)',
@@ -79,6 +82,7 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
 
 export async function LandingPage() {
   const t = await getT();
+  const demo = isDemoMode();
 
   return (
     <div className='min-h-svh bg-[#0a0a0a] text-[#fafafa] [color-scheme:dark]'>
@@ -108,6 +112,15 @@ export async function LandingPage() {
               className='hidden rounded-md px-3 py-2 text-sm text-zinc-400 transition-colors hover:text-white md:block'
             >
               {t('landing.nav.selfHost')}
+            </a>
+            <a
+              href={GITHUB_URL}
+              target='_blank'
+              rel='noopener noreferrer'
+              aria-label={t('landing.nav.github')}
+              className='flex size-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:text-white'
+            >
+              <Icons.github aria-hidden='true' className='size-5' />
             </a>
             <Link
               href='/login'
@@ -141,7 +154,9 @@ export async function LandingPage() {
                 {t('landing.hero.body')}
               </p>
               <div className='mt-9 flex flex-wrap items-center justify-center gap-3'>
-                <PrimaryLink href='/login'>{t('landing.hero.primary')}</PrimaryLink>
+                <PrimaryLink href='/login'>
+                  {demo ? t('landing.hero.tryDemo') : t('landing.hero.primary')}
+                </PrimaryLink>
                 <a
                   href='#self-host'
                   className='inline-flex h-11 items-center gap-2 rounded-lg border border-white/10 px-5 font-mono text-sm text-zinc-300 transition-colors hover:bg-white/[0.06]'
@@ -282,7 +297,9 @@ export async function LandingPage() {
             </h2>
             <p className='mt-4 text-zinc-400'>{t('landing.cta.body')}</p>
             <div className='mt-8'>
-              <PrimaryLink href='/login'>{t('landing.cta.button')}</PrimaryLink>
+              <PrimaryLink href='/login'>
+                {demo ? t('landing.hero.tryDemo') : t('landing.cta.button')}
+              </PrimaryLink>
             </div>
           </div>
         </section>
@@ -295,6 +312,15 @@ export async function LandingPage() {
             DevOne
           </span>
           <span>{t('landing.footer.tagline')}</span>
+          <a
+            href={GITHUB_URL}
+            target='_blank'
+            rel='noopener noreferrer'
+            className='flex items-center gap-1.5 transition-colors hover:text-zinc-300'
+          >
+            <Icons.github aria-hidden='true' className='size-4' />
+            {t('landing.footer.github')}
+          </a>
         </div>
       </footer>
     </div>

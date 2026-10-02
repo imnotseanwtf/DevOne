@@ -98,6 +98,8 @@ model User {
   preferences       Json              @default("{}")
   /// Set by an administrator: signed out everywhere and refused at sign-in.
   disabledAt        DateTime?
+  /// Set only for public-demo accounts (DEVONE_DEMO_MODE): when the account and its sample workspace expire.
+  demoExpiresAt     DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   lastLoginAt       DateTime          @default(now())
@@ -119,6 +121,7 @@ model User {
 
   @@unique([provider, providerUserId])
   @@index([username])
+  @@index([demoExpiresAt])
 }
 
 model GitConnection {

@@ -1,5 +1,6 @@
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
+import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 
 /**
  * DevOne's server can reach the machines DevOne runs beside: the internal
@@ -94,6 +95,7 @@ export async function assertSafeRequestUrl(
   value: string,
   resolve: (hostname: string) => Promise<string[]> = defaultResolve
 ): Promise<URL> {
+  if (isDemoMode()) throw new BlockedRequestError(DEMO_DISABLED_MESSAGE);
   const url = parseRequestUrl(value);
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
 

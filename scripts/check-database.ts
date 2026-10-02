@@ -510,6 +510,32 @@ try {
     assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: other.id } })).disabledAt, null);
   }
 
+  // Public demo accounts: each gets its own sample project, and expired ones are deleted.
+  {
+    const { createDemoAccount, deleteExpiredDemoAccounts } = await import('../src/features/demo/service');
+    const realUsers = await prisma.user.count({ where: { demoExpiresAt: null } });
+    const realProjects = await prisma.project.count();
+    const first = await createDemoAccount();
+    const second = await createDemoAccount();
+    assert.notEqual(first.projectId, second.projectId);
+
+    const demoUser = await prisma.user.findUniqueOrThrow({ where: { id: first.userId } });
+    assert.equal(demoUser.role, 'MEMBER');
+    assert.ok(demoUser.demoExpiresAt && demoUser.demoExpiresAt > new Date());
+    const demoProject = await prisma.project.findUniqueOrThrow({ where: { id: first.projectId } });
+    assert.equal(demoProject.name, 'Acme web app');
+    assert.equal(await prisma.issue.count({ where: { projectId: first.projectId } }), 11);
+    assert.equal(await prisma.docPage.count({ where: { projectId: first.projectId } }), 2);
+    const collection = await prisma.apiCollection.findFirstOrThrow({ where: { projectId: first.projectId } });
+    assert.equal(await prisma.apiRequest.count({ where: { collectionId: collection.id } }), 3);
+
+    assert.equal(await deleteExpiredDemoAccounts(new Date()), 0);
+    assert.equal(await deleteExpiredDemoAccounts(new Date(Date.now() + 25 * 3_600_000)), 2);
+    assert.equal(await prisma.user.count({ where: { id: { in: [first.userId, second.userId] } } }), 0);
+    assert.equal(await prisma.project.count(), realProjects);
+    assert.equal(await prisma.user.count({ where: { demoExpiresAt: null } }), realUsers);
+  }
+
   for (let attempt = 0; attempt < 10; attempt += 1) {
     assert.equal(await consumeAuthAttempt(rateLimitKey), true);
   }

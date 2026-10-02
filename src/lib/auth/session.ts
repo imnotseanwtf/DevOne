@@ -83,7 +83,9 @@ export async function getCurrentUser(): Promise<User | null> {
   });
 
   // Disabling a user deletes their sessions too; this covers a sign-in racing it.
-  if (!session || session.expiresAt <= new Date() || session.user.disabledAt) {
+  const now = new Date();
+  const demoExpired = session?.user.demoExpiresAt && session.user.demoExpiresAt <= now;
+  if (!session || session.expiresAt <= now || session.user.disabledAt || demoExpired) {
     if (session) await getPrisma().session.deleteMany({ where: { id: session.id } });
     return null;
   }

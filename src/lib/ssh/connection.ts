@@ -1,4 +1,5 @@
 import { Client, type ClientChannel, type ConnectConfig } from 'ssh2';
+import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { hostKeyFingerprint } from '@/lib/ssh/fingerprint';
 
 export type SshCredentials =
@@ -59,6 +60,8 @@ export function openShell(
   target: SshTarget,
   size: { cols: number; rows: number }
 ): Promise<OpenShell> {
+  if (isDemoMode())
+    return Promise.reject(new SshConnectError(DEMO_DISABLED_MESSAGE, 'unreachable'));
   return new Promise((resolve, reject) => {
     const client = new Client();
     let fingerprint = '';

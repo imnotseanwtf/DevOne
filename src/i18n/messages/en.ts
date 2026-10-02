@@ -337,14 +337,30 @@ export const en = {
     admin_user_disable: 'disabled a user',
     admin_user_enable: 'enabled a user'
   },
+  demo: {
+    banner:
+      'You’re exploring the DevOne demo. Your sample project is deleted in {hours} h, and anything that connects to other machines is turned off.',
+    selfHost: 'Self-host DevOne',
+    title: 'Try DevOne',
+    body: 'Get your own sample project to explore for 24 hours. No sign-up, nothing to install.',
+    start: 'Start the demo',
+    note: 'This is a public demo, so signing in with GitHub or GitLab is turned off.'
+  },
   landing: {
-    nav: { features: 'Features', security: 'Security', selfHost: 'Self-host', signIn: 'Sign in' },
+    nav: {
+      features: 'Features',
+      security: 'Security',
+      selfHost: 'Self-host',
+      signIn: 'Sign in',
+      github: 'DevOne on GitHub'
+    },
     hero: {
       eyebrow: 'Self-hosted developer workspace',
       title: 'Every tool.',
       titleAccent: 'One place.',
       body: 'DevOne puts your board, Git, databases, API client, docs, drawings, pipelines and servers inside one project, so the context you need is always a click away.',
       primary: 'Get started',
+      tryDemo: 'Try the demo',
       secondary: 'Self-host it'
     },
     demo: { label: 'DevOne product demo', play: 'Play demo', pause: 'Pause demo' },
@@ -420,6 +436,6 @@ export const en = {
       body: 'Sign in with GitHub or GitLab and open your first project.',
       button: 'Get started'
     },
-    footer: { tagline: 'Every tool. One place.' }
+    footer: { tagline: 'Every tool. One place.', github: 'Star on GitHub' }
   }
 };
