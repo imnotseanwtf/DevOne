@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: devone
+      POSTGRES_USER: devone
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - devone-postgres:/var/lib/postgresql/data
+    ports:
+      - '127.0.0.1:${DEVONE_POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U devone -d devone']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - devone-redis:/data
+    ports:
+      - '127.0.0.1:${DEVONE_REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      target: builder
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: ${DEVONE_DOCKER_DATABASE_URL:?Set DEVONE_DOCKER_DATABASE_URL in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  web:
+    build: .
+    environment:
+      DATABASE_URL: ${DEVONE_DOCKER_DATABASE_URL:?Set DEVONE_DOCKER_DATABASE_URL in .env}
+      DEVONE_ENCRYPTION_KEY: ${DEVONE_ENCRYPTION_KEY:?Set DEVONE_ENCRYPTION_KEY in .env}
+      DEVONE_AUTH_PROVIDERS: ${DEVONE_AUTH_PROVIDERS:-github,gitlab}
+      DEVONE_GITLAB_ALLOWED_HOSTS: ${DEVONE_GITLAB_ALLOWED_HOSTS:-gitlab.com}
+      DEVONE_GITHUB_ALLOWED_ORGS: ${DEVONE_GITHUB_ALLOWED_ORGS:-}
+      DEVONE_GITLAB_ALLOWED_GROUPS: ${DEVONE_GITLAB_ALLOWED_GROUPS:-}
+      DEVONE_ALLOW_BOOTSTRAP: ${DEVONE_ALLOW_BOOTSTRAP:-false}
+      DEVONE_ALLOW_REGISTRATION: ${DEVONE_ALLOW_REGISTRATION:-false}
+      DEVONE_TRUST_PROXY: ${DEVONE_TRUST_PROXY:-false}
+    ports:
+      - '3000:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  devone-postgres:
+  devone-redis:

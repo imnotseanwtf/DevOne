@@ -1,0 +1,834 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GitProvider {
+  GITHUB
+  GITLAB
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+  HEAD
+  OPTIONS
+}
+
+/// How an API request's `body` string is sent.
+enum ApiBodyType {
+  NONE
+  JSON
+  TEXT
+  FORM
+}
+
+/// Which dropdown an `IssueFieldOption` belongs to.
+enum IssueFieldKind {
+  TYPE
+  PRIORITY
+}
+
+/// A project-scoped, user-editable value for the type or priority dropdown.
+/// `Issue.type`/`Issue.priority` store the option's `name` directly.
+model IssueFieldOption {
+  id        String         @id @default(cuid())
+  projectId String
+  kind      IssueFieldKind
+  name      String
+  color     String?
+  position  Int            @default(0)
+  createdAt DateTime       @default(now())
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, kind, name])
+  @@index([projectId, kind, position])
+}
+
+enum IssueLinkType {
+  BRANCH
+  COMMIT
+  MERGE_REQUEST
+}
+
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+}
+
+enum DatabaseProvider {
+  POSTGRES
+  MYSQL
+}
+
+enum DatabaseEnvironment {
+  LOCAL
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+enum ProjectRole {
+  OWNER
+  MEMBER
+}
+
+model User {
+  id                String            @id @default(cuid())
+  provider          GitProvider
+  providerUserId    String
+  username          String
+  name              String?
+  avatarUrl         String?
+  role              UserRole          @default(MEMBER)
+  /// Personal preferences (`UserPreferences` in src/features/account/preferences.ts).
+  preferences       Json              @default("{}")
+  /// Set by an administrator: signed out everywhere and refused at sign-in.
+  disabledAt        DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  lastLoginAt       DateTime          @default(now())
+  connections       GitConnection[]
+  sessions          Session[]
+  projectsCreated   Project[]         @relation("ProjectCreator")
+  memberships       ProjectMember[]
+  issuesAssigned    Issue[]           @relation("IssueAssignee")
+  issuesCreated     Issue[]           @relation("IssueCreator")
+  issueComments     IssueComment[]
+  docs              DocPage[]
+  drawings          Drawing[]
+  drawingPresence   DrawingPresence[]
+  apiHistory        ApiHistoryEntry[]
+  issueEvents       IssueEvent[]
+  personalResources ProjectResource[]
+  sshHosts          SshHost[]
+  auditEvents       AuditEvent[]
+
+  @@unique([provider, providerUserId])
+  @@index([username])
+}
+
+model GitConnection {
+  id                    String       @id @default(cuid())
+  userId                String
+  provider              GitProvider
+  providerUserId        String
+  baseUrl               String
+  encryptedToken        String
+  /// Set only for OAuth sign-ins whose access token expires (GitLab); null for personal access tokens.
+  encryptedRefreshToken String?
+  tokenExpiresAt        DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositories          Repository[]
+
+  @@unique([userId, provider, baseUrl])
+  @@index([provider, providerUserId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  /// Browser and address at sign-in, shown under My account → Sessions.
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Project {
+  id                     String               @id @default(cuid())
+  name                   String
+  slug                   String               @unique
+  description            String?
+  /// Prefix for issue keys, e.g. "DEV" in DEV-142. Unique so keys never collide.
+  issuePrefix            String               @unique
+  /// Last allocated issue number; incremented atomically when an issue is created.
+  issueCounter           Int                  @default(0)
+  /// Who may open the DevOps SSH terminal in this project.
+  terminalAccess         TerminalAccess       @default(MEMBERS)
+  /// Host patterns the terminal may connect to, e.g. "*.internal" or "10.0.*". Empty: any host.
+  sshAllowedHosts        String[]             @default([])
+  /// Branch patterns left out of the DevOps pipeline lists, e.g. "dependabot/*".
+  hiddenPipelineBranches String[]             @default([])
+  createdById            String
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  creator                User                 @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members                ProjectMember[]
+  repositories           ProjectRepository[]
+  databases              DatabaseConnection[]
+  issues                 Issue[]
+  boards                 Board[]
+  sprints                Sprint[]
+  collections            ApiCollection[]
+  apiHistory             ApiHistoryEntry[]
+  docs                   DocPage[]
+  drawings               Drawing[]
+  contentFolders         ContentFolder[]
+  fieldOptions           IssueFieldOption[]
+  resources              ProjectResource[]
+  sshHosts               SshHost[]
+  auditEvents            AuditEvent[]
+
+  @@index([createdById])
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole @default(MEMBER)
+  createdAt DateTime    @default(now())
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+/// Provider repository metadata cached so projects can link repositories.
+/// Branches, commits, and merge requests are read live from the provider.
+model Repository {
+  id                   String              @id @default(cuid())
+  gitConnectionId      String
+  providerRepositoryId String
+  name                 String
+  fullName             String
+  defaultBranch        String
+  visibility           String
+  webUrl               String
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  connection           GitConnection       @relation(fields: [gitConnectionId], references: [id], onDelete: Cascade)
+  projects             ProjectRepository[]
+  issueLinks           IssueGitLink[]
+  resources            ProjectResource[]
+
+  @@unique([gitConnectionId, providerRepositoryId])
+  @@index([fullName])
+}
+
+model ProjectRepository {
+  id               String     @id @default(cuid())
+  projectId        String
+  repositoryId     String
+  /// The branch this project deploys to production from; pipelines on it are marked.
+  productionBranch String?
+  createdAt        DateTime   @default(now())
+  project          Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repository       Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, repositoryId])
+  @@index([repositoryId])
+}
+
+model DatabaseConnection {
+  id                String              @id @default(cuid())
+  projectId         String
+  name              String
+  provider          DatabaseProvider
+  host              String
+  port              Int
+  /// Which database this connection is tracked (scanned/history) against.
+  /// Null until one is picked from the server's database list.
+  databaseName      String?
+  username          String
+  encryptedPassword String
+  sslEnabled        Boolean             @default(false)
+  /// Copied from the linked resource when there is one.
+  environment       DatabaseEnvironment @default(DEVELOPMENT)
+  /// The environment (resource) this database belongs to, e.g. Staging.
+  resourceId        String?
+  /// Enforced by a read-only transaction. MySQL DDL implicitly commits and
+  /// escapes that, so the MySQL adapter also refuses non-read statements.
+  readOnly          Boolean             @default(true)
+  lastScannedAt     DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  resource          ProjectResource?    @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  snapshots         SchemaSnapshot[]
+  savedQueries      SavedQuery[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@index([resourceId])
+}
+
+/// One row per distinct schema. Re-scanning an unchanged database updates
+/// `lastSeenAt` instead of storing another copy.
+model SchemaSnapshot {
+  id                   String             @id @default(cuid())
+  databaseConnectionId String
+  contentHash          String
+  schemaJson           Json
+  createdAt            DateTime           @default(now())
+  lastSeenAt           DateTime           @default(now())
+  connection           DatabaseConnection @relation(fields: [databaseConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([databaseConnectionId, contentHash])
+  @@index([databaseConnectionId, createdAt])
+}
+
+model SavedQuery {
+  id                   String             @id @default(cuid())
+  databaseConnectionId String
+  name                 String
+  sql                  String
+  createdById          String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  connection           DatabaseConnection @relation(fields: [databaseConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([databaseConnectionId, name])
+  @@index([databaseConnectionId])
+}
+
+model Sprint {
+  id        String       @id @default(cuid())
+  projectId String
+  name      String
+  goal      String?
+  status    SprintStatus @default(PLANNED)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+
+  @@unique([projectId, name])
+  @@index([projectId, status])
+}
+
+model Board {
+  id        String        @id @default(cuid())
+  projectId String
+  name      String
+  createdAt DateTime      @default(now())
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+  columns   BoardColumn[]
+
+  @@unique([projectId, name])
+  @@unique([projectId, id])
+}
+
+/// A workflow stage on a board. Every board is seeded with the default
+/// stages on creation; all of them (seeded or added later) are equally
+/// rename-/removable. `Issue.status` stores the column's `name` directly —
+/// "BACKLOG" is the one reserved sentinel for issues not yet on any board
+/// column, and isn't a row here.
+model BoardColumn {
+  id        String   @id @default(cuid())
+  boardId   String
+  name      String
+  /// Hex color (e.g. "#22c55e") shown on the column header; null uses the
+  /// default neutral styling.
+  color     String?
+  /// One of STATUS_ICON_NAMES (src/features/issues/status-icons.ts); null picks
+  /// an icon from the name ("Done" gets a check, "In progress" a ring, …).
+  icon      String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, name])
+  @@index([boardId, position])
+}
+
+model Issue {
+  id           String             @id @default(cuid())
+  projectId    String
+  boardId      String
+  /// Full key shown to people, e.g. DEV-142. Unique across the installation.
+  issueKey     String             @unique
+  number       Int
+  title        String
+  description  String?
+  type         String             @default("TASK")
+  /// A board column's `name`, or the reserved "BACKLOG" sentinel.
+  status       String             @default("BACKLOG")
+  priority     String             @default("MEDIUM")
+  assigneeId   String?
+  createdById  String
+  sprintId     String?
+  /// Manual ordering within a board column.
+  position     Int                @default(0)
+  /// Set when the task is deleted from the board; it waits in the archive until
+  /// restored or deleted for good.
+  archivedAt   DateTime?
+  /// When the task should be done by. Optional; a date without a time.
+  targetDate   DateTime?          @db.Date
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  project      Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  board        Board              @relation(fields: [projectId, boardId], references: [projectId, id], onDelete: Cascade)
+  assignee     User?              @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  creator      User               @relation("IssueCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  sprint       Sprint?            @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  comments     IssueComment[]
+  gitLinks     IssueGitLink[]
+  docLinks     DocIssueLink[]
+  drawingLinks DrawingIssueLink[]
+  events       IssueEvent[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+  @@index([boardId, status, position])
+  @@index([boardId, archivedAt])
+  @@index([sprintId])
+  @@index([assigneeId])
+}
+
+model IssueComment {
+  id        String   @id @default(cuid())
+  issueId   String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+}
+
+/// Git work discovered by an issue key appearing in a branch, commit, or merge request.
+model IssueGitLink {
+  id           String        @id @default(cuid())
+  issueId      String
+  repositoryId String
+  linkType     IssueLinkType
+  /// Branch name, commit sha, or merge request number.
+  reference    String
+  title        String?
+  webUrl       String?
+  detectedAt   DateTime      @default(now())
+  issue        Issue         @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  repository   Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, repositoryId, linkType, reference])
+  @@index([repositoryId])
+}
+
+model ApiCollection {
+  id        String       @id @default(cuid())
+  projectId String
+  name      String
+  createdAt DateTime     @default(now())
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requests  ApiRequest[]
+
+  @@unique([projectId, name])
+}
+
+model ApiRequest {
+  id             String        @id @default(cuid())
+  collectionId   String
+  name           String
+  method         HttpMethod    @default(GET)
+  url            String
+  /// Optional group inside the collection, e.g. an OpenAPI tag such as "Products".
+  folder         String?
+  /// Header name/value pairs as JSON.
+  headersJson    Json?
+  body           String?
+  bodyType       ApiBodyType   @default(JSON)
+  /// `ApiAuth` from `@/lib/api-client/types`; values may hold `{{VARIABLES}}`.
+  authJson       Json?
+  /// Values for `{{name}}` path parameters in the URL; empty ones fall back to the environment.
+  pathParamsJson Json?
+  /// `OperationDocs` from `@/lib/api-client/openapi`: what the spec says about
+  /// parameters, body and responses. Only set for imported requests.
+  docsJson       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  collection     ApiCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId, folder])
+}
+
+/// A request as it was sent, before variable substitution, so secrets never land here.
+model ApiHistoryEntry {
+  id             String      @id @default(cuid())
+  projectId      String
+  userId         String
+  method         HttpMethod
+  url            String
+  headersJson    Json?
+  body           String?
+  bodyType       ApiBodyType @default(JSON)
+  authJson       Json?
+  pathParamsJson Json?
+  /// Null when the request never got a response (blocked, timed out, network error).
+  status         Int?
+  durationMs     Int?
+  createdAt      DateTime    @default(now())
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, createdAt])
+}
+
+model DocPage {
+  id          String         @id @default(cuid())
+  projectId   String
+  slug        String
+  title       String
+  body        String
+  /// Slash-separated folder path, e.g. "Design/Flows"; null sits at the top level.
+  folder      String?
+  createdById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author      User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  issueLinks  DocIssueLink[]
+
+  @@unique([projectId, slug])
+  @@index([projectId, updatedAt])
+}
+
+model DocIssueLink {
+  id        String   @id @default(cuid())
+  docId     String
+  issueId   String
+  createdAt DateTime @default(now())
+  doc       DocPage  @relation(fields: [docId], references: [id], onDelete: Cascade)
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@unique([docId, issueId])
+  @@index([issueId])
+}
+
+enum DrawingKind {
+  /// Hand-drawn style sketches.
+  EXCALIDRAW
+  /// Formal diagrams (flowcharts, UML, cloud architecture) in draw.io.
+  DRAWIO
+}
+
+/// A canvas in a project, linkable to tasks like a doc page.
+model Drawing {
+  id          String             @id @default(cuid())
+  projectId   String
+  title       String
+  kind        DrawingKind        @default(EXCALIDRAW)
+  /// Excalidraw: the scene (elements, trimmed appState, files). draw.io: `{ "xml": "<mxfile…>" }`.
+  scene       Json               @default("{}")
+  /// Slash-separated folder path, e.g. "Design/Flows"; null sits at the top level.
+  folder      String?
+  /// Excalidraw live session: "<roomId>,<roomKey>" for excalidraw.com's #room= link. The
+  /// drawing itself lives in that shared session; null means the scene above is used.
+  liveRoom    String?
+  createdById String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author      User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  /// Bumped whenever shapes change; clients ask for changes since the revision they have.
+  revision    Int                @default(0)
+  /// Excalidraw: open copies sync live, with cursors. Off ("local"): saved in DevOne,
+  /// but changes from others only show after reopening.
+  live        Boolean            @default(false)
+  issueLinks  DrawingIssueLink[]
+  elements    DrawingElement[]
+  presence    DrawingPresence[]
+
+  @@index([projectId, updatedAt])
+}
+
+model DrawingIssueLink {
+  id        String   @id @default(cuid())
+  drawingId String
+  issueId   String
+  createdAt DateTime @default(now())
+  drawing   Drawing  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@unique([drawingId, issueId])
+  @@index([issueId])
+}
+
+model AuthRateLimit {
+  key             String    @id
+  attempts        Int       @default(0)
+  windowStartedAt DateTime
+  blockedUntil    DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@index([blockedUntil])
+}
+
+enum FolderScope {
+  DOC
+  DRAWING
+}
+
+/// A folder in the Docs or Drawings list; kept even when nothing is in it yet.
+model ContentFolder {
+  id        String      @id @default(cuid())
+  projectId String
+  scope     FolderScope
+  /// Slash-separated path, e.g. "Design/Flows".
+  path      String
+  createdAt DateTime    @default(now())
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, scope, path])
+}
+
+/// One Excalidraw shape. Live sync merges by Excalidraw's own rule: the higher `version`
+/// wins, and on a tie the lower `versionNonce` wins.
+model DrawingElement {
+  drawingId    String
+  elementId    String
+  version      Int
+  versionNonce Int
+  /// The whole element as Excalidraw serializes it (deleted ones stay, as tombstones).
+  data         Json
+  /// The drawing's revision when this shape last changed.
+  revision     Int
+  drawing      Drawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+
+  @@id([drawingId, elementId])
+  @@index([drawingId, revision])
+}
+
+/// Who has a drawing open (one row per browser tab), and where their pointer is; stale
+/// after a few seconds.
+model DrawingPresence {
+  drawingId String
+  /// Random per open tab, so one person in two windows shows up twice.
+  clientId  String
+  userId    String
+  x         Float?
+  y         Float?
+  updatedAt DateTime @updatedAt
+  drawing   Drawing  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([drawingId, clientId])
+  @@index([drawingId, updatedAt])
+}
+
+/// A project environment, e.g. "Staging": where the app runs (URL, host, build),
+/// its keys and credentials, and what links to it. Databases pick one, and the
+/// API client uses it as its environment: `url` fills `{{baseUrl}}`, and the
+/// variables fill the other `{{KEYS}}`.
+model ProjectResource {
+  id            String               @id @default(cuid())
+  projectId     String
+  name          String
+  environment   DatabaseEnvironment  @default(DEVELOPMENT)
+  kind          ResourceKind         @default(API)
+  /// Set for a personal resource: only this user sees it. Null means the whole project.
+  ownerId       String?
+  /// GIT_TAG: only tags matching this glob are listed, e.g. "v*".
+  tagPattern    String?
+  /// DOCKER_IMAGE: the image reference without a tag, e.g. "ghcr.io/org/app".
+  image         String?
+  /// DOCKER_IMAGE: the tag this environment runs, e.g. "staging".
+  imageTag      String?
+  /// The app's base URL. Optional, since an environment may start as just its keys.
+  url           String?
+  /// Where the app is deployed, e.g. "Vercel" or "AWS ECS (us-east-1)".
+  hostedOn      String?
+  /// What builds and ships it, e.g. "GitHub Actions" or "Vercel build".
+  builtBy       String?
+  /// The repository and branch this environment deploys from.
+  repositoryId  String?
+  branch        String?
+  notes         String?
+  /// The environment's default auth (`ApiAuth` as JSON), encrypted like a secret.
+  /// Requests with no auth of their own use it, and it fills {{TOKEN}}-style placeholders.
+  encryptedAuth String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner         User?                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  accounts      ResourceAccount[]
+  repository    Repository?          @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  variables     ResourceVariable[]
+  headers       ResourceHeader[]
+  databases     DatabaseConnection[]
+
+  // Names are unique per project among shared resources, and per person among
+  // personal ones; checked in code, since NULL owners can't share a unique index.
+  @@index([projectId, ownerId])
+  @@index([projectId])
+  @@index([repositoryId])
+}
+
+/// A key or credential of an environment, e.g. DATABASE_URL or STRIPE_SECRET_KEY.
+model ResourceVariable {
+  id             String          @id @default(cuid())
+  resourceId     String
+  key            String
+  /// Always encrypted at rest (AES-256-GCM with DEVONE_ENCRYPTION_KEY). Secret
+  /// values only reach the browser when a member explicitly reveals one.
+  encryptedValue String
+  isSecret       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  resource       ProjectResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, key])
+}
+
+/// A header sent with every API request made in this environment, e.g. a
+/// Cloudflare bypass or tenant header. A request's own header with the same
+/// name wins. Values may use `{{KEYS}}` and are encrypted like variables.
+model ResourceHeader {
+  id             String          @id @default(cuid())
+  resourceId     String
+  /// Stored lowercase: header names are case-insensitive.
+  name           String
+  encryptedValue String
+  isSecret       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  resource       ProjectResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, name])
+}
+
+/// What a resource is, which decides the fields it has.
+enum ResourceKind {
+  /// An API endpoint: URL, host, build, branch. Shows in the API client.
+  API
+  /// A deployed app, recorded as just its URL.
+  APP
+  /// Release tags of the project's repository.
+  GIT_TAG
+  /// A container image and the tag this environment runs.
+  DOCKER_IMAGE
+  /// A personal note: free-form fields and accounts, like a small private vault.
+  NOTE
+}
+
+/// A login for the app behind a resource, e.g. the staging admin account.
+model ResourceAccount {
+  id                String          @id @default(cuid())
+  resourceId        String
+  label             String
+  username          String
+  /// Encrypted like every other secret; only revealed on request.
+  encryptedPassword String
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  resource          ProjectResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId])
+}
+
+/// What an `IssueEvent` records.
+enum IssueEventType {
+  CREATED
+  /// Moved between board columns (or to/from the backlog).
+  STATUS
+  ASSIGNEE
+  PRIORITY
+  TARGET_DATE
+  ARCHIVED
+  RESTORED
+}
+
+/// One entry in a task's history: who changed what, from what, to what, when.
+model IssueEvent {
+  id        String         @id @default(cuid())
+  issueId   String
+  /// Null when the change came from a linked branch or pull request.
+  actorId   String?
+  type      IssueEventType
+  fromValue String?
+  toValue   String?
+  /// Set when a git sync made the change (a branch, commit or PR mentioned the task).
+  viaGit    Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  issue     Issue          @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  actor     User?          @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([issueId, createdAt])
+}
+
+enum SshAuthMethod {
+  PASSWORD
+  PRIVATE_KEY
+}
+
+/// A server someone saved for the DevOps terminal. Always personal: only its
+/// owner sees or connects with it, and only while still a project member.
+model SshHost {
+  id                  String        @id @default(cuid())
+  projectId           String
+  ownerId             String
+  name                String
+  host                String
+  port                Int           @default(22)
+  username            String
+  authMethod          SshAuthMethod
+  /// The password or private key, encrypted like every other secret.
+  encryptedSecret     String
+  /// The private key's passphrase, when it has one.
+  encryptedPassphrase String?
+  /// SHA256 host key fingerprint, pinned on the first connection. A different
+  /// key later refuses to connect, in case the server was swapped out.
+  hostKeyFingerprint  String?
+  lastConnectedAt     DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  project             Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner               User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, ownerId, name])
+  @@index([ownerId])
+}
+
+enum TerminalAccess {
+  DISABLED
+  OWNERS
+  MEMBERS
+}
+
+/// Who did what: member and settings changes, terminal connections, account and
+/// user changes. Project owners see their project's; administrators see all.
+model AuditEvent {
+  id        String   @id @default(cuid())
+  /// Null once the person who did it is deleted.
+  actorId   String?
+  projectId String?
+  /// Dotted name, e.g. "project.member.add" or "terminal.connect".
+  action    String
+  /// What it was done to, in words: a username, "deploy@10.0.0.4", a project name.
+  target    String?
+  details   Json?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([createdAt])
+}

@@ -1,0 +1,8 @@
+{
+  "buildCommand": "prisma migrate deploy && next build",
+  "git": {
+    "deploymentEnabled": {
+      "claude/*": false
+    }
+  }
+}
