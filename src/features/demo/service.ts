@@ -223,7 +223,8 @@ async function seedDemoIntegrations(
       provider: GitProvider.GITHUB,
       providerUserId: `demo-${userId}`,
       baseUrl: 'https://github.com',
-      encryptedToken: encryptSecret('demo', getEncryptionKey())
+      // Its own token, so this visitor's Git edits are kept apart from everyone else's.
+      encryptedToken: encryptSecret(`demo:${userId}`, getEncryptionKey())
     }
   });
   const repository = await db.repository.create({

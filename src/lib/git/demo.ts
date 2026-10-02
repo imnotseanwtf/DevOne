@@ -232,27 +232,43 @@ function jobLog(name: string, status: string): string {
   return `${header}${BOLD}$ ./scripts/deploy.sh${RESET}\nBuilding image ghcr.io/acme/web-app:${'9d01b3a'}…\nPushing image… done\nRolling out to ${name.includes('production') ? 'production' : 'a preview environment'}…\n${GREEN}✓ Live at https://${name.includes('production') ? 'acme.example' : 'preview-42.acme.example'}${RESET}\n${GREEN}Job succeeded${RESET}\n`;
 }
 
-/** Edits made in the demo, keyed by `branch:path`; null means deleted. */
+/** One visitor's edits, keyed by `branch:path`; null means deleted. */
 interface DemoState {
   files: Map<string, string | null>;
   branches: Map<string, string>;
 }
 
-function state(): DemoState {
-  const globalState = globalThis as typeof globalThis & { devoneDemoGit?: DemoState };
-  globalState.devoneDemoGit ??= { files: new Map(), branches: new Map() };
-  return globalState.devoneDemoGit;
+/** Most visitors whose edits are kept at once; the oldest are forgotten first. */
+const MAX_VISITORS = 500;
+
+/**
+ * Edits are kept per visitor: every demo account has its own connection token,
+ * so one visitor's changes never show up for another.
+ */
+function state(token: string): DemoState {
+  const globalState = globalThis as typeof globalThis & {
+    devoneDemoGit?: Map<string, DemoState>;
+  };
+  globalState.devoneDemoGit ??= new Map();
+  const visitors = globalState.devoneDemoGit;
+  let visitor = visitors.get(token);
+  if (!visitor) {
+    if (visitors.size >= MAX_VISITORS) visitors.delete(visitors.keys().next().value!);
+    visitor = { files: new Map(), branches: new Map() };
+    visitors.set(token, visitor);
+  }
+  return visitor;
 }
 
-function fileText(branch: string, path: string): string | undefined {
-  const edited = state().files.get(`${branch}:${path}`);
+function fileText(token: string, branch: string, path: string): string | undefined {
+  const edited = state(token).files.get(`${branch}:${path}`);
   if (edited === null) return undefined;
   return edited ?? FILES[path];
 }
 
-function allPaths(branch: string): string[] {
+function allPaths(token: string, branch: string): string[] {
   const paths = new Set(Object.keys(FILES));
-  for (const [key, value] of state().files) {
+  for (const [key, value] of state(token).files) {
     const [keyBranch, ...rest] = key.split(':');
     if (keyBranch !== branch) continue;
     const path = rest.join(':');
@@ -266,8 +282,8 @@ function revision(): string {
   return Math.random().toString(16).slice(2, 12);
 }
 
-function branchCommits(branch: string): GitCommit[] {
-  const base = state().branches.get(branch) ?? branch;
+function branchCommits(token: string, branch: string): GitCommit[] {
+  const base = state(token).branches.get(branch) ?? branch;
   return (COMMITS[base] ?? COMMITS.main).map(([sha, message, authorName, hours]) => ({
     sha,
     message,
@@ -294,20 +310,23 @@ export function createDemoGitProvider(): GitProviderClient {
     async getRepositories() {
       return [REPOSITORY];
     },
-    async getBranches(): Promise<GitBranch[]> {
-      const names = [...Object.keys(COMMITS), ...state().branches.keys()];
-      return names.map((name) => ({ name, sha: branchCommits(name)[0]?.sha ?? '9d01b3a4c2' }));
+    async getBranches(token): Promise<GitBranch[]> {
+      const names = [...Object.keys(COMMITS), ...state(token).branches.keys()];
+      return names.map((name) => ({
+        name,
+        sha: branchCommits(token, name)[0]?.sha ?? '9d01b3a4c2'
+      }));
     },
-    async getCommits(_token, _repositoryId, branch) {
-      return branchCommits(branch);
+    async getCommits(token, _repositoryId, branch) {
+      return branchCommits(token, branch);
     },
     async getMergeRequests() {
       return MERGE_REQUESTS;
     },
-    async getTree(_token, _repositoryId, path, ref): Promise<GitTreeEntry[]> {
+    async getTree(token, _repositoryId, path, ref): Promise<GitTreeEntry[]> {
       const prefix = path ? `${path.replace(/\/$/, '')}/` : '';
       const entries = new Map<string, GitTreeEntry>();
-      for (const file of allPaths(ref)) {
+      for (const file of allPaths(token, ref)) {
         if (!file.startsWith(prefix)) continue;
         const [name, ...below] = file.slice(prefix.length).split('/');
         entries.set(name, {
@@ -320,24 +339,24 @@ export function createDemoGitProvider(): GitProviderClient {
         a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1
       );
     },
-    async getFile(_token, _repositoryId, path, ref) {
-      const text = fileText(ref, path);
+    async getFile(token, _repositoryId, path, ref) {
+      const text = fileText(token, ref, path);
       if (text === undefined) throw new Error('File not found');
       return { path, text, truncated: false, revision: 'demo' };
     },
-    async updateFile(_token, _repositoryId, input) {
-      state().files.set(`${input.branch}:${input.path}`, input.content);
+    async updateFile(token, _repositoryId, input) {
+      state(token).files.set(`${input.branch}:${input.path}`, input.content);
       return { revision: revision() };
     },
-    async createFile(_token, _repositoryId, input) {
-      state().files.set(`${input.branch}:${input.path}`, input.content);
+    async createFile(token, _repositoryId, input) {
+      state(token).files.set(`${input.branch}:${input.path}`, input.content);
       return { revision: revision() };
     },
-    async deleteFile(_token, _repositoryId, input) {
-      state().files.set(`${input.branch}:${input.path}`, null);
+    async deleteFile(token, _repositoryId, input) {
+      state(token).files.set(`${input.branch}:${input.path}`, null);
     },
-    async createBranch(_token, _repositoryId, name) {
-      state().branches.set(name, 'main');
+    async createBranch(token, _repositoryId, name) {
+      state(token).branches.set(name, 'main');
     },
     async getMergeRequestFiles(_token, _repositoryId, number) {
       if (number === 42) {

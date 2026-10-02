@@ -1810,3 +1810,16 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
   assert.equal(showLandingPage({ DEVONE_LANDING_PAGE: 'false' }), false);
   assert.equal(showLandingPage({ DEVONE_LANDING_PAGE: 'TRUE' }), true);
 }
+
+// Demo Git edits are kept per visitor (per connection token).
+{
+  const { createDemoGitProvider, DEMO_REPOSITORY_ID } = await import('../src/lib/git/demo');
+  const git = createDemoGitProvider();
+  const edit = { path: 'README.md', branch: 'main', content: '# Changed by A', message: 'edit', revision: 'demo' };
+  await git.updateFile('demo:visitor-a', DEMO_REPOSITORY_ID, edit);
+  assert.equal((await git.getFile('demo:visitor-a', DEMO_REPOSITORY_ID, 'README.md', 'main')).text, '# Changed by A');
+  assert.notEqual((await git.getFile('demo:visitor-b', DEMO_REPOSITORY_ID, 'README.md', 'main')).text, '# Changed by A');
+  await git.createBranch('demo:visitor-a', DEMO_REPOSITORY_ID, 'a-only', 'sha');
+  assert.ok((await git.getBranches('demo:visitor-a', DEMO_REPOSITORY_ID)).some((branch) => branch.name === 'a-only'));
+  assert.ok(!(await git.getBranches('demo:visitor-b', DEMO_REPOSITORY_ID)).some((branch) => branch.name === 'a-only'));
+}
