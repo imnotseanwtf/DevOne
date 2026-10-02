@@ -43,6 +43,28 @@ ENV BUILD_STANDALONE=true
 RUN npm run build
 
 # ============================================
+# Database migrations: a slim image with only Prisma and the migrations.
+# Build with --target migrate; published as ghcr.io/imnotseanwtf/devone-migrate.
+# ============================================
+
+FROM node:${NODE_VERSION} AS migrate
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Same versions as package.json; prisma.config.ts imports dotenv.
+RUN npm install --no-save --no-audit --no-fund prisma@7.10.0 dotenv@17
+
+COPY prisma.config.ts ./
+COPY prisma ./prisma
+
+USER node
+
+CMD ["npx", "prisma", "migrate", "deploy"]
+
+# ============================================
 # Stage 3: Production runner
 # ============================================
 

@@ -37,6 +37,11 @@ Optional controls:
 
 ## Vercel
 
+The **Deploy with Vercel** button in the README creates your own copy. It asks for
+`DATABASE_URL` (any PostgreSQL; with Neon, also set `DATABASE_URL_UNPOOLED`, see below) and
+`DEVONE_ENCRYPTION_KEY` (`openssl rand -base64 32`). Then set `DEVONE_ALLOW_BOOTSTRAP=true` to
+sign in as the first administrator, and turn it off again afterwards.
+
 Only the `main` branch deploys. `vercel.json` turns off deployments for `dev`, `staging`,
 Dependabot's `dependabot/*` branches and `claude/*`, because every Vercel build runs
 `prisma migrate deploy` and would otherwise apply unreleased migrations to whatever database
@@ -165,9 +170,16 @@ kept), then register it in `src/i18n/messages/index.ts` and `LOCALES` in `src/i1
 Start the stack after configuring `.env`:
 
 ```bash
+docker compose pull
 docker compose up -d
 docker compose ps
 ```
+
+Every release publishes two images: `ghcr.io/imnotseanwtf/devone` (the app) and
+`ghcr.io/imnotseanwtf/devone-migrate` (a slim image that applies database migrations), for
+`linux/amd64` and `linux/arm64`. Compose uses the `latest` tag; set `DEVONE_VERSION` in `.env` to
+pin a release (e.g. `0.1.0`). To upgrade, pull again and restart. To build the images from
+source instead, run `docker compose up -d --build`.
 
 Compose waits for PostgreSQL, applies committed Prisma migrations, then starts DevOne at
 `http://localhost:3000`. Put a TLS reverse proxy in front of the application for production.

@@ -6,7 +6,18 @@
 
 <p align="center">One workspace for everything developers need.</p>
 
+<p align="center">
+  <a href="https://github.com/imnotseanwtf/devone/actions/workflows/ci.yml"><img src="https://github.com/imnotseanwtf/devone/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/imnotseanwtf/devone/releases/latest"><img src="https://img.shields.io/github/v/release/imnotseanwtf/devone" alt="Latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/imnotseanwtf/devone" alt="MIT License" /></a>
+  <a href="https://github.com/imnotseanwtf/devone/pkgs/container/devone"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Docker image" /></a>
+</p>
+
 <p align="center"><a href="docs/demo.mp4">Watch the demo</a> · every tool in under a minute</p>
+
+<p align="center">
+  <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fimnotseanwtf%2Fdevone&project-name=devone&repository-name=devone&env=DATABASE_URL,DEVONE_ENCRYPTION_KEY&envDescription=A%20PostgreSQL%20connection%20string%20and%20an%20encryption%20key%20from%20%60openssl%20rand%20-base64%2032%60&envLink=https%3A%2F%2Fgithub.com%2Fimnotseanwtf%2Fdevone%2Fblob%2Fmain%2Fdocs%2Fdeployment.md%23vercel"><img src="https://vercel.com/button" alt="Deploy with Vercel" /></a>
+</p>
 
 DevOne is a self-hosted developer workspace that connects project work, Git activity, databases, APIs, documentation, and deployments in one project context.
 
@@ -61,21 +72,31 @@ bun run build
 
 ## Self-hosting
 
-Configure `.env`, then start the complete stack:
+DevOne ships as ready-made Docker images, `ghcr.io/imnotseanwtf/devone` and
+`ghcr.io/imnotseanwtf/devone-migrate`, with PostgreSQL and Redis in the Compose stack.
 
 ```bash
+git clone https://github.com/imnotseanwtf/devone
+cd devone
 cp env.example.txt .env
 openssl rand -base64 32
 # Paste the generated value into DEVONE_ENCRYPTION_KEY, choose a PostgreSQL password,
-# URL-encode it in both database URLs, then start DevOne.
+# URL-encode it in both database URLs, then start DevOne:
+docker compose pull
 docker compose up -d
 ```
+
+`docker compose pull` fetches the latest release. To stay on a version, set `DEVONE_VERSION=0.1.0`
+in `.env`; to build from source instead, run `docker compose up -d --build`.
 
 For the first administrator only, set `DEVONE_ALLOW_BOOTSTRAP=true`, sign in once, then set it
 back to `false` and restart the web service. New-user registration is disabled by default.
 
 Open [http://localhost:3000](http://localhost:3000). Use TLS in production so secure session
 cookies cannot travel over plaintext connections.
+
+Prefer a managed host? The **Deploy with Vercel** button above creates your own copy; you'll need a
+PostgreSQL database (Neon works well) and an encryption key. See [docs/deployment.md](docs/deployment.md#vercel).
 
 ## Roadmap
 

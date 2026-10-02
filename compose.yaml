@@ -31,9 +31,10 @@ services:
     restart: unless-stopped
 
   migrate:
+    image: ghcr.io/imnotseanwtf/devone-migrate:${DEVONE_VERSION:-latest}
     build:
       context: .
-      target: builder
+      target: migrate
     command: ['npx', 'prisma', 'migrate', 'deploy']
     environment:
       DATABASE_URL: ${DEVONE_DOCKER_DATABASE_URL:?Set DEVONE_DOCKER_DATABASE_URL in .env}
@@ -43,6 +44,7 @@ services:
     restart: 'no'
 
   web:
+    image: ghcr.io/imnotseanwtf/devone:${DEVONE_VERSION:-latest}
     build: .
     environment:
       DATABASE_URL: ${DEVONE_DOCKER_DATABASE_URL:?Set DEVONE_DOCKER_DATABASE_URL in .env}
