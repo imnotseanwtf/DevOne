@@ -2,6 +2,9 @@
   "buildCommand": "prisma migrate deploy && next build",
   "git": {
     "deploymentEnabled": {
+      "dev": false,
+      "staging": false,
+      "dependabot/*": false,
       "claude/*": false
     }
   }

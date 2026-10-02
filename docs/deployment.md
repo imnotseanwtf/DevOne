@@ -35,6 +35,15 @@ Optional controls:
 - `DEVONE_TRUST_PROXY`: set `true` only when the reverse proxy overwrites `X-Forwarded-For`.
 - `DEVONE_POSTGRES_PORT` and `DEVONE_REDIS_PORT`: localhost-bound development ports.
 
+## Vercel
+
+Only the `main` branch deploys. `vercel.json` turns off deployments for `dev`, `staging`,
+Dependabot's `dependabot/*` branches and `claude/*`, because every Vercel build runs
+`prisma migrate deploy` and would otherwise apply unreleased migrations to whatever database
+that environment points at. To deploy `staging` or `dev` later, give that branch its own
+`DATABASE_URL` and `DEVONE_ENCRYPTION_KEY` in Vercel first, then remove it from
+`git.deploymentEnabled`.
+
 ## Pooled databases (Neon, PgBouncer)
 
 `prisma migrate deploy` takes a session-level advisory lock, which a pooled connection can't hold
