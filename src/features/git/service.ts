@@ -1,4 +1,6 @@
 import { GitProvider, Prisma, type GitConnection } from '@/generated/prisma/client';
+import { createDemoGitProvider } from '@/lib/git/demo';
+import { isDemoMode } from '@/lib/demo';
 import { getPrisma } from '@/lib/db/prisma';
 import { getAppUrl, getOAuthConfig, oauthCallbackUrl, refreshOAuthToken } from '@/lib/auth/oauth';
 import { decryptSecret, encryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
@@ -83,6 +85,8 @@ async function connectionToken(connection: GitConnection): Promise<string> {
 }
 
 function clientFor(provider: GitProvider, baseUrl: string): GitProviderClient {
+  // The public demo shows a made-up repository and never contacts GitHub or GitLab.
+  if (isDemoMode()) return createDemoGitProvider();
   return provider === GitProvider.GITHUB ? createGitHubProvider() : createGitLabProvider(baseUrl);
 }
 

@@ -1,6 +1,8 @@
 import PageContainer from '@/components/layout/page-container';
 import { DevOpsTabs } from '@/features/devops/components/devops-tabs';
 import { SshWorkspace } from '@/features/devops/components/ssh-workspace';
+import { DemoTerminalWorkspace } from '@/features/demo/components/demo-terminal';
+import { isDemoMode } from '@/lib/demo';
 import { getPreferences } from '@/features/account/service';
 import { listSshHosts } from '@/features/devops/ssh-service';
 import { getTerminalPolicy } from '@/features/project-settings/service';
@@ -35,17 +37,21 @@ export default async function TerminalPage({ params }: TerminalPageProps) {
     <PageContainer pageTitle={t('devops.title')} pageDescription={t('devops.description')}>
       <div className='space-y-6'>
         <DevOpsTabs projectId={project.id} active='terminal' />
-        <SshWorkspace
-          projectId={project.id}
-          savedHosts={savedHosts}
-          policy={{
-            allowed: policy.allowed,
-            access: policy.terminalAccess,
-            allowedHosts: policy.sshAllowedHosts,
-            isOwner: policy.role === 'OWNER'
-          }}
-          fontSize={preferences.terminalFontSize}
-        />
+        {isDemoMode() ? (
+          <DemoTerminalWorkspace fontSize={preferences.terminalFontSize} />
+        ) : (
+          <SshWorkspace
+            projectId={project.id}
+            savedHosts={savedHosts}
+            policy={{
+              allowed: policy.allowed,
+              access: policy.terminalAccess,
+              allowedHosts: policy.sshAllowedHosts,
+              isOwner: policy.role === 'OWNER'
+            }}
+            fontSize={preferences.terminalFontSize}
+          />
+        )}
       </div>
     </PageContainer>
   );

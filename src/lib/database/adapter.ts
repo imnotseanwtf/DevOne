@@ -2,13 +2,15 @@ import { DatabaseProvider } from '@/generated/prisma/client';
 import { createMySqlAdapter } from '@/lib/database/mysql';
 import { createPostgresAdapter } from '@/lib/database/postgres';
 import type { ConnectionConfig, DatabaseAdapter } from '@/lib/database/types';
-import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
+import { createDemoAdapter } from '@/lib/database/demo';
+import { isDemoMode } from '@/lib/demo';
 
 export function createAdapter(
   provider: DatabaseProvider,
   config: ConnectionConfig
 ): DatabaseAdapter {
-  if (isDemoMode()) throw new Error(DEMO_DISABLED_MESSAGE);
+  // The public demo never connects anywhere: every connection opens the sample data.
+  if (isDemoMode()) return createDemoAdapter();
   return provider === DatabaseProvider.POSTGRES
     ? createPostgresAdapter(config)
     : createMySqlAdapter(config);

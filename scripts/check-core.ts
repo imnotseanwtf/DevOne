@@ -1785,7 +1785,16 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
     );
     assert.equal(providerIsEnabled('github'), false);
     assert.equal(providerIsEnabled('gitlab'), false);
-    assert.throws(() => createAdapter(DatabaseProvider.POSTGRES, {} as never), refused);
+    // Databases open the built-in sample data instead of connecting anywhere.
+    const sample = createAdapter(DatabaseProvider.POSTGRES, {} as never);
+    assert.equal((await sample.getSchema()).tables.length, 4);
+    const shipped = await sample.execute("SELECT id, status FROM orders WHERE status = 'shipped' ORDER BY id DESC LIMIT 2", true);
+    assert.deepEqual(shipped.columns, ['id', 'status']);
+    assert.equal(shipped.rows.length, 2);
+    assert.ok((shipped.rows[0][0] as number) > (shipped.rows[1][0] as number));
+    assert.deepEqual((await sample.execute('select count(*) from customers', true)).rows, [[12]]);
+    await assert.rejects(() => sample.execute('DELETE FROM orders', false), /read-only/);
+    await assert.rejects(() => sample.insertRow('public', 'orders', {}), /read-only/);
     await assert.rejects(() => openShell({} as never, { cols: 80, rows: 24 }), refused);
   } finally {
     delete process.env.DEVONE_DEMO_MODE;

@@ -515,8 +515,11 @@ try {
     const { createDemoAccount, deleteExpiredDemoAccounts } = await import('../src/features/demo/service');
     const realUsers = await prisma.user.count({ where: { demoExpiresAt: null } });
     const realProjects = await prisma.project.count();
+    // Demo accounts only exist in demo mode, where the sample integrations are built in.
+    process.env.DEVONE_DEMO_MODE = 'true';
     const first = await createDemoAccount();
     const second = await createDemoAccount();
+    delete process.env.DEVONE_DEMO_MODE;
     assert.notEqual(first.projectId, second.projectId);
 
     const demoUser = await prisma.user.findUniqueOrThrow({ where: { id: first.userId } });
@@ -524,7 +527,16 @@ try {
     assert.ok(demoUser.demoExpiresAt && demoUser.demoExpiresAt > new Date());
     const demoProject = await prisma.project.findUniqueOrThrow({ where: { id: first.projectId } });
     assert.equal(demoProject.name, 'Acme web app');
-    assert.equal(await prisma.issue.count({ where: { projectId: first.projectId } }), 11);
+    assert.equal(await prisma.issue.count({ where: { projectId: first.projectId } }), 14);
+    assert.equal(await prisma.projectRepository.count({ where: { projectId: first.projectId } }), 1);
+    assert.equal(await prisma.projectResource.count({ where: { projectId: first.projectId } }), 5);
+    assert.equal(await prisma.drawing.count({ where: { projectId: first.projectId } }), 2);
+    const sampleDb = await prisma.databaseConnection.findFirstOrThrow({
+      where: { projectId: first.projectId },
+      include: { _count: { select: { snapshots: true, savedQueries: true } } }
+    });
+    assert.equal(sampleDb._count.snapshots, 2);
+    assert.equal(sampleDb._count.savedQueries, 2);
     assert.equal(await prisma.docPage.count({ where: { projectId: first.projectId } }), 2);
     const collection = await prisma.apiCollection.findFirstOrThrow({ where: { projectId: first.projectId } });
     assert.equal(await prisma.apiRequest.count({ where: { collectionId: collection.id } }), 3);

@@ -68,10 +68,14 @@ In demo mode:
   requests), so nobody can change what another visitor sees.
 - Demo accounts expire after 24 hours. Expired accounts and everything in them are deleted
   automatically whenever someone starts a new demo.
-- Everything that connects to other machines is refused on the server: SSH terminals, database
-  connections, sending API requests, importing from URLs, and signing in with or connecting GitHub
-  and GitLab accounts. This stops anyone from using the demo to reach or attack other systems, and
-  means no one enters real credentials.
+- Nothing connects to other machines. Git, pipelines, databases and the terminal run against
+  built-in stand-ins instead: a sample repository with merge requests and CI runs, a read-only
+  sample database (customers, products, orders) that answers simple SELECT queries, and a
+  simulated SSH terminal that runs in the browser. Sending API requests, importing from URLs, and
+  signing in with or connecting GitHub and GitLab accounts are refused. This stops anyone from
+  using the demo to reach or attack other systems, and means no one enters real credentials.
+- Each sample project also comes with resources (environments, release tags, a Docker image), an
+  Excalidraw sketch and a draw.io diagram.
 - Starting demos is rate-limited per visitor (set `DEVONE_TRUST_PROXY=true` behind a proxy such as
   Vercel's so the visitor's address is known) and capped at 300 an hour overall.
 

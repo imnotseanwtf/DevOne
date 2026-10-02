@@ -82,9 +82,15 @@ async function ProfileTab({ userId }: { userId: string }) {
         <div className='flex-1 space-y-1'>
           <h2 className='text-xl font-semibold'>{profile.name ?? profile.username}</h2>
           <p className='text-muted-foreground'>@{profile.username}</p>
-          <Badge variant='secondary'>{t('account.profile.signedInWith', { provider })}</Badge>
+          <Badge variant='secondary'>
+            {profile.demoExpiresAt
+              ? t('demo.account.badge')
+              : t('account.profile.signedInWith', { provider })}
+          </Badge>
           <p className='text-muted-foreground pt-2 text-xs'>
-            {t('account.profile.fromProvider', { provider })}
+            {profile.demoExpiresAt
+              ? t('demo.account.note')
+              : t('account.profile.fromProvider', { provider })}
           </p>
         </div>
         <dl className='grid grid-cols-2 gap-x-8 gap-y-3 text-sm'>

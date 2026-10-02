@@ -16,6 +16,7 @@ import {
 import { LinkNewProjectForm } from '@/features/git/components/link-repository-form';
 import { listProjectMembers, listProjectsForUser } from '@/features/projects/service';
 import { requireUser } from '@/lib/auth/session';
+import { isDemoMode } from '@/lib/demo';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Projects' };
@@ -101,9 +102,12 @@ export default async function ProjectsPage() {
             </div>
           )}
         </section>
-        <aside aria-label='Start a project'>
-          <LinkNewProjectForm repositories={providerRepos} />
-        </aside>
+        {/* The demo has one sample repository, already linked. */}
+        {!isDemoMode() && (
+          <aside aria-label='Start a project'>
+            <LinkNewProjectForm repositories={providerRepos} />
+          </aside>
+        )}
       </div>
     </PageContainer>
   );

@@ -338,6 +338,16 @@ export const en = {
     admin_user_enable: 'enabled a user'
   },
   demo: {
+    account: {
+      badge: 'Demo account',
+      note: 'A temporary account for the DevOne demo. It and everything in it are deleted after 24 hours.'
+    },
+    terminal: {
+      hint: 'Sample servers for the demo. They open a simulated terminal: nothing connects anywhere.',
+      simulated: 'Simulated',
+      disconnect: 'Disconnect',
+      pick: 'Pick a server to open a terminal.'
+    },
     banner:
       'You’re exploring the DevOne demo. Your sample project is deleted in {hours} h, and anything that connects to other machines is turned off.',
     selfHost: 'Self-host DevOne',

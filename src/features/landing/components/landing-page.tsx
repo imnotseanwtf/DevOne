@@ -126,7 +126,7 @@ export async function LandingPage() {
               href='/login'
               className='ml-2 inline-flex h-9 items-center rounded-lg border border-white/10 px-4 text-sm font-medium transition-colors hover:bg-white/[0.06]'
             >
-              {t('landing.nav.signIn')}
+              {demo ? t('landing.hero.tryDemo') : t('landing.nav.signIn')}
             </Link>
           </div>
         </nav>

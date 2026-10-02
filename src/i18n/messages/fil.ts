@@ -349,6 +349,16 @@ export const fil: MessageShape<typeof en> = {
     admin_user_enable: 'nag-enable ng user'
   },
   demo: {
+    account: {
+      badge: 'Demo account',
+      note: 'Pansamantalang account para sa demo ng DevOne. Mabubura ito at ang lahat ng laman nito pagkalipas ng 24 oras.'
+    },
+    terminal: {
+      hint: 'Mga sample na server para sa demo. Nagbubukas sila ng simulated na terminal: walang kumokonekta kahit saan.',
+      simulated: 'Simulated',
+      disconnect: 'Idiskonekta',
+      pick: 'Pumili ng server para magbukas ng terminal.'
+    },
     banner:
       'Nasa demo ka ng DevOne. Mabubura ang sample project mo sa loob ng {hours} oras, at naka-off ang lahat ng kumokonekta sa ibang machine.',
     selfHost: 'I-self-host ang DevOne',

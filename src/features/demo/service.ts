@@ -1,9 +1,22 @@
-import { GitProvider, UserRole } from '@/generated/prisma/client';
+import {
+  DatabaseEnvironment,
+  DatabaseProvider,
+  DrawingKind,
+  GitProvider,
+  IssueLinkType,
+  ResourceKind,
+  UserRole
+} from '@/generated/prisma/client';
+import { createConnection, saveQuery, scanSchema } from '@/features/database/service';
+import { architectureDiagram, checkoutSketch } from '@/features/demo/sample-drawings';
 import { createBoard, createIssue, listBoardColumns } from '@/features/issues/service';
 import { createApiRequest, createCollection, saveDoc } from '@/features/platform/service';
 import { createProjectForUser } from '@/features/projects/service';
 import { getPrisma } from '@/lib/db/prisma';
 import { DEMO_LIFETIME_MS } from '@/lib/demo';
+import { encryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
+import { DEMO_REPOSITORY_ID } from '@/lib/git/demo';
+import { createDemoAdapter } from '@/lib/database/demo';
 import { NO_AUTH } from '@/lib/api-client/types';
 import { randomInt, randomUUID } from 'node:crypto';
 
@@ -81,11 +94,15 @@ async function seedDemoWorkspace(userId: string, now: Date): Promise<string> {
     ['Rate-limit the login endpoint', 'BUG', readyForQa, 'CRITICAL', true, 0],
     ['Set up the staging database', 'TASK', done, 'MEDIUM', true, -4],
     ['Analytics dashboard', 'EPIC', done, 'LOW', false, -8],
+    ['Order search in the admin', 'TASK', done, 'MEDIUM', true, -12],
+    ['Serve product images from the CDN', 'TASK', done, 'LOW', false, -18],
+    ['Password reset emails', 'STORY', done, 'HIGH', true, -25],
     ['Dark mode for emails', 'TASK', 'BACKLOG', 'LOW', false, null],
     ['Customer feedback survey', 'STORY', 'BACKLOG', 'MEDIUM', false, 14]
   ];
+  const issueIds = new Map<string, string>();
   for (const [title, type, status, priority, mine, due] of issues) {
-    await createIssue(userId, project.id, {
+    const issue = await createIssue(userId, project.id, {
       boardId: board.id,
       title,
       type,
@@ -94,7 +111,27 @@ async function seedDemoWorkspace(userId: string, now: Date): Promise<string> {
       assigneeId: mine ? userId : null,
       targetDate: due === null ? null : daysFromNow(now, due)
     });
+    issueIds.set(title, issue.id);
+    // Finished work gets a history, so the dashboard's throughput and lead time have data.
+    if (status === done && due !== null) {
+      await getPrisma().issue.update({
+        where: { id: issue.id },
+        data: { createdAt: daysFromNow(now, due - 6) }
+      });
+      await getPrisma().issueEvent.create({
+        data: {
+          issueId: issue.id,
+          actorId: userId,
+          type: 'STATUS',
+          fromValue: inProgress,
+          toValue: done,
+          createdAt: daysFromNow(now, due)
+        }
+      });
+    }
   }
+
+  await seedDemoIntegrations(userId, project.id, issueIds);
 
   await saveDoc(
     userId,
@@ -165,6 +202,200 @@ async function seedDemoWorkspace(userId: string, now: Date): Promise<string> {
   }
 
   return project.id;
+}
+
+/**
+ * The sample repository, resources, database and drawings. None of it reaches
+ * outside DevOne: in demo mode the Git provider, database adapter and terminal
+ * are built-in stand-ins (src/lib/git/demo.ts, src/lib/database/demo.ts,
+ * src/features/demo/fake-shell.ts).
+ */
+async function seedDemoIntegrations(
+  userId: string,
+  projectId: string,
+  issueIds: Map<string, string>
+) {
+  const db = getPrisma();
+
+  const connection = await db.gitConnection.create({
+    data: {
+      userId,
+      provider: GitProvider.GITHUB,
+      providerUserId: `demo-${userId}`,
+      baseUrl: 'https://github.com',
+      encryptedToken: encryptSecret('demo', getEncryptionKey())
+    }
+  });
+  const repository = await db.repository.create({
+    data: {
+      gitConnectionId: connection.id,
+      providerRepositoryId: DEMO_REPOSITORY_ID,
+      name: 'web-app',
+      fullName: DEMO_REPOSITORY_ID,
+      defaultBranch: 'main',
+      visibility: 'private',
+      webUrl: 'https://github.com/imnotseanwtf/devone'
+    }
+  });
+  await db.projectRepository.create({
+    data: { projectId, repositoryId: repository.id, productionBranch: 'main' }
+  });
+  const links: [string, IssueLinkType, string, string][] = [
+    ['Checkout with saved cards', IssueLinkType.BRANCH, 'feat/saved-cards', 'feat/saved-cards'],
+    ['Checkout with saved cards', IssueLinkType.MERGE_REQUEST, '42', 'Checkout with saved cards'],
+    [
+      'Mobile menu stays open after navigating',
+      IssueLinkType.MERGE_REQUEST,
+      '41',
+      'Close the mobile menu after navigating'
+    ],
+    [
+      'Rate-limit the login endpoint',
+      IssueLinkType.MERGE_REQUEST,
+      '39',
+      'Rate-limit the login endpoint'
+    ]
+  ];
+  for (const [title, linkType, reference, linkTitle] of links) {
+    const issueId = issueIds.get(title);
+    if (!issueId) continue;
+    await db.issueGitLink.create({
+      data: {
+        issueId,
+        repositoryId: repository.id,
+        linkType,
+        reference,
+        title: linkTitle,
+        webUrl: repository.webUrl
+      }
+    });
+  }
+
+  const production = await db.projectResource.create({
+    data: {
+      projectId,
+      name: 'Production API',
+      environment: DatabaseEnvironment.PRODUCTION,
+      kind: ResourceKind.API,
+      url: 'https://api.acme.example',
+      hostedOn: 'AWS ECS (us-east-1)',
+      builtBy: 'GitHub Actions',
+      repositoryId: repository.id,
+      branch: 'main',
+      notes: 'Deploys automatically when CI passes on main.'
+    }
+  });
+  await db.projectResource.createMany({
+    data: [
+      {
+        projectId,
+        name: 'Staging API',
+        environment: DatabaseEnvironment.STAGING,
+        kind: ResourceKind.API,
+        url: 'https://staging-api.acme.example',
+        hostedOn: 'AWS ECS (us-east-1)',
+        builtBy: 'GitHub Actions',
+        repositoryId: repository.id,
+        branch: 'main'
+      },
+      {
+        projectId,
+        name: 'Storefront',
+        environment: DatabaseEnvironment.PRODUCTION,
+        kind: ResourceKind.APP,
+        url: 'https://acme.example',
+        hostedOn: 'Vercel'
+      },
+      {
+        projectId,
+        name: 'Releases',
+        environment: DatabaseEnvironment.PRODUCTION,
+        kind: ResourceKind.GIT_TAG,
+        repositoryId: repository.id,
+        tagPattern: 'v*'
+      },
+      {
+        projectId,
+        name: 'Web image',
+        environment: DatabaseEnvironment.PRODUCTION,
+        kind: ResourceKind.DOCKER_IMAGE,
+        image: 'ghcr.io/acme/web-app',
+        imageTag: '1.8.2'
+      }
+    ]
+  });
+
+  const database = await createConnection(userId, projectId, {
+    projectId,
+    name: 'Acme production',
+    provider: DatabaseProvider.POSTGRES,
+    host: 'db-1.acme.internal',
+    port: 5432,
+    username: 'readonly',
+    password: 'demo',
+    sslEnabled: true,
+    environment: DatabaseEnvironment.PRODUCTION,
+    resourceId: production.id,
+    readOnly: true
+  });
+  await db.databaseConnection.update({
+    where: { id: database.id },
+    data: { databaseName: 'acme' }
+  });
+  // A week-old snapshot without the newest columns and index, so Schema diff has a change to show.
+  const current = await createDemoAdapter().getSchema();
+  const previous = {
+    tables: current.tables.map((table) => ({
+      ...table,
+      columns: table.columns.filter(
+        (column) =>
+          !(table.name === 'products' && column.name === 'featured') &&
+          !(table.name === 'customers' && column.name === 'country')
+      ),
+      indexes: table.indexes.filter((index) => index.name !== 'order_items_order_id_idx')
+    }))
+  };
+  await db.schemaSnapshot.create({
+    data: {
+      databaseConnectionId: database.id,
+      contentHash: 'demo-previous',
+      schemaJson: previous as never,
+      createdAt: new Date(Date.now() - 7 * 86_400_000),
+      lastSeenAt: new Date(Date.now() - 7 * 86_400_000)
+    }
+  });
+  await scanSchema(userId, database.id);
+  await saveQuery(
+    userId,
+    database.id,
+    'Latest orders',
+    'SELECT id, customer_id, status, total, created_at FROM orders ORDER BY created_at DESC LIMIT 10;'
+  );
+  await saveQuery(
+    userId,
+    database.id,
+    'Low stock',
+    'SELECT sku, name, stock FROM products WHERE stock < 50 ORDER BY stock;'
+  );
+
+  await db.drawing.create({
+    data: {
+      projectId,
+      title: 'Checkout with saved cards',
+      kind: DrawingKind.EXCALIDRAW,
+      scene: checkoutSketch(),
+      createdById: userId
+    }
+  });
+  await db.drawing.create({
+    data: {
+      projectId,
+      title: 'Production architecture',
+      kind: DrawingKind.DRAWIO,
+      scene: { xml: architectureDiagram() },
+      createdById: userId
+    }
+  });
 }
 
 /** Deletes demo users and everything they created. */

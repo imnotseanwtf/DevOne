@@ -32,6 +32,7 @@ export async function getProfile(userId: string) {
       role: true,
       createdAt: true,
       lastLoginAt: true,
+      demoExpiresAt: true,
       preferences: true,
       _count: { select: { memberships: true } }
     }
