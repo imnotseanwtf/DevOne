@@ -2,7 +2,8 @@
 
 `desktop/` wraps DevOne in an Electron window. DevOne still needs its Node.js server (server
 actions, the SSH terminal over Server-Sent Events) and PostgreSQL, so the desktop app either
-**loads a DevOne you already run** or **starts a bundled copy of the server** on `127.0.0.1`.
+**loads a running DevOne** (by default the hosted one at https://www.dev-one.site) or **starts a
+bundled copy of the server** on `127.0.0.1`.
 
 ## Develop
 
@@ -35,7 +36,8 @@ that touch `desktop/` build the Linux app only. It can also be run by hand from 
 
 ## Configure
 
-On first launch the app writes `config.json` to its data folder and asks you to fill it in:
+With no settings the app opens https://www.dev-one.site. On first launch it writes `config.json`
+to its data folder; edit it to use another DevOne or the bundled server:
 
 | OS      | Folder                                         |
 | ------- | ---------------------------------------------- |
@@ -52,9 +54,10 @@ On first launch the app writes `config.json` to its data folder and asks you to 
 }
 ```
 
-- `url`: a hosted DevOne to load instead of the bundled server (the `DEVONE_URL` environment
-  variable overrides it). Leave empty to use the bundled server.
-- `databaseUrl`: the PostgreSQL database for the bundled server. Apply the migrations to it
+- `url`: the DevOne to load, such as your own deployment (the `DEVONE_URL` environment variable
+  overrides it). Takes precedence over `databaseUrl`.
+- `databaseUrl`: set it (with `url` empty) to run the bundled server against this PostgreSQL
+  database. With both empty, the app opens https://www.dev-one.site. Apply the migrations to it
   before first use: `DATABASE_URL=… bun db:deploy`.
 - `port`: the bundled server listens on `http://127.0.0.1:<port>`, which is also its
   `DEVONE_APP_URL`. Register `http://127.0.0.1:31337/api/auth/<provider>/callback` with GitHub or

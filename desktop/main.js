@@ -1,10 +1,11 @@
 // DevOne desktop: an Electron window around the DevOne Next.js server.
 //
-// Two modes:
-// - Remote: set DEVONE_URL (or "url" in config.json) and the window loads that
-//   instance. `bun desktop:dev` uses this against `bun dev` on localhost:3000.
-// - Bundled: the packaged app starts its own Next.js standalone server on
-//   127.0.0.1 and loads it. It needs a PostgreSQL database ("databaseUrl").
+// Which DevOne the window loads, first match wins:
+// - DEVONE_URL or "url" in config.json: that instance. `bun desktop:dev` uses this
+//   against `bun dev` on localhost:3000.
+// - "databaseUrl" in config.json: the packaged app starts its own Next.js
+//   standalone server on 127.0.0.1 against that PostgreSQL database.
+// - Otherwise the hosted DevOne at DEFAULT_URL.
 //
 // Settings live in config.json in the app's user data folder; see docs/desktop.md.
 const { app, BrowserWindow, dialog, safeStorage, shell, utilityProcess } = require('electron');
@@ -13,6 +14,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 
+const DEFAULT_URL = 'https://www.dev-one.site';
 const DEFAULT_PORT = 31337;
 
 let serverProcess = null;
@@ -84,17 +86,6 @@ function waitForPort(port, timeoutMs = 30_000) {
 }
 
 async function startBundledServer(config) {
-  if (!config.databaseUrl) {
-    await dialog.showMessageBox({
-      type: 'info',
-      message: 'DevOne needs a PostgreSQL database',
-      detail: `Set "databaseUrl" in ${configPath()} (or "url" to use a hosted DevOne), then start DevOne again.`
-    });
-    shell.showItemInFolder(configPath());
-    app.quit();
-    return null;
-  }
-
   const port = Number(config.port) || DEFAULT_PORT;
   const origin = `http://127.0.0.1:${port}`;
   const serverDir = app.isPackaged
@@ -170,9 +161,9 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     try {
       const config = readConfig();
-      const remote = process.env.DEVONE_URL || config.url;
+      const remote =
+        process.env.DEVONE_URL || config.url || (config.databaseUrl ? '' : DEFAULT_URL);
       const origin = remote ? remote.replace(/\/$/, '') : await startBundledServer(config);
-      if (!origin) return;
 
       createWindow(origin);
       app.on('activate', () => {
