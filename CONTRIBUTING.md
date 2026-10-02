@@ -4,15 +4,9 @@ Thanks for helping! This guide covers how to set up DevOne, how branches work, a
 
 ## Branches
 
-| Branch | What it's for |
-|---|---|
-| `dev` | Day-to-day development. **Open your pull requests against `dev`.** |
-| `staging` | Release candidates. `dev` is merged here to test a release before it ships. |
-| `main` | Released, production-ready code. Only `staging` is merged here. |
+All work goes into **`main`**: open your pull requests against it. Releases are tagged from `main`.
 
-Changes flow one way: **feature branch → `dev` → `staging` → `main`**. Fixes that can't wait (hotfixes) branch from `main` and are merged back into `staging` and `dev` too.
-
-Only maintainers can push to `dev`, `staging` and `main`. Everyone else works in their own fork and sends a pull request: you don't need permission or a branch from us to start.
+Only maintainers can push to `main`. Everyone else works in their own fork and sends a pull request: you don't need permission or a branch from us to start.
 
 For anything bigger than a small fix, please open an issue or a [Discussion](https://github.com/imnotseanwtf/devone/discussions) first, so we can agree on the approach before you spend time on it.
 
@@ -26,7 +20,6 @@ First, **fork** the repository on GitHub (the Fork button, top right), then clon
 git clone https://github.com/<your-username>/devone
 cd devone
 git remote add upstream https://github.com/imnotseanwtf/devone
-git checkout dev
 bun install
 cp env.example.txt .env
 # Generate DEVONE_ENCRYPTION_KEY with: openssl rand -base64 32
@@ -39,10 +32,10 @@ Open http://localhost:3000.
 
 ## Making a change
 
-1. Get the latest `dev` and create a branch from it:
+1. Get the latest `main` and create a branch from it:
    ```bash
    git fetch upstream
-   git checkout -b fix/board-drag upstream/dev
+   git checkout -b fix/board-drag upstream/main
    ```
 2. Make your change. Read [AGENTS.md](AGENTS.md) for the project's structure and conventions, and [docs/forms.md](docs/forms.md) if you're building a form.
 3. Run the checks:
@@ -53,7 +46,7 @@ Open http://localhost:3000.
    bun run test
    bun run test:db        # needs the database from docker compose
    ```
-4. Push the branch to your fork (`git push -u origin fix/board-drag`) and open a pull request against `imnotseanwtf/devone`'s `dev` branch. Fill in the template; CI runs automatically, and a maintainer will review it.
+4. Push the branch to your fork (`git push -u origin fix/board-drag`) and open a pull request against `imnotseanwtf/devone`'s `main` branch. Fill in the template; CI runs automatically, and a maintainer will review it.
 
 ## Conventions
 

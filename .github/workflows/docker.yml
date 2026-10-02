@@ -13,7 +13,7 @@ on:
         description: Publish as this version and latest (e.g. 0.1.0). Leave empty for an "edge" image.
         required: false
   pull_request:
-    branches: [main, staging, dev]
+    branches: [main]
     paths:
       - Dockerfile
       - .dockerignore

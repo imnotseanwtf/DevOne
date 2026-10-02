@@ -121,13 +121,7 @@ Have an idea or want to pick one up? Start a thread in [Discussions](https://git
 
 ## Contributing
 
-Contributions are welcome! Fork the repository, make your change on a branch in your fork, and open a pull request against `dev`. [CONTRIBUTING.md](CONTRIBUTING.md) has the details. Questions are best asked in [Discussions](https://github.com/imnotseanwtf/devone/discussions).
-
-| Branch | Purpose |
-|---|---|
-| `dev` | Day-to-day development; pull requests go here |
-| `staging` | Release candidates, tested before they ship |
-| `main` | Released, production-ready code |
+Contributions are welcome! Fork the repository, make your change on a branch in your fork, and open a pull request against `main`. [CONTRIBUTING.md](CONTRIBUTING.md) has the details. Questions are best asked in [Discussions](https://github.com/imnotseanwtf/devone/discussions).
 
 Found a security problem? Please report it privately; see [SECURITY.md](SECURITY.md). Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
 
