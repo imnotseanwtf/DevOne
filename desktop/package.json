@@ -13,7 +13,7 @@
   "scripts": {
     "start": "electron .",
     "prepare-server": "node prepare-server.mjs",
-    "dist": "node prepare-server.mjs && electron-builder"
+    "dist": "node prepare-server.mjs && electron-builder --config electron-builder.config.cjs --publish never"
   },
   "devDependencies": {
     "electron": "^44.5.1",

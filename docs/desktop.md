@@ -24,6 +24,15 @@ This runs `desktop/prepare-server.mjs` (a `BUILD_STANDALONE=true` Next.js build,
 that platform (for example a CI matrix): the server's native modules (`sharp`, `ssh2`'s optional
 bindings) are installed for the OS that runs the build.
 
+## Release
+
+The **Desktop** workflow (`.github/workflows/desktop.yml`) ships the app. To release, bump
+`version` in the root `package.json` (the desktop app takes its version from there) and merge to
+`main`. If no `v<version>` tag exists yet, the workflow builds the macOS (Apple silicon DMG),
+Windows (NSIS installer) and Linux (AppImage) installers on their own runners and publishes them as
+the GitHub Release `v<version>`. Pushes that keep the version unchanged build nothing; pull requests
+that touch `desktop/` build the Linux app only. It can also be run by hand from the Actions tab.
+
 ## Configure
 
 On first launch the app writes `config.json` to its data folder and asks you to fill it in:
@@ -60,4 +69,5 @@ readable only by you. Back it up: losing it makes stored tokens unrecoverable.
 
 - Webhooks can't reach a desktop machine, so pipeline updates won't arrive by push.
 - Installers aren't code-signed; macOS Gatekeeper and Windows SmartScreen will warn until signing
-  is configured in `desktop/electron-builder.yml`.
+  is configured in `desktop/electron-builder.config.cjs` and the certificates are added to the
+  workflow as secrets.
