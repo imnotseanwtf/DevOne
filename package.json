@@ -30,7 +30,10 @@
     "lint:strict": "oxlint --deny-warnings",
     "format": "oxfmt --write . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
-    "prepare": "husky"
+    "prepare": "husky",
+    "desktop:install": "cd desktop && bun install",
+    "desktop:dev": "cd desktop && DEVONE_URL=http://localhost:3000 bun run start",
+    "desktop:build": "cd desktop && bun run dist"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
