@@ -10,6 +10,15 @@
 
 DevOne is a self-hosted developer workspace that connects project work, Git activity, databases, APIs, documentation, and deployments in one project context.
 
+![The DevOne board](docs/screenshots/board.png)
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/list.png" alt="List view" /></td>
+    <td><img src="docs/screenshots/calendar.png" alt="Calendar view" /></td>
+  </tr>
+</table>
+
 ## Current MVP
 
 - Next.js 16 and React 19
@@ -68,9 +77,21 @@ back to `false` and restart the web service. New-user registration is disabled b
 Open [http://localhost:3000](http://localhost:3000). Use TLS in production so secure session
 cookies cannot travel over plaintext connections.
 
+## Roadmap
+
+DevOne is young, and the direction is open to discussion. Things we'd like to do next:
+
+- Published Docker images for every release
+- A public demo instance
+- More interface languages beyond English and Filipino
+- Better mobile layouts across the workspace
+- Notifications for mentions, assignments and failed pipelines
+
+Have an idea or want to pick one up? Start a thread in [Discussions](https://github.com/imnotseanwtf/devone/discussions) or look for issues labelled [`good first issue`](https://github.com/imnotseanwtf/devone/labels/good%20first%20issue).
+
 ## Contributing
 
-Contributions are welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and open pull requests against the `dev` branch.
+Contributions are welcome! Fork the repository, make your change on a branch in your fork, and open a pull request against `dev`. [CONTRIBUTING.md](CONTRIBUTING.md) has the details. Questions are best asked in [Discussions](https://github.com/imnotseanwtf/devone/discussions).
 
 | Branch | Purpose |
 |---|---|

@@ -12,13 +12,20 @@ Thanks for helping! This guide covers how to set up DevOne, how branches work, a
 
 Changes flow one way: **feature branch → `dev` → `staging` → `main`**. Fixes that can't wait (hotfixes) branch from `main` and are merged back into `staging` and `dev` too.
 
+Only maintainers can push to `dev`, `staging` and `main`. Everyone else works in their own fork and sends a pull request: you don't need permission or a branch from us to start.
+
+For anything bigger than a small fix, please open an issue or a [Discussion](https://github.com/imnotseanwtf/devone/discussions) first, so we can agree on the approach before you spend time on it.
+
 ## Setting up
 
 You'll need [Bun](https://bun.sh) 1.3+, Docker, and Git.
 
+First, **fork** the repository on GitHub (the Fork button, top right), then clone your fork:
+
 ```bash
-git clone https://github.com/imnotseanwtf/devone
+git clone https://github.com/<your-username>/devone
 cd devone
+git remote add upstream https://github.com/imnotseanwtf/devone
 git checkout dev
 bun install
 cp env.example.txt .env
@@ -32,7 +39,11 @@ Open http://localhost:3000.
 
 ## Making a change
 
-1. Create a branch from `dev`: `git checkout -b fix/board-drag dev`
+1. Get the latest `dev` and create a branch from it:
+   ```bash
+   git fetch upstream
+   git checkout -b fix/board-drag upstream/dev
+   ```
 2. Make your change. Read [AGENTS.md](AGENTS.md) for the project's structure and conventions, and [docs/forms.md](docs/forms.md) if you're building a form.
 3. Run the checks:
    ```bash
@@ -42,7 +53,7 @@ Open http://localhost:3000.
    bun run test
    bun run test:db        # needs the database from docker compose
    ```
-4. Open a pull request against `dev` and fill in the template.
+4. Push the branch to your fork (`git push -u origin fix/board-drag`) and open a pull request against `imnotseanwtf/devone`'s `dev` branch. Fill in the template; CI runs automatically, and a maintainer will review it.
 
 ## Conventions
 
