@@ -8,7 +8,10 @@ module.exports = {
   artifactName: 'DevOne-${version}-${os}-${arch}.${ext}',
   extraMetadata: { version },
   directories: { output: 'dist' },
-  files: ['main.js', 'database.js', 'package.json'],
+  // DevOne's logo (src/app/icon.svg) at 1024px; electron-builder makes the .icns,
+  // .ico and Linux sizes from it.
+  icon: 'icon.png',
+  files: ['main.js', 'database.js', 'icon.png', 'package.json'],
   // Not packed into app.asar: embedded-postgres runs its Postgres binaries from
   // node_modules, and binaries inside an asar archive can't be executed.
   asar: false,
@@ -18,6 +21,8 @@ module.exports = {
   mac: { category: 'public.app-category.developer-tools', target: 'dmg' },
   win: { target: 'nsis' },
   linux: {
+    // Same logo at the standard sizes, so desktops don't have to scale the 1024px one.
+    icon: 'icons',
     target: ['deb', 'rpm'],
     category: 'Development',
     maintainer: 'Sean Gulliver Doctora',

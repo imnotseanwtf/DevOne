@@ -4,6 +4,18 @@ All notable changes to DevOne are listed here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-03
+
+### Fixed
+
+- **Desktop app on Windows**: it no longer fails with "DevOne could not start — undefined" when run with administrator rights (for example when its installer opens it). The built-in database is now started with `pg_ctl`.
+- **Desktop app on macOS**: the built-in database's libraries are now set up when the app is built.
+- **Desktop app**: if it can't start, the error shows the database's own message and points to `devone.log`; it also recovers from a database left running by a crash or half-created by a failed first launch.
+
+### Changed
+
+- **Desktop app icon**: the installers, app window and Linux launcher now use the DevOne logo instead of Electron's default icon.
+
 ## [1.1.0] - 2026-10-03
 
 ### Added
@@ -30,6 +42,7 @@ The first public release.
 - **Self-hosting** with Docker Compose (PostgreSQL and Redis included), or deploy to Vercel.
 - Landing page with a self-playing product demo, and the Prompt mascot.
 
-[Unreleased]: https://github.com/imnotseanwtf/devone/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/imnotseanwtf/devone/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/imnotseanwtf/devone/releases/tag/v1.1.1
 [1.1.0]: https://github.com/imnotseanwtf/devone/releases/tag/v1.1.0
 [0.1.0]: https://github.com/imnotseanwtf/devone/releases/tag/v0.1.0
