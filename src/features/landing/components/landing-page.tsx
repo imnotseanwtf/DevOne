@@ -10,6 +10,7 @@ import { isDemoMode } from '@/lib/demo';
 import type { TKey } from '@/i18n/messages';
 import { getT } from '@/i18n/server';
 import Link from 'next/link';
+import { Fragment } from 'react';
 
 /**
  * The public front page for signed-out visitors. It always uses the brand
@@ -89,6 +90,31 @@ const DOWNLOADS: { platform: DesktopPlatform; icon: IconName; title: TKey; detai
 ];
 
 const GITHUB_URL = 'https://github.com/imnotseanwtf/devone';
+
+/**
+ * The self-hosting quick start, the same steps as the README's "Self-hosting" section. Step 3
+ * fills env.example.txt's placeholders: one hex password (no URL-encoding needed) for Postgres
+ * and both database URLs, a new encryption key, and bootstrap on so the first sign-in becomes
+ * the administrator.
+ */
+const SELF_HOST_SCRIPT: { step: TKey; commands: string[] }[] = [
+  {
+    step: 'landing.selfHost.step1',
+    commands: [`git clone ${GITHUB_URL}`, 'cd devone']
+  },
+  { step: 'landing.selfHost.step2', commands: ['cp env.example.txt .env'] },
+  {
+    step: 'landing.selfHost.step3',
+    commands: [
+      [
+        'perl -pi -e "s/change-me/$(openssl rand -hex 16)/g; \\',
+        '  s|^DEVONE_ENCRYPTION_KEY=.*|DEVONE_ENCRYPTION_KEY=$(openssl rand -base64 32)|; \\',
+        '  s/^DEVONE_ALLOW_BOOTSTRAP=.*/DEVONE_ALLOW_BOOTSTRAP=true/" .env'
+      ].join('\n')
+    ]
+  },
+  { step: 'landing.selfHost.step4', commands: ['docker compose pull', 'docker compose up -d'] }
+];
 
 const GRID_BACKGROUND = {
   backgroundImage:
@@ -325,13 +351,7 @@ export async function LandingPage() {
               </h2>
               <p className='mt-4 text-zinc-400'>{t('landing.selfHost.body')}</p>
               <ol className='mt-8 space-y-3'>
-                {(
-                  [
-                    'landing.selfHost.step1',
-                    'landing.selfHost.step2',
-                    'landing.selfHost.step3'
-                  ] as const
-                ).map((step, index) => (
+                {SELF_HOST_SCRIPT.map(({ step }, index) => (
                   <li key={step} className='flex items-center gap-3 text-sm text-zinc-300'>
                     <span className='flex size-6 items-center justify-center rounded-full border border-white/10 font-mono text-xs text-zinc-400'>
                       {index + 1}
@@ -340,8 +360,19 @@ export async function LandingPage() {
                   </li>
                 ))}
               </ol>
+              <p className='mt-6 text-sm leading-relaxed text-zinc-400'>
+                {t('landing.selfHost.note')}{' '}
+                <a
+                  href={`${GITHUB_URL}#self-hosting`}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-zinc-200 underline underline-offset-4 hover:text-white'
+                >
+                  {t('landing.selfHost.guide')}
+                </a>
+              </p>
             </div>
-            <div className='overflow-hidden rounded-xl border border-white/10 bg-[#0f0f10] shadow-2xl shadow-black/50'>
+            <div className='min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#0f0f10] shadow-2xl shadow-black/50'>
               <div className='flex items-center gap-1.5 border-b border-white/[0.06] px-4 py-3'>
                 <span className='size-2.5 rounded-full bg-white/15' />
                 <span className='size-2.5 rounded-full bg-white/15' />
@@ -350,15 +381,20 @@ export async function LandingPage() {
               </div>
               <pre className='overflow-x-auto p-5 font-mono text-[13px] leading-7' translate='no'>
                 <code>
-                  <span className='text-zinc-500'># 1</span>
-                  {'\n'}
-                  <span className='text-[#b6f23a]'>$</span> cp env.example.txt .env{'\n'}
-                  <span className='text-zinc-500'># 2</span>
-                  {'\n'}
-                  <span className='text-[#b6f23a]'>$</span> openssl rand -base64 32{'\n'}
-                  <span className='text-zinc-500'># 3</span>
-                  {'\n'}
-                  <span className='text-[#b6f23a]'>$</span> docker compose up -d{'\n'}
+                  {SELF_HOST_SCRIPT.map((block, index) => (
+                    <Fragment key={block.step}>
+                      <span className='text-zinc-500'>
+                        # {index + 1} · {t(block.step)}
+                      </span>
+                      {'\n'}
+                      {block.commands.map((command) => (
+                        <Fragment key={command}>
+                          <span className='text-[#b6f23a]'>$</span> {command}
+                          {'\n'}
+                        </Fragment>
+                      ))}
+                    </Fragment>
+                  ))}
                   <span className='text-[#b6f23a]'>✓</span>{' '}
                   <span className='text-zinc-400'>{t('landing.selfHost.ready')}</span>
                   <span className='ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-[#fafafa]' />

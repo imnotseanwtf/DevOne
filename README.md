@@ -87,24 +87,32 @@ DevOne ships as ready-made Docker images, `ghcr.io/imnotseanwtf/devone` and
 `ghcr.io/imnotseanwtf/devone-migrate`, with PostgreSQL and Redis in the Compose stack.
 
 ```bash
+# 1. Get the code
 git clone https://github.com/imnotseanwtf/devone
 cd devone
+# 2. Copy the example environment
 cp env.example.txt .env
-openssl rand -base64 32
-# Paste the generated value into DEVONE_ENCRYPTION_KEY, choose a PostgreSQL password,
-# URL-encode it in both database URLs, then start DevOne:
+# 3. Set a database password and encryption key, and let the first sign-in become administrator
+perl -pi -e "s/change-me/$(openssl rand -hex 16)/g; \
+  s|^DEVONE_ENCRYPTION_KEY=.*|DEVONE_ENCRYPTION_KEY=$(openssl rand -base64 32)|; \
+  s/^DEVONE_ALLOW_BOOTSTRAP=.*/DEVONE_ALLOW_BOOTSTRAP=true/" .env
+# 4. Start the stack
 docker compose pull
 docker compose up -d
 ```
 
-`docker compose pull` fetches the latest release. To stay on a version, set `DEVONE_VERSION=0.1.0`
-in `.env`; to build from source instead, run `docker compose up -d --build`.
+Step 3 fills the placeholders in `.env`: one random password for PostgreSQL and both database
+URLs (hex, so it needs no URL-encoding), a new `DEVONE_ENCRYPTION_KEY` (back it up: losing it makes
+stored tokens unrecoverable), and `DEVONE_ALLOW_BOOTSTRAP=true`. You can also edit `.env` by hand.
 
-For the first administrator only, set `DEVONE_ALLOW_BOOTSTRAP=true`, sign in once, then set it
-back to `false` and restart the web service. New-user registration is disabled by default.
+`docker compose pull` fetches the latest release images. To stay on a version, set
+`DEVONE_VERSION=0.1.0` in `.env`; to build from source instead, run `docker compose up -d --build`.
 
-Open [http://localhost:3000](http://localhost:3000). Use TLS in production so secure session
-cookies cannot travel over plaintext connections.
+Open [http://localhost:3000](http://localhost:3000) and sign in with a GitHub or GitLab token: the
+first person to sign in becomes the administrator. Then set `DEVONE_ALLOW_BOOTSTRAP=false` in `.env`
+and run `docker compose up -d` again. New-user registration is disabled by default.
+
+Use TLS in production so secure session cookies cannot travel over plaintext connections.
 
 Prefer a managed host? The **Deploy with Vercel** button above creates your own copy; you'll need a
 PostgreSQL database (Neon works well) and an encryption key. See [docs/deployment.md](docs/deployment.md#vercel).
