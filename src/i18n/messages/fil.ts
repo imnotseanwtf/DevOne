@@ -209,6 +209,7 @@ export const fil: MessageShape<typeof en> = {
       connections: 'Mga nakakonektang account',
       ssh: 'Mga naka-save na server',
       sessions: 'Mga session',
+      ai: 'Mga AI key',
       preferences: 'Mga kagustuhan'
     },
     profile: {
@@ -286,7 +287,12 @@ export const fil: MessageShape<typeof en> = {
   admin: {
     title: 'Admin',
     description: 'Mga tao, patakaran sa pag-sign in at audit log ng DevOne na ito.',
-    tabs: { users: 'Mga user', policy: 'Patakaran sa pag-sign in', audit: 'Audit log' },
+    tabs: {
+      users: 'Mga user',
+      ai: 'AI router',
+      policy: 'Patakaran sa pag-sign in',
+      audit: 'Audit log'
+    },
     users: {
       count: '{count} tao',
       user: 'User',
@@ -346,7 +352,119 @@ export const fil: MessageShape<typeof en> = {
     account_session_revoke_others: 'nag-sign out sa ibang session',
     admin_user_role: 'binago ang tungkulin ng user',
     admin_user_disable: 'nag-disable ng user',
-    admin_user_enable: 'nag-enable ng user'
+    admin_user_enable: 'nag-enable ng user',
+    admin_ai_provider_add: 'nagdagdag ng AI provider',
+    admin_ai_provider_update: 'nagbago ng AI provider',
+    admin_ai_provider_delete: 'nag-alis ng AI provider',
+    admin_ai_combo_add: 'nagdagdag ng AI combo',
+    admin_ai_combo_update: 'nagbago ng AI combo',
+    admin_ai_combo_delete: 'nag-alis ng AI combo',
+    account_ai_key_create: 'gumawa ng AI key',
+    account_ai_key_delete: 'nagbura ng AI key'
+  },
+  aiRouter: {
+    intro:
+      'Iisang OpenAI-compatible na endpoint para sa lahat ng model na naka-set up dito. Napupunta ang request sa unang provider na sumagot; kapag rate-limited, ubos ang quota o down ang isa, ipapasa ito sa susunod.',
+    endpoint: 'Endpoint',
+    providers: {
+      title: 'Mga provider',
+      description:
+        'Mga OpenAI-compatible na API na magagamit ng router. Naka-encrypt ang mga key at hindi na ipapakita ulit.',
+      empty: 'Wala pang provider. Magdagdag ng isa para magsimulang mag-route ng mga request.',
+      add: 'Magdagdag ng provider',
+      addTitle: 'Magdagdag ng provider',
+      editTitle: 'I-edit ang {name}',
+      preset: 'Simulan mula sa',
+      name: 'Pangalan',
+      nameHint:
+        'Puwedeng humingi ang mga client ng "{name}/model" para itong provider lang ang gamitin.',
+      baseUrl: 'Base URL',
+      apiKey: 'API key',
+      apiKeyKeep: 'Iwanang blangko para panatilihin ang naka-save na key.',
+      clearKey: 'Alisin ang naka-save na key',
+      models: 'Mga model',
+      modelsHint:
+        'Isa bawat linya, ayon sa pangalan sa provider. Ang una ang ginagamit para sa "auto".',
+      fetchModels: 'Kunin ang mga model',
+      fetched: '{count} model ang nakita',
+      priority: 'Priyoridad',
+      priorityHint:
+        'Kapag maraming provider ang may parehong model, mauunang subukan ang mas mababang numero.',
+      enabled: 'Naka-enable',
+      off: 'Naka-off',
+      noKey: 'Walang API key',
+      modelCount: '{count} model',
+      resting: 'Nagpapahinga hanggang {time}',
+      lastError: 'Huling error',
+      tryNow: 'Subukan ulit ngayon',
+      removeTitle: 'Alisin ang {name}?',
+      removeDescription: 'Aalisin din ito sa bawat combo na gumagamit nito.',
+      saved: 'Na-save ang provider',
+      removed: 'Naalis ang provider'
+    },
+    combos: {
+      title: 'Mga combo',
+      description:
+        'Pangalan ng model na kumakatawan sa listahan ng mga model, sinusubukan nang sunod-sunod hanggang may sumagot. Ilagay muna ang mga libreng model at sa huli ang may bayad para makatipid.',
+      empty: 'Wala pang combo.',
+      add: 'Magdagdag ng combo',
+      addTitle: 'Magdagdag ng combo',
+      editTitle: 'I-edit ang {name}',
+      name: 'Pangalan',
+      nameHint: 'Ang hihingin ng mga client bilang model, hal. "free-stack".',
+      steps: 'Mga model, ayon sa pagkakasunod ng pagsubok',
+      addStep: 'Magdagdag ng model',
+      provider: 'Provider',
+      model: 'Model',
+      moveUp: 'Iakyat',
+      moveDown: 'Ibaba',
+      removeStep: 'Alisin ang model na ito',
+      noProviders: 'Magdagdag muna ng provider.',
+      removeTitle: 'Alisin ang combo na {name}?',
+      removeDescription: 'Magkaka-error ang mga client na humihingi nito hanggang maidagdag ulit.',
+      saved: 'Na-save ang combo',
+      removed: 'Naalis ang combo'
+    },
+    usage: {
+      title: 'Paggamit',
+      description: 'Mga request sa nakaraang 24 na oras, at ang pinakabagong 50.',
+      empty: 'Wala pang request.',
+      provider: 'Provider',
+      requests: 'Mga request',
+      failures: 'Pumalya',
+      tokens: 'Mga token papasok / palabas',
+      latency: 'Karaniwang tagal',
+      when: 'Kailan',
+      who: 'Sino',
+      model: 'Model',
+      tries: 'Mga subok',
+      status: 'Katayuan',
+      noProvider: 'Walang sumagot'
+    },
+    keys: {
+      description:
+        'Mga personal na key para magamit ang AI router mula sa OpenCode, Cursor, mga script at iba pang tool. Hindi na kailangan ng key sa loob mismo ng DevOne.',
+      empty: 'Wala ka pang AI key.',
+      create: 'Gumawa ng key',
+      createTitle: 'Gumawa ng AI key',
+      name: 'Pangalan',
+      namePlaceholder: 'hal. OpenCode sa laptop',
+      created: 'Kopyahin na ang key mo. Hindi na ito ipapakita ulit.',
+      copy: 'Kopyahin',
+      copied: 'Nakopya',
+      done: 'Tapos na',
+      lastUsed: 'Huling ginamit',
+      createdOn: 'Ginawa noong {date}',
+      deleteTitle: 'Burahin ang key na {name}?',
+      deleteDescription: 'Titigil gumana ang mga tool na gumagamit nito.',
+      deleted: 'Nabura ang key',
+      setup: 'Mag-set up ng tool',
+      setupHint:
+        'Gagana ang kahit anong tool na tumatanggap ng OpenAI-compatible na base URL. Humingi ng "auto" o ng isang combo bilang model para sa awtomatikong fallback.',
+      models: 'Mga model na puwede mong hingin',
+      noModels: 'Wala pang AI provider na na-set up ng administrator.',
+      disabledInDemo: 'Naka-off ang AI router sa pampublikong demo.'
+    }
   },
   demo: {
     account: {

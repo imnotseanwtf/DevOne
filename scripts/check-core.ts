@@ -1848,3 +1848,330 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
     }
   });
 }
+
+// AI router: which providers a model goes to, in what order, and when to move on.
+{
+  const {
+    AUTO_MODEL,
+    cooldownMs,
+    listModelIds,
+    normalizeBaseUrl,
+    parseModelList,
+    providerUrl,
+    resolveTargets,
+    shouldFallBack,
+    usageFromJson,
+    usageFromSse
+  } = await import('../src/lib/ai-router/routing');
+  const now = new Date('2026-10-03T12:00:00Z');
+  const provider = (id: string, priority: number, models: string[], extra = {}) => ({
+    id,
+    name: id[0].toUpperCase() + id.slice(1),
+    baseUrl: `https://${id}.example/v1`,
+    models,
+    priority,
+    enabled: true,
+    cooldownUntil: null,
+    ...extra
+  });
+  const zen = provider('zen', 10, ['big-pickle', 'shared']);
+  const groq = provider('groq', 20, ['llama', 'shared']);
+  const off = provider('off', 0, ['shared'], { enabled: false });
+  const resting = provider('resting', 5, ['shared'], {
+    cooldownUntil: new Date(now.getTime() + 60_000)
+  });
+  const providers = [groq, off, resting, zen];
+  const combos = [
+    {
+      name: 'free-stack',
+      steps: [
+        { providerId: 'groq', model: 'llama' },
+        { providerId: 'off', model: 'shared' },
+        { providerId: 'zen', model: 'big-pickle' }
+      ]
+    }
+  ];
+  const route = (model: string) =>
+    resolveTargets(model, providers, combos, now).map((t) => `${t.provider.id}:${t.model}`);
+
+  // A combo keeps its order and skips disabled providers.
+  assert.deepEqual(route('free-stack'), ['groq:llama', 'zen:big-pickle']);
+  // A shared model goes by priority; a resting provider is tried last, a disabled one never.
+  assert.deepEqual(route('shared'), ['zen:shared', 'groq:shared', 'resting:shared']);
+  // "Provider/model" pins the provider, in any case; an unknown model has nowhere to go.
+  assert.deepEqual(route('groq/some-new-model'), ['groq:some-new-model']);
+  assert.deepEqual(route('GROQ/llama'), ['groq:llama']);
+  assert.deepEqual(route('nobody-serves-this'), []);
+  assert.deepEqual(route('off/shared'), []);
+  // "auto" is each provider's first model, by priority.
+  assert.deepEqual(route(AUTO_MODEL), ['zen:big-pickle', 'groq:llama', 'resting:shared']);
+  // A cooldown in the past no longer counts.
+  assert.deepEqual(
+    resolveTargets('shared', providers, combos, new Date(now.getTime() + 120_000)).map(
+      (t) => t.provider.id
+    ),
+    ['resting', 'zen', 'groq']
+  );
+
+  const ids = listModelIds(providers, combos);
+  assert.equal(ids[0], 'auto');
+  assert.ok(ids.includes('free-stack'));
+  assert.ok(ids.includes('Zen/big-pickle'));
+  assert.ok(!ids.some((id) => id.startsWith('Off/')));
+  assert.deepEqual(listModelIds([], []), []);
+
+  for (const status of [401, 402, 403, 404, 408, 429, 500, 502, 503]) {
+    assert.equal(shouldFallBack(status), true, `falls back on ${status}`);
+  }
+  for (const status of [400, 413, 422]) {
+    assert.equal(shouldFallBack(status), false, `returns ${status} as is`);
+  }
+
+  const at = now.getTime();
+  assert.equal(cooldownMs(429, '30', at), 30_000);
+  assert.equal(cooldownMs(429, new Date(at + 90_000).toUTCString(), at), 90_000);
+  assert.equal(cooldownMs(429, '999999', at), 60 * 60_000);
+  assert.equal(cooldownMs(429, null, at), 60_000);
+  assert.equal(cooldownMs(401, null, at), 10 * 60_000);
+  assert.equal(cooldownMs(503, null, at), 30_000);
+  assert.equal(cooldownMs(0, null, at), 30_000);
+  assert.equal(cooldownMs(404, null, at), 0);
+
+  assert.deepEqual(usageFromJson('{"usage":{"prompt_tokens":3,"completion_tokens":5}}'), {
+    promptTokens: 3,
+    completionTokens: 5
+  });
+  assert.deepEqual(usageFromJson('not json'), { promptTokens: null, completionTokens: null });
+  assert.deepEqual(
+    usageFromSse(
+      'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n' +
+        'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":2}}\n\n' +
+        'data: [DONE]\n\n'
+    ),
+    { promptTokens: 7, completionTokens: 2 }
+  );
+
+  assert.equal(providerUrl('https://x.example/v1/', '/models'), 'https://x.example/v1/models');
+  assert.equal(normalizeBaseUrl(' https://openrouter.ai/api/v1/ '), 'https://openrouter.ai/api/v1');
+  assert.equal(normalizeBaseUrl('http://localhost:11434/v1'), 'http://localhost:11434/v1');
+  assert.equal(normalizeBaseUrl('ftp://x.example'), null);
+  assert.equal(normalizeBaseUrl('https://x.example/v1?key=1'), null);
+  assert.equal(normalizeBaseUrl('https://user:pw@x.example/v1'), null);
+  assert.deepEqual(parseModelList({ data: [{ id: 'b' }, { id: 'a' }, { id: 'b' }, {}] }), [
+    'a',
+    'b'
+  ]);
+  assert.deepEqual(parseModelList(null), []);
+}
+
+// AI router: fallback across providers, streaming relay and what gets reported.
+{
+  const { forwardChatCompletion } = await import('../src/lib/ai-router/forward');
+  const target = (id: string, model = 'm') => ({
+    provider: {
+      id,
+      name: id,
+      baseUrl: `https://${id}.example/v1`,
+      models: [model],
+      priority: 0,
+      enabled: true,
+      cooldownUntil: null
+    },
+    model
+  });
+  type Call = { url: string; auth: string | null; body: Record<string, unknown> };
+  const fakeFetch = (answers: Record<string, () => Response | Promise<Response>>, calls: Call[]) =>
+    (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const headers = new Headers(init?.headers);
+      calls.push({ url, auth: headers.get('authorization'), body: JSON.parse(String(init?.body)) });
+      const answer = answers[new URL(url).hostname.split('.')[0]];
+      return answer();
+    }) as typeof fetch;
+
+  // A rate-limited provider hands over to the next, which answers.
+  {
+    const calls: Call[] = [];
+    const failures: { id: string; status: number; retryAfter: string | null }[] = [];
+    let outcome: import('../src/lib/ai-router/forward').ForwardOutcome | undefined;
+    const response = await forwardChatCompletion({
+      body: { model: 'free-stack', messages: [{ role: 'user', content: 'hi' }] },
+      targets: [target('a', 'big-pickle'), target('b', 'llama')],
+      apiKeyFor: (id) => (id === 'a' ? 'key-a' : null),
+      fetchImpl: fakeFetch(
+        {
+          a: () =>
+            Response.json(
+              { error: { message: 'Rate limit reached' } },
+              { status: 429, headers: { 'retry-after': '12' } }
+            ),
+          b: () => Response.json({ choices: [], usage: { prompt_tokens: 4, completion_tokens: 6 } })
+        },
+        calls
+      ),
+      onFailure: (failure) => {
+        failures.push({
+          id: failure.target.provider.id,
+          status: failure.status,
+          retryAfter: failure.retryAfter
+        });
+      },
+      onFinish: (result) => {
+        outcome = result;
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('x-devone-provider'), 'b');
+    assert.equal(response.headers.get('x-devone-attempts'), '2');
+    assert.deepEqual(
+      calls.map((call) => [call.url, call.auth, call.body.model]),
+      [
+        ['https://a.example/v1/chat/completions', 'Bearer key-a', 'big-pickle'],
+        ['https://b.example/v1/chat/completions', null, 'llama']
+      ]
+    );
+    assert.deepEqual(failures, [{ id: 'a', status: 429, retryAfter: '12' }]);
+    await response.text();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(outcome?.target?.provider.id, 'b');
+    assert.equal(outcome?.attempts, 2);
+    assert.deepEqual(outcome?.usage, { promptTokens: 4, completionTokens: 6 });
+  }
+
+  // A malformed request is the client's to fix: no fallback.
+  {
+    const calls: Call[] = [];
+    const response = await forwardChatCompletion({
+      body: { model: 'x', messages: [] },
+      targets: [target('a'), target('b')],
+      apiKeyFor: () => null,
+      fetchImpl: fakeFetch(
+        {
+          a: () => Response.json({ error: { message: 'messages is empty' } }, { status: 400 }),
+          b: () => Response.json({})
+        },
+        calls
+      )
+    });
+    assert.equal(response.status, 400);
+    assert.equal(calls.length, 1);
+    assert.equal(((await response.json()) as { error: { message: string } }).error.message, 'messages is empty');
+  }
+
+  // Unreachable providers and outages: every one fails, the last error is reported.
+  {
+    const response = await forwardChatCompletion({
+      body: { model: 'x', messages: [] },
+      targets: [target('a'), target('b')],
+      apiKeyFor: () => null,
+      fetchImpl: fakeFetch(
+        {
+          a: () => {
+            throw new TypeError('fetch failed');
+          },
+          b: () => new Response('Bad gateway', { status: 503 })
+        },
+        []
+      )
+    });
+    assert.equal(response.status, 503);
+    const body = (await response.json()) as { error: { message: string; code: string } };
+    assert.equal(body.error.code, 'all_providers_failed');
+    assert.match(body.error.message, /Bad gateway/);
+  }
+
+  // A provider that does not start answering in time is skipped.
+  {
+    const response = await forwardChatCompletion({
+      body: { model: 'x', messages: [] },
+      targets: [target('slow'), target('b')],
+      apiKeyFor: () => null,
+      timeoutMs: 20,
+      fetchImpl: (async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input).includes('slow')) {
+          return new Promise<Response>((_, reject) =>
+            init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+          );
+        }
+        return Response.json({ ok: true });
+      }) as typeof fetch
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('x-devone-provider'), 'b');
+  }
+
+  // No provider for the model.
+  {
+    const response = await forwardChatCompletion({
+      body: { model: 'nothing', messages: [] },
+      targets: [],
+      apiKeyFor: () => null
+    });
+    assert.equal(response.status, 404);
+  }
+
+  // A stream is relayed as it is, asks for usage, and reports its token counts at the end.
+  {
+    const calls: Call[] = [];
+    let outcome: import('../src/lib/ai-router/forward').ForwardOutcome | undefined;
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2}}\n\ndata: [DONE]\n\n'
+    ];
+    const response = await forwardChatCompletion({
+      body: { model: 'x', messages: [], stream: true },
+      targets: [target('a')],
+      apiKeyFor: () => null,
+      fetchImpl: fakeFetch(
+        {
+          a: () =>
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+                  controller.close();
+                }
+              }),
+              { headers: { 'content-type': 'text/event-stream' } }
+            )
+        },
+        calls
+      ),
+      onFinish: (result) => {
+        outcome = result;
+      }
+    });
+    assert.deepEqual(calls[0].body.stream_options, { include_usage: true });
+    assert.equal(response.headers.get('content-type'), 'text/event-stream');
+    assert.equal(await response.text(), chunks.join(''));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(outcome?.usage, { promptTokens: 9, completionTokens: 2 });
+    assert.equal(outcome?.error, null);
+  }
+}
+
+// AI router: personal keys and the per-person rate limit.
+{
+  const { createAiApiKey, hashAiApiKey, readAiApiKey } = await import('../src/lib/ai-router/keys');
+  const { aiRateLimit, createRateLimiter } = await import('../src/lib/ai-router/rate-limit');
+  const { key, hash, prefix } = createAiApiKey();
+  assert.match(key, /^dvo_[\w-]{32}$/);
+  assert.equal(hash, hashAiApiKey(key));
+  assert.ok(key.startsWith(prefix));
+  assert.equal(readAiApiKey(new Headers({ authorization: `Bearer ${key}` })), key);
+  assert.equal(readAiApiKey(new Headers({ 'x-api-key': key })), key);
+  assert.equal(readAiApiKey(new Headers({ authorization: 'Bearer sk-someone-else' })), null);
+  assert.equal(readAiApiKey(new Headers()), null);
+
+  assert.equal(aiRateLimit({}), 60);
+  assert.equal(aiRateLimit({ DEVONE_AI_RATE_LIMIT: '0' }), 0);
+  assert.equal(aiRateLimit({ DEVONE_AI_RATE_LIMIT: 'lots' }), 60);
+  const limiter = createRateLimiter(2);
+  assert.equal(limiter.take('u', 0), true);
+  assert.equal(limiter.take('u', 1), true);
+  assert.equal(limiter.take('u', 2), false);
+  assert.equal(limiter.take('other', 2), true);
+  assert.equal(limiter.take('u', 60_001), true);
+  assert.equal(createRateLimiter(0).take('u'), true);
+}

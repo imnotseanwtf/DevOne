@@ -106,6 +106,7 @@ Everything DevOne is built with, grouped by what it does. Versions match `packag
 | Docker | `Dockerfile`, `Dockerfile.bun` and `compose.yaml` (Postgres + Redis) for self-hosting |
 | diagrams.net (`embed.diagrams.net`) | The draw.io editor iframe (or a self-hosted copy) |
 | Excalidraw backends (`json.excalidraw.com`, Firestore and Firebase Storage of `excalidraw-room-persistence`) | Only for importing Excalidraw links, and for older embedded sessions |
+| OpenAI-compatible model APIs (OpenCode Zen, OpenRouter, Groq, Gemini, Ollama, …) | The AI router, set up by administrators (see [ai-router.md](./ai-router.md)) |
 
 ## Tooling
 

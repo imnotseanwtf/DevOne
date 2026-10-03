@@ -118,6 +118,8 @@ model User {
   personalResources ProjectResource[]
   sshHosts          SshHost[]
   auditEvents       AuditEvent[]
+  aiApiKeys         AiApiKey[]
+  aiUsage           AiUsage[]
 
   @@unique([provider, providerUserId])
   @@index([username])
@@ -834,4 +836,80 @@ model AuditEvent {
 
   @@index([projectId, createdAt])
   @@index([createdAt])
+}
+
+/// An OpenAI-compatible model API the AI router can send requests to: OpenCode
+/// Zen, OpenRouter, Groq, Ollama and the like. Set up by administrators and
+/// shared by everyone on this installation.
+model AiProvider {
+  id              String    @id @default(cuid())
+  name            String    @unique
+  /// Up to and including the version, e.g. "https://openrouter.ai/api/v1".
+  baseUrl         String
+  /// Null for providers that need no key, such as a local Ollama.
+  encryptedApiKey String?
+  /// The models this provider serves, as it names them.
+  models          String[]
+  /// Lower is tried first when a model is served by more than one provider.
+  priority        Int       @default(100)
+  enabled         Boolean   @default(true)
+  /// Set after a rate limit or failure: skipped until then, unless nothing else is left.
+  cooldownUntil   DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  usage           AiUsage[]
+}
+
+/// A model name clients can ask for that stands for an ordered list of
+/// provider models: the first that answers wins, the rest are fallbacks.
+model AiCombo {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  /// `[{ providerId, model }]`, in the order they are tried.
+  steps     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// A personal key for calling the AI router from tools outside the browser.
+model AiApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  tokenHash  String    @unique
+  /// The first characters of the key, so its owner can tell keys apart.
+  prefix     String
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usage      AiUsage[]
+
+  @@index([userId])
+}
+
+/// One request through the AI router, for the usage overview.
+model AiUsage {
+  id               String      @id @default(cuid())
+  userId           String?
+  apiKeyId         String?
+  providerId       String?
+  /// Kept as text so the row still reads after the provider is removed.
+  providerName     String?
+  requestedModel   String
+  model            String?
+  status           Int
+  /// How many providers were tried, the one that answered included.
+  attempts         Int
+  promptTokens     Int?
+  completionTokens Int?
+  latencyMs        Int
+  error            String?
+  createdAt        DateTime    @default(now())
+  user             User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apiKey           AiApiKey?   @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  provider         AiProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([providerId, createdAt])
 }
