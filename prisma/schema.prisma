@@ -904,6 +904,8 @@ model AiUsage {
   promptTokens     Int?
   completionTokens Int?
   latencyMs        Int
+  /// Characters of tool output the compressor removed before sending.
+  savedChars       Int?
   error            String?
   createdAt        DateTime    @default(now())
   user             User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -912,4 +914,16 @@ model AiUsage {
 
   @@index([createdAt])
   @@index([providerId, createdAt])
+}
+
+/// Installation-wide AI router settings: a single row with id "default".
+model AiRouterSettings {
+  id                 String   @id @default("default")
+  /// Used when nothing serves the requested model, e.g. Claude Code asking for "claude-…".
+  defaultModel       String?
+  /// Shrink tool output (command logs, file listings) before it is sent.
+  compressToolOutput Boolean  @default(true)
+  /// Tool output longer than this keeps only its beginning and end.
+  maxToolOutputChars Int      @default(30000)
+  updatedAt          DateTime @updatedAt
 }
