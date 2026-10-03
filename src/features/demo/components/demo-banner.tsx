@@ -1,4 +1,5 @@
 import { getT } from '@/i18n/server';
+import Link from 'next/link';
 
 /** Shown across the app to demo visitors: what this is and when it goes away. */
 export async function DemoBanner({ expiresAt }: { expiresAt: Date }) {
@@ -7,6 +8,9 @@ export async function DemoBanner({ expiresAt }: { expiresAt: Date }) {
   return (
     <div className='bg-primary text-primary-foreground flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-center text-xs'>
       <span>{t('demo.banner', { hours })}</span>
+      <Link href='/' className='font-medium underline underline-offset-2'>
+        {t('demo.homePage')}
+      </Link>
       <a
         href='https://github.com/imnotseanwtf/devone#self-hosting'
         target='_blank'

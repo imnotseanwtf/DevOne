@@ -365,7 +365,9 @@ export const fil: MessageShape<typeof en> = {
     title: 'Subukan ang DevOne',
     body: 'Magkaroon ng sariling sample project na masusubukan sa loob ng 24 oras. Walang sign-up, walang ii-install.',
     start: 'Simulan ang demo',
-    note: 'Pampublikong demo ito, kaya naka-off ang pag-sign in gamit ang GitHub o GitLab.'
+    note: 'Pampublikong demo ito, kaya naka-off ang pag-sign in gamit ang GitHub o GitLab.',
+    home: 'Bumalik sa home page',
+    homePage: 'Home page'
   },
   landing: {
     nav: {
@@ -382,6 +384,7 @@ export const fil: MessageShape<typeof en> = {
       titleAccent: 'Iisang lugar.',
       body: 'Pinagsasama ng DevOne ang board, Git, database, API client, docs, drawings, pipeline at server mo sa iisang project, kaya isang click lang ang kailangan mong konteksto.',
       primary: 'Magsimula',
+      openWorkspace: 'Buksan ang workspace mo',
       tryDemo: 'Subukan ang demo',
       secondary: 'I-self-host'
     },
