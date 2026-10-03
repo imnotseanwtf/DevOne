@@ -1,10 +1,7 @@
 {
   "duration": 58.766666666666666,
   "fps": 30,
-  "size": [
-    1920,
-    1080
-  ],
+  "size": [1920, 1080],
   "opening_seconds": 8.5,
   "actual_clicks": 25,
   "feature_introductions": [

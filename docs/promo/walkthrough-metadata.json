@@ -1,10 +1,7 @@
 {
   "duration": 50.266666666666666,
   "fps": 30,
-  "size": [
-    1920,
-    1080
-  ],
+  "size": [1920, 1080],
   "native_capture_fps": 15,
   "actual_clicks": 25,
   "chapters": [
