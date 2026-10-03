@@ -1,6 +1,11 @@
 import { DevOneMark } from '@/components/brand/devone-mark';
 import { Icons } from '@/components/icons';
 import { FeatureDemo } from '@/features/landing/components/feature-demo';
+import {
+  getDesktopRelease,
+  RELEASES_URL,
+  type DesktopPlatform
+} from '@/features/landing/desktop-release';
 import { isDemoMode } from '@/lib/demo';
 import type { TKey } from '@/i18n/messages';
 import { getT } from '@/i18n/server';
@@ -56,6 +61,33 @@ const SECURITY: { icon: IconName; title: TKey; body: TKey }[] = [
   { icon: 'history', title: 'landing.security.audit.title', body: 'landing.security.audit.body' }
 ];
 
+const DOWNLOADS: { platform: DesktopPlatform; icon: IconName; title: TKey; detail: TKey }[] = [
+  {
+    platform: 'mac',
+    icon: 'apple',
+    title: 'landing.download.mac',
+    detail: 'landing.download.macDetail'
+  },
+  {
+    platform: 'windows',
+    icon: 'windows',
+    title: 'landing.download.windows',
+    detail: 'landing.download.windowsDetail'
+  },
+  {
+    platform: 'debian',
+    icon: 'debian',
+    title: 'landing.download.debian',
+    detail: 'landing.download.debianDetail'
+  },
+  {
+    platform: 'redhat',
+    icon: 'redhat',
+    title: 'landing.download.redhat',
+    detail: 'landing.download.redhatDetail'
+  }
+];
+
 const GITHUB_URL = 'https://github.com/imnotseanwtf/devone';
 
 const GRID_BACKGROUND = {
@@ -81,7 +113,7 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
 }
 
 export async function LandingPage() {
-  const t = await getT();
+  const [t, release] = await Promise.all([getT(), getDesktopRelease()]);
   const demo = isDemoMode();
 
   return (
@@ -106,6 +138,12 @@ export async function LandingPage() {
               className='hidden rounded-md px-3 py-2 text-sm text-zinc-400 transition-colors hover:text-white md:block'
             >
               {t('landing.nav.security')}
+            </a>
+            <a
+              href='#download'
+              className='hidden rounded-md px-3 py-2 text-sm text-zinc-400 transition-colors hover:text-white md:block'
+            >
+              {t('landing.nav.download')}
             </a>
             <a
               href='#self-host'
@@ -221,6 +259,55 @@ export async function LandingPage() {
                     <Icon aria-hidden='true' className='size-5 text-[#b6f23a]' />
                     <h3 className='mt-4 font-medium'>{t(item.title)}</h3>
                     <p className='mt-1.5 text-sm leading-relaxed text-zinc-400'>{t(item.body)}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </section>
+
+        {/* Desktop app */}
+        <section id='download' className='scroll-mt-16 border-t border-white/[0.06]'>
+          <div className='mx-auto max-w-6xl px-4 py-24 sm:px-6'>
+            <div className='flex flex-col gap-6 md:flex-row md:items-end md:justify-between'>
+              <div className='max-w-2xl'>
+                <Eyebrow>{t('landing.download.eyebrow')}</Eyebrow>
+                <h2 className='mt-4 text-3xl font-semibold tracking-tight text-balance sm:text-4xl'>
+                  {t('landing.download.title')}
+                </h2>
+                <p className='mt-4 text-zinc-400'>{t('landing.download.body')}</p>
+              </div>
+              <a
+                href={RELEASES_URL}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='inline-flex shrink-0 items-center gap-1.5 font-mono text-xs text-zinc-400 transition-colors hover:text-white'
+              >
+                {release.version
+                  ? `${t('landing.download.version')} · v${release.version}`
+                  : t('landing.download.allReleases')}
+                <Icons.externalLink aria-hidden='true' className='size-3.5' />
+              </a>
+            </div>
+            <ul className='mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+              {DOWNLOADS.map((item) => {
+                const Icon = Icons[item.icon];
+                return (
+                  <li key={item.platform}>
+                    <a
+                      href={release.downloads[item.platform]}
+                      className='group flex h-full items-center gap-4 rounded-xl border border-white/[0.06] bg-[#111113] p-5 transition-colors hover:border-[#b6f23a]/40 focus-visible:ring-2 focus-visible:ring-[#b6f23a] focus-visible:outline-none'
+                    >
+                      <Icon aria-hidden='true' className='size-7 shrink-0 text-zinc-300' />
+                      <span className='min-w-0 flex-1'>
+                        <span className='block font-medium'>{t(item.title)}</span>
+                        <span className='block text-sm text-zinc-400'>{t(item.detail)}</span>
+                      </span>
+                      <Icons.download
+                        aria-hidden='true'
+                        className='size-5 shrink-0 text-zinc-500 transition-colors group-hover:text-[#b6f23a]'
+                      />
+                    </a>
                   </li>
                 );
               })}

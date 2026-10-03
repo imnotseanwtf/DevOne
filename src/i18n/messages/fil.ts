@@ -371,6 +371,7 @@ export const fil: MessageShape<typeof en> = {
     nav: {
       features: 'Mga feature',
       security: 'Seguridad',
+      download: 'I-download',
       selfHost: 'Self-host',
       signIn: 'Mag-sign in',
       github: 'DevOne sa GitHub'
@@ -442,6 +443,21 @@ export const fil: MessageShape<typeof en> = {
         title: 'Audit log',
         body: 'Naitatala ang pagbabago sa settings, sa mga miyembro at ang access sa terminal.'
       }
+    },
+    download: {
+      eyebrow: 'Desktop app',
+      title: 'O patakbuhin ito sa sarili mong computer.',
+      body: 'Pinapatakbo ng desktop app ang DevOne gamit ang sarili nitong database. Walang server, walang setup: i-install at mag-sign in.',
+      version: 'Pinakabagong release',
+      allReleases: 'Lahat ng release',
+      mac: 'macOS',
+      macDetail: 'Apple silicon (.dmg)',
+      windows: 'Windows',
+      windowsDetail: '64-bit na installer (.exe)',
+      debian: 'Debian / Ubuntu',
+      debianDetail: '64-bit na package (.deb)',
+      redhat: 'Fedora / RHEL',
+      redhatDetail: '64-bit na package (.rpm)'
     },
     selfHost: {
       eyebrow: 'Self-host',
