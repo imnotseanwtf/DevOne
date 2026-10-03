@@ -1,0 +1,42 @@
+{
+  "duration": 50.266666666666666,
+  "fps": 30,
+  "size": [
+    1920,
+    1080
+  ],
+  "native_capture_fps": 15,
+  "actual_clicks": 25,
+  "chapters": [
+    {
+      "name": "board",
+      "start": 0.0,
+      "duration": 9.2
+    },
+    {
+      "name": "git",
+      "start": 9.2,
+      "duration": 7.133333333333334
+    },
+    {
+      "name": "database",
+      "start": 16.333333333333332,
+      "duration": 9.8
+    },
+    {
+      "name": "api",
+      "start": 26.133333333333333,
+      "duration": 6.533333333333333
+    },
+    {
+      "name": "docs",
+      "start": 32.666666666666664,
+      "duration": 6.066666666666666
+    },
+    {
+      "name": "terminal",
+      "start": 38.733333333333334,
+      "duration": 8.533333333333333
+    }
+  ]
+}

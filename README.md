@@ -18,7 +18,7 @@
   <a href="https://github.com/imnotseanwtf/devone/releases/latest">Desktop app</a> ·
   <a href="https://github.com/imnotseanwtf/devone">GitHub</a> ·
   <a href="docs/deployment.md">Docs</a> ·
-  <a href="docs/demo.mp4">Demo video (MP4)</a> ·
+  <a href="docs/promo/devone-promo-story.mp4">Demo video (MP4)</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/demo.mp4"><img src="docs/demo.gif" width="800" alt="DevOne demo: the board, Git, database, API client, docs, drawings, pipelines and SSH terminal in under a minute" /></a>
+  <a href="docs/promo/devone-promo-story.mp4"><img src="docs/promo/story-poster.png" width="800" alt="Too many projects? Watch DevOne's workspace walkthrough with music and introductions to every feature." /></a>
 </p>
 
 DevOne is a self-hosted developer workspace that connects project work, Git activity, databases, APIs, documentation, and deployments in one project context.
