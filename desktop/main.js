@@ -163,6 +163,8 @@ function createWindow() {
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
+    // The window and taskbar icon on Windows and Linux (macOS uses the app bundle's).
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       contextIsolation: true,
       sandbox: true,

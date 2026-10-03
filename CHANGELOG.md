@@ -12,6 +12,10 @@ All notable changes to DevOne are listed here. The format follows [Keep a Change
 - **Desktop app on macOS**: the built-in database's libraries are now set up when the app is built.
 - **Desktop app**: if it can't start, the error shows the database's own message and points to `devone.log`; it also recovers from a database left running by a crash or half-created by a failed first launch.
 
+### Changed
+
+- **Desktop app icon**: the installers, app window and Linux launcher now use the DevOne logo instead of Electron's default icon.
+
 ## [1.1.0] - 2026-10-03
 
 ### Added
