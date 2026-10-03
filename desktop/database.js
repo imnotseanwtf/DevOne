@@ -23,8 +23,39 @@ function freePort() {
 }
 
 /**
+ * Stops a Postgres left running by an earlier DevOne that crashed, which would
+ * still hold the data folder. The app is single-instance, so a live server for
+ * this folder can only be such a leftover.
+ */
+function stopLeftoverServer(databaseDir, log) {
+  const pidFile = path.join(databaseDir, 'postmaster.pid');
+  if (!fs.existsSync(pidFile)) return;
+  const pid = Number(fs.readFileSync(pidFile, 'utf8').split(/\r?\n/)[0]);
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return; // Not running: Postgres clears the stale pid file itself.
+  }
+  log(`Stopping a leftover PostgreSQL (pid ${pid}) from an earlier run`);
+  try {
+    process.kill(pid);
+  } catch {
+    // Already gone.
+  }
+}
+
+async function waitForExit(pidFile, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (fs.existsSync(pidFile) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
+/**
  * Starts the embedded Postgres in `dataDir` and returns its connection URL and
  * a stop function. `secret(name)` returns a stored random secret, creating it once.
+ * Failures throw an Error that includes Postgres's own recent output.
  */
 async function startDatabase({ dataDir, secret, log }) {
   const { default: EmbeddedPostgres } = await import('embedded-postgres');
@@ -32,6 +63,26 @@ async function startDatabase({ dataDir, secret, log }) {
   const isNew = !fs.existsSync(path.join(databaseDir, 'PG_VERSION'));
   const password = secret('database-password');
   const port = await freePort();
+
+  // embedded-postgres rejects with no reason when the server exits, so keep the
+  // server's recent output to explain the failure.
+  const recent = [];
+  const record = (message) => {
+    const text = String(message).trimEnd();
+    if (!text) return;
+    recent.push(text);
+    if (recent.length > 40) recent.shift();
+    log(text);
+  };
+  const failure = (what, error) =>
+    new Error(
+      [
+        `${what}${error instanceof Error ? `: ${error.message}` : ''}`,
+        '',
+        'PostgreSQL output:',
+        recent.join('\n') || '(none)'
+      ].join('\n')
+    );
 
   const postgres = new EmbeddedPostgres({
     databaseDir,
@@ -42,13 +93,42 @@ async function startDatabase({ dataDir, secret, log }) {
     initdbFlags: ['--encoding=UTF8', '--locale=C'],
     // Listen on loopback only; nothing outside this computer can reach it.
     postgresFlags: ['-c', 'listen_addresses=127.0.0.1'],
-    onLog: (message) => log(String(message).trimEnd()),
-    onError: (error) => log(String(error).trimEnd())
+    onLog: record,
+    onError: record
   });
 
-  if (isNew) await postgres.initialise();
-  await postgres.start();
-  if (isNew) await postgres.createDatabase(DATABASE);
+  if (isNew) {
+    // A folder left by an initdb that failed part-way can't be started; begin again.
+    fs.rmSync(databaseDir, { recursive: true, force: true });
+    try {
+      await postgres.initialise();
+    } catch (error) {
+      fs.rmSync(databaseDir, { recursive: true, force: true });
+      throw failure('Could not create the database', error);
+    }
+  } else {
+    stopLeftoverServer(databaseDir, record);
+    await waitForExit(path.join(databaseDir, 'postmaster.pid'));
+  }
+
+  try {
+    await postgres.start();
+  } catch (error) {
+    throw failure('PostgreSQL stopped while starting', error);
+  }
+
+  const admin = new Client({
+    connectionString: `postgresql://${USER}:${encodeURIComponent(password)}@127.0.0.1:${port}/postgres`
+  });
+  await admin.connect();
+  try {
+    const { rowCount } = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [
+      DATABASE
+    ]);
+    if (!rowCount) await admin.query(`CREATE DATABASE "${DATABASE}"`);
+  } finally {
+    await admin.end();
+  }
 
   const url = `postgresql://${USER}:${encodeURIComponent(password)}@127.0.0.1:${port}/${DATABASE}`;
   return { url, stop: () => postgres.stop() };

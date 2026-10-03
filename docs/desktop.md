@@ -68,6 +68,8 @@ Everything the app keeps is in its data folder:
   provider tokens and SSH credentials; back it up with the database, since losing it makes them
   unrecoverable.
 - `database-password.*`: the local database's password, generated on first launch.
+- `devone.log`: what the database and server printed during the last launch. If DevOne can't
+  start, the error dialog shows PostgreSQL's own message and points to this file.
 
 Both secrets are encrypted with the OS keychain (`safeStorage`, the `.bin` files). On Linux without
 a keyring (gnome-keyring or KWallet) they are stored as `.txt` files readable only by you.
@@ -92,6 +94,13 @@ a keyring (gnome-keyring or KWallet) they are stored as `.txt` files readable on
   variable overrides it).
 - `env`: any other DevOne environment variables (see `env.example.txt`). Demo mode can't be turned
   on in the desktop app.
+
+## Troubleshooting
+
+- **"DevOne could not start"**: the dialog includes PostgreSQL's output, and `devone.log` in the data
+  folder has the full launch log. A PostgreSQL left running by a DevOne that crashed is stopped
+  automatically on the next launch, and a database folder left half-created by a failed first
+  launch is created again.
 
 ## Limits
 

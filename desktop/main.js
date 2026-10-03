@@ -24,6 +24,23 @@ function configPath() {
   return path.join(app.getPath('userData'), 'config.json');
 }
 
+// Everything the database and server print goes to devone.log in the data
+// folder (rewritten on each launch), since a packaged app has no console.
+function logPath() {
+  return path.join(app.getPath('userData'), 'devone.log');
+}
+
+let logStream = null;
+function log(message) {
+  if (!logStream) {
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    logStream = fs.createWriteStream(logPath(), { flags: 'w' });
+  }
+  const line = `${new Date().toISOString()} ${String(message).trimEnd()}\n`;
+  logStream.write(line);
+  if (!app.isPackaged) process.stdout.write(line);
+}
+
 function readConfig() {
   const file = configPath();
   if (!fs.existsSync(file)) {
@@ -91,7 +108,7 @@ async function startLocalServer(config) {
     database = await startDatabase({
       dataDir: app.getPath('userData'),
       secret,
-      log: (message) => process.stdout.write(`[postgres] ${message}\n`)
+      log: (message) => log(`[postgres] ${message}`)
     });
     databaseUrl = database.url;
   }
@@ -99,7 +116,7 @@ async function startLocalServer(config) {
 
   serverProcess = utilityProcess.fork(path.join(serverDir, 'server.js'), [], {
     cwd: serverDir,
-    stdio: 'inherit',
+    stdio: 'pipe',
     env: {
       ...process.env,
       ...config.env,
@@ -117,10 +134,15 @@ async function startLocalServer(config) {
       DEVONE_LANDING_PAGE: 'false'
     }
   });
+  serverProcess.stdout?.on('data', (chunk) => log(`[server] ${chunk}`));
+  serverProcess.stderr?.on('data', (chunk) => log(`[server] ${chunk}`));
   serverProcess.once('exit', (code) => {
     serverProcess = null;
     if (code !== 0 && !quitting) {
-      dialog.showErrorBox('DevOne server stopped', `The server exited with code ${code}.`);
+      dialog.showErrorBox(
+        'DevOne server stopped',
+        `The server exited with code ${code}. Details are in ${logPath()}`
+      );
       app.quit();
     }
   });
@@ -187,7 +209,9 @@ if (!gotLock) {
         if (BrowserWindow.getAllWindows().length === 0) openDevOne(createWindow(), origin);
       });
     } catch (error) {
-      dialog.showErrorBox('DevOne could not start', String(error?.stack ?? error));
+      const detail = error instanceof Error ? error.message : String(error);
+      log(`Startup failed: ${error instanceof Error ? error.stack : detail}`);
+      dialog.showErrorBox('DevOne could not start', `${detail}\n\nFull log: ${logPath()}`);
       app.quit();
     }
   });
@@ -205,7 +229,7 @@ if (!gotLock) {
     const { stop } = database;
     database = null;
     stop()
-      .catch((error) => console.error('[postgres] could not stop cleanly', error))
+      .catch((error) => log(`[postgres] could not stop cleanly: ${error}`))
       .finally(() => app.quit());
   });
 }
