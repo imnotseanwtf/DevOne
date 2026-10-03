@@ -468,6 +468,11 @@ export const en = {
       body: 'Sign in with GitHub or GitLab and open your first project.',
       button: 'Get started'
     },
-    footer: { tagline: 'Every tool. One place.', github: 'Star on GitHub' }
+    footer: {
+      tagline: 'Every tool. One place.',
+      github: 'Star on GitHub',
+      createdBy: 'Created by',
+      contribute: 'You can contribute to the project'
+    }
   }
 };

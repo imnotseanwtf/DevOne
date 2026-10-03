@@ -479,6 +479,11 @@ export const fil: MessageShape<typeof en> = {
       body: 'Mag-sign in gamit ang GitHub o GitLab at buksan ang una mong project.',
       button: 'Magsimula'
     },
-    footer: { tagline: 'Lahat ng tool. Iisang lugar.', github: 'I-star sa GitHub' }
+    footer: {
+      tagline: 'Lahat ng tool. Iisang lugar.',
+      github: 'I-star sa GitHub',
+      createdBy: 'Ginawa ni',
+      contribute: 'Puwede kang mag-ambag sa project'
+    }
   }
 };
