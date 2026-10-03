@@ -4,6 +4,12 @@ All notable changes to DevOne are listed here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-03
+
+### Added
+
+- **Desktop app** for macOS, Windows and Linux (`.deb` and `.rpm`). It runs DevOne on your own computer with its own built-in PostgreSQL, so it needs no server or website; the first person to sign in becomes its administrator. See [docs/desktop.md](docs/desktop.md).
+
 ## [0.1.0] - 2026-10-02
 
 The first public release.
@@ -24,5 +30,6 @@ The first public release.
 - **Self-hosting** with Docker Compose (PostgreSQL and Redis included), or deploy to Vercel.
 - Landing page with a self-playing product demo, and the Prompt mascot.
 
-[Unreleased]: https://github.com/imnotseanwtf/devone/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/imnotseanwtf/devone/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/imnotseanwtf/devone/releases/tag/v1.1.0
 [0.1.0]: https://github.com/imnotseanwtf/devone/releases/tag/v0.1.0
