@@ -96,7 +96,8 @@ async function startDatabase({ dataDir, secret, log }) {
     } catch (error) {
       fs.rmSync(databaseDir, { recursive: true, force: true });
       throw new Error(
-        `Could not create the database: ${error instanceof Error ? error.message : error}\n\n${recent.slice(-20).join('\n')}`
+        `Could not create the database: ${error instanceof Error ? error.message : error}\n\n${recent.slice(-20).join('\n')}`,
+        { cause: error }
       );
     }
   } else if ((await run(pg_ctl, ['status', '-D', databaseDir])).code === 0) {
