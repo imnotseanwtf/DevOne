@@ -97,8 +97,9 @@ a keyring (gnome-keyring or KWallet) they are stored as `.txt` files readable on
 
 ## Troubleshooting
 
-- **"DevOne could not start"**: the dialog includes PostgreSQL's output, and `devone.log` in the data
-  folder has the full launch log. A PostgreSQL left running by a DevOne that crashed is stopped
+- **"DevOne could not start"**: the dialog includes PostgreSQL's output, and `devone.log` (with
+  `postgres.log`, the database server's own log) in the data folder has the full launch log. The
+  server is started with `pg_ctl`, which also lets it run from a Windows administrator account. A PostgreSQL left running by a DevOne that crashed is stopped
   automatically on the next launch, and a database folder left half-created by a failed first
   launch is created again.
 
