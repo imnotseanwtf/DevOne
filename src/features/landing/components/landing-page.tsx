@@ -138,9 +138,20 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
   );
 }
 
-export async function LandingPage() {
+/**
+ * `workspaceHref` is set for a signed-in demo visitor: the sign-in and "try the
+ * demo" buttons then open their workspace instead.
+ */
+export async function LandingPage({ workspaceHref }: { workspaceHref?: string } = {}) {
   const [t, release] = await Promise.all([getT(), getDesktopRelease()]);
   const demo = isDemoMode();
+  const startHref = workspaceHref ?? '/login';
+  const startLabel = (fallback: TKey) =>
+    workspaceHref
+      ? t('landing.hero.openWorkspace')
+      : demo
+        ? t('landing.hero.tryDemo')
+        : t(fallback);
 
   return (
     <div className='min-h-svh bg-[#0a0a0a] text-[#fafafa] [color-scheme:dark]'>
@@ -187,10 +198,10 @@ export async function LandingPage() {
               <Icons.github aria-hidden='true' className='size-5' />
             </a>
             <Link
-              href='/login'
+              href={startHref}
               className='ml-2 inline-flex h-9 items-center rounded-lg border border-white/10 px-4 text-sm font-medium transition-colors hover:bg-white/[0.06]'
             >
-              {demo ? t('landing.hero.tryDemo') : t('landing.nav.signIn')}
+              {startLabel('landing.nav.signIn')}
             </Link>
           </div>
         </nav>
@@ -218,9 +229,7 @@ export async function LandingPage() {
                 {t('landing.hero.body')}
               </p>
               <div className='mt-9 flex flex-wrap items-center justify-center gap-3'>
-                <PrimaryLink href='/login'>
-                  {demo ? t('landing.hero.tryDemo') : t('landing.hero.primary')}
-                </PrimaryLink>
+                <PrimaryLink href={startHref}>{startLabel('landing.hero.primary')}</PrimaryLink>
                 <a
                   href='#self-host'
                   className='inline-flex h-11 items-center gap-2 rounded-lg border border-white/10 px-5 font-mono text-sm text-zinc-300 transition-colors hover:bg-white/[0.06]'
@@ -420,9 +429,7 @@ export async function LandingPage() {
             </h2>
             <p className='mt-4 text-zinc-400'>{t('landing.cta.body')}</p>
             <div className='mt-8'>
-              <PrimaryLink href='/login'>
-                {demo ? t('landing.hero.tryDemo') : t('landing.cta.button')}
-              </PrimaryLink>
+              <PrimaryLink href={startHref}>{startLabel('landing.cta.button')}</PrimaryLink>
             </div>
           </div>
         </section>

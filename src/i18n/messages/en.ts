@@ -354,7 +354,9 @@ export const en = {
     title: 'Try DevOne',
     body: 'Get your own sample project to explore for 24 hours. No sign-up, nothing to install.',
     start: 'Start the demo',
-    note: 'This is a public demo, so signing in with GitHub or GitLab is turned off.'
+    note: 'This is a public demo, so signing in with GitHub or GitLab is turned off.',
+    home: 'Back to the home page',
+    homePage: 'Home page'
   },
   landing: {
     nav: {
@@ -371,6 +373,7 @@ export const en = {
       titleAccent: 'One place.',
       body: 'DevOne puts your board, Git, databases, API client, docs, drawings, pipelines and servers inside one project, so the context you need is always a click away.',
       primary: 'Get started',
+      openWorkspace: 'Open your workspace',
       tryDemo: 'Try the demo',
       secondary: 'Self-host it'
     },
