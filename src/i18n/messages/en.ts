@@ -360,6 +360,7 @@ export const en = {
     nav: {
       features: 'Features',
       security: 'Security',
+      download: 'Download',
       selfHost: 'Self-host',
       signIn: 'Sign in',
       github: 'DevOne on GitHub'
@@ -431,6 +432,21 @@ export const en = {
         title: 'Audit log',
         body: 'Settings changes, member changes and terminal access are recorded.'
       }
+    },
+    download: {
+      eyebrow: 'Desktop app',
+      title: 'Or run it on your own computer.',
+      body: 'The desktop app runs DevOne with its own built-in database. No server, no setup: install it and sign in.',
+      version: 'Latest release',
+      allReleases: 'All releases',
+      mac: 'macOS',
+      macDetail: 'Apple silicon (.dmg)',
+      windows: 'Windows',
+      windowsDetail: '64-bit installer (.exe)',
+      debian: 'Debian / Ubuntu',
+      debianDetail: '64-bit package (.deb)',
+      redhat: 'Fedora / RHEL',
+      redhatDetail: '64-bit package (.rpm)'
     },
     selfHost: {
       eyebrow: 'Self-host',

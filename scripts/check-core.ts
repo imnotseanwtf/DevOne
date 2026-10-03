@@ -142,6 +142,7 @@ import { RESOURCE_KINDS } from '../src/features/resources/labels';
 import { finalize } from '../src/lib/database/postgres';
 import { layoutErd, tableDepths } from '../src/lib/erd/layout';
 import { toggleMarkdownTask } from '../src/features/git/markdown-tasks';
+import { desktopDownloads, RELEASES_URL } from '../src/features/landing/desktop-release';
 import {
   formatIssueKey,
   issueKeysForPrefix,
@@ -1822,4 +1823,28 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
   await git.createBranch('demo:visitor-a', DEMO_REPOSITORY_ID, 'a-only', 'sha');
   assert.ok((await git.getBranches('demo:visitor-a', DEMO_REPOSITORY_ID)).some((branch) => branch.name === 'a-only'));
   assert.ok(!(await git.getBranches('demo:visitor-b', DEMO_REPOSITORY_ID)).some((branch) => branch.name === 'a-only'));
+}
+
+// Desktop downloads: each platform's installer from the latest release, else the release page.
+{
+  const release = desktopDownloads({
+    tag_name: 'v1.1.0',
+    assets: [
+      { name: 'DevOne-1.1.0-mac-arm64.dmg', browser_download_url: 'https://x/mac.dmg' },
+      { name: 'DevOne-1.1.0-linux-amd64.deb', browser_download_url: 'https://x/linux.deb' }
+    ]
+  });
+  assert.equal(release.version, '1.1.0');
+  assert.equal(release.downloads.mac, 'https://x/mac.dmg');
+  assert.equal(release.downloads.debian, 'https://x/linux.deb');
+  assert.equal(release.downloads.windows, `${RELEASES_URL}/latest`);
+  assert.deepEqual(desktopDownloads(null), {
+    version: null,
+    downloads: {
+      mac: `${RELEASES_URL}/latest`,
+      windows: `${RELEASES_URL}/latest`,
+      debian: `${RELEASES_URL}/latest`,
+      redhat: `${RELEASES_URL}/latest`
+    }
+  });
 }

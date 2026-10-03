@@ -14,6 +14,8 @@
 </p>
 
 <p align="center">
+  <a href="https://www.dev-one.site">Website</a> ·
+  <a href="https://github.com/imnotseanwtf/devone/releases/latest">Desktop app</a> ·
   <a href="https://github.com/imnotseanwtf/devone">GitHub</a> ·
   <a href="docs/deployment.md">Docs</a> ·
   <a href="docs/demo.mp4">Demo video (MP4)</a> ·
