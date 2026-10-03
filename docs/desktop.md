@@ -1,17 +1,27 @@
 # Desktop app (Electron)
 
-`desktop/` wraps DevOne in an Electron window. DevOne still needs its Node.js server (server
-actions, the SSH terminal over Server-Sent Events) and PostgreSQL, so the desktop app either
-**loads a running DevOne** (by default the hosted one at https://www.dev-one.site) or **starts a
-bundled copy of the server** on `127.0.0.1`.
+`desktop/` is DevOne as an application that runs on your own computer. When it starts it runs:
+
+- its own **PostgreSQL** ([embedded-postgres](https://github.com/leinelissen/embedded-postgres)),
+  listening on `127.0.0.1` only, with its data in the app's data folder (below). DevOne's Prisma
+  migrations are applied on every start, so updating the app updates the database too.
+- the **DevOne server** (the Next.js standalone build) on `http://127.0.0.1:31337`, in demo mode
+  off, and shows it in the app window.
+
+Nothing is loaded from a website. The first person to sign in (with a GitHub or GitLab personal
+access token) becomes the app's administrator. Git, pipelines and sign-in still talk to GitHub or
+GitLab; everything else stays on the machine.
 
 ## Develop
 
 ```bash
-bun desktop:install   # once: installs Electron into desktop/node_modules
+bun desktop:install   # once: installs Electron and the embedded Postgres into desktop/node_modules
 bun dev               # DevOne on http://localhost:3000
 bun desktop:dev       # Electron window pointing at it
 ```
+
+To run the full local app (embedded database and bundled server) without packaging it:
+`cd desktop && node prepare-server.mjs && bun run start`.
 
 ## Build installers
 
@@ -20,24 +30,32 @@ bun desktop:build
 ```
 
 This runs `desktop/prepare-server.mjs` (a `BUILD_STANDALONE=true` Next.js build, copied with
-`public/` and `.next/static` into `desktop/server`) and then electron-builder, which writes a DMG
-(macOS), NSIS installer (Windows) or AppImage (Linux) to `desktop/dist`. Build each platform on
-that platform (for example a CI matrix): the server's native modules (`sharp`, `ssh2`'s optional
-bindings) are installed for the OS that runs the build.
+`public/`, `.next/static` and `prisma/migrations` into `desktop/server`) and then electron-builder,
+which writes to `desktop/dist`:
+
+| OS      | Installer                                                        |
+| ------- | ---------------------------------------------------------------- |
+| macOS   | `.dmg`                                                           |
+| Windows | `.exe` (NSIS)                                                    |
+| Linux   | `.deb` (Debian, Ubuntu) and `.rpm` (Fedora, RHEL, openSUSE); `rpmbuild` must be installed |
+
+Build each platform on that platform (for example a CI matrix): the Postgres binaries and the
+server's native modules (`sharp`, `ssh2`'s optional bindings) are installed for the OS that runs
+the build.
 
 ## Release
 
 The **Desktop** workflow (`.github/workflows/desktop.yml`) ships the app. To release, bump
 `version` in the root `package.json` (the desktop app takes its version from there) and merge to
 `main`. If no `v<version>` tag exists yet, the workflow builds the macOS (Apple silicon DMG),
-Windows (NSIS installer) and Linux (AppImage) installers on their own runners and publishes them as
-the GitHub Release `v<version>`. Pushes that keep the version unchanged build nothing; pull requests
-that touch `desktop/` build the Linux app only. It can also be run by hand from the Actions tab.
+Windows (NSIS installer) and Linux (`.deb` and `.rpm`) installers on their own runners and
+publishes them as the GitHub Release `v<version>`. Pushes that keep the version unchanged build
+nothing; pull requests that touch `desktop/` build the Linux packages only. It can also be run by
+hand from the Actions tab.
 
-## Configure
+## Data and settings
 
-With no settings the app opens https://www.dev-one.site. On first launch it writes `config.json`
-to its data folder; edit it to use another DevOne or the bundled server:
+Everything the app keeps is in its data folder:
 
 | OS      | Folder                                         |
 | ------- | ---------------------------------------------- |
@@ -45,28 +63,35 @@ to its data folder; edit it to use another DevOne or the bundled server:
 | Windows | `%APPDATA%\devone-desktop`                     |
 | Linux   | `~/.config/devone-desktop`                     |
 
+- `postgres/`: the database. Back up this folder (with the app closed) to back up your data.
+- `encryption-key.*`: `DEVONE_ENCRYPTION_KEY`, generated on first launch. It protects stored
+  provider tokens and SSH credentials; back it up with the database, since losing it makes them
+  unrecoverable.
+- `database-password.*`: the local database's password, generated on first launch.
+
+Both secrets are encrypted with the OS keychain (`safeStorage`, the `.bin` files). On Linux without
+a keyring (gnome-keyring or KWallet) they are stored as `.txt` files readable only by you.
+
+`config.json` is optional; the defaults need no changes:
+
 ```json
 {
   "url": "",
-  "databaseUrl": "postgresql://devone:password@localhost:5432/devone",
+  "databaseUrl": "",
   "port": 31337,
-  "env": { "DEVONE_ALLOW_BOOTSTRAP": "true" }
+  "env": {}
 }
 ```
 
-- `url`: the DevOne to load, such as your own deployment (the `DEVONE_URL` environment variable
-  overrides it). Takes precedence over `databaseUrl`.
-- `databaseUrl`: set it (with `url` empty) to run the bundled server against this PostgreSQL
-  database. With both empty, the app opens https://www.dev-one.site. Apply the migrations to it
-  before first use: `DATABASE_URL=… bun db:deploy`.
-- `port`: the bundled server listens on `http://127.0.0.1:<port>`, which is also its
+- `databaseUrl`: use this PostgreSQL instead of the built-in one. The app applies the migrations to
+  it on start.
+- `port`: the local server listens on `http://127.0.0.1:<port>`, which is also its
   `DEVONE_APP_URL`. Register `http://127.0.0.1:31337/api/auth/<provider>/callback` with GitHub or
   GitLab if you want OAuth sign-in; personal access tokens work without it.
-- `env`: any other DevOne environment variables (see `env.example.txt`).
-
-`DEVONE_ENCRYPTION_KEY` is generated on first launch and kept outside the database, encrypted with
-the OS keychain (`safeStorage`). On Linux without a keyring it is stored as `encryption-key.txt`,
-readable only by you. Back it up: losing it makes stored tokens unrecoverable.
+- `url`: open another DevOne server instead of running one locally (the `DEVONE_URL` environment
+  variable overrides it).
+- `env`: any other DevOne environment variables (see `env.example.txt`). Demo mode can't be turned
+  on in the desktop app.
 
 ## Limits
 

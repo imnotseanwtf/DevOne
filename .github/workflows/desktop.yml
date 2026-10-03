@@ -71,6 +71,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install rpmbuild for the .rpm package
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
       - run: bun install --frozen-lockfile
       - run: bun install --frozen-lockfile
         working-directory: desktop
@@ -82,7 +85,8 @@ jobs:
           path: |
             desktop/dist/*.dmg
             desktop/dist/*.exe
-            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.rpm
 
   release:
     name: Publish v${{ needs.version.outputs.version }}

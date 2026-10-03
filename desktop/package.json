@@ -15,8 +15,19 @@
     "prepare-server": "node prepare-server.mjs",
     "dist": "node prepare-server.mjs && electron-builder --config electron-builder.config.cjs --publish never"
   },
+  "dependencies": {
+    "embedded-postgres": "18.4.0-beta.17",
+    "pg": "^8.23.0"
+  },
   "devDependencies": {
     "electron": "^44.5.1",
     "electron-builder": "^26.0.12"
-  }
+  },
+  "trustedDependencies": [
+    "@embedded-postgres/darwin-arm64",
+    "@embedded-postgres/darwin-x64",
+    "@embedded-postgres/linux-arm64",
+    "@embedded-postgres/linux-x64",
+    "@embedded-postgres/windows-x64"
+  ]
 }
