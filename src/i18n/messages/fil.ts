@@ -461,12 +461,15 @@ export const fil: MessageShape<typeof en> = {
     },
     selfHost: {
       eyebrow: 'Self-host',
-      title: 'Tatlong command lang.',
-      body: 'May kasamang Docker Compose, PostgreSQL at Redis ang DevOne. Magdala ng server at hawakan ang sarili mong data.',
-      step1: 'Kopyahin ang halimbawang environment',
-      step2: 'Gumawa ng encryption key',
-      step3: 'Patakbuhin ang stack',
-      ready: 'Tumatakbo na ang DevOne sa port 3000'
+      title: 'Apat na hakbang lang.',
+      body: 'May kasamang Docker Compose, PostgreSQL at Redis ang DevOne. Magdala ng server na may Docker at hawakan ang sarili mong data.',
+      step1: 'Kunin ang code',
+      step2: 'Kopyahin ang halimbawang environment',
+      step3: 'Magtakda ng password ng database at encryption key',
+      step4: 'Patakbuhin ang stack',
+      ready: 'Tumatakbo na ang DevOne sa http://localhost:3000',
+      note: 'Ang unang mag-sign in ang magiging administrator. Pagkatapos, itakda ang DEVONE_ALLOW_BOOTSTRAP=false sa .env at patakbuhin muli ang docker compose up -d.',
+      guide: 'Buong gabay sa self-hosting'
     },
     cta: {
       title: 'Iuwi ang buong project.',

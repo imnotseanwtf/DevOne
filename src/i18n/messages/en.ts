@@ -450,12 +450,15 @@ export const en = {
     },
     selfHost: {
       eyebrow: 'Self-host',
-      title: 'Up in three commands.',
-      body: 'DevOne ships with Docker Compose, PostgreSQL and Redis. Bring a server and keep your data.',
-      step1: 'Copy the example environment',
-      step2: 'Generate an encryption key',
-      step3: 'Start the stack',
-      ready: 'DevOne is running on port 3000'
+      title: 'Up in four steps.',
+      body: 'DevOne ships with Docker Compose, PostgreSQL and Redis. Bring a server with Docker and keep your data.',
+      step1: 'Get the code',
+      step2: 'Copy the example environment',
+      step3: 'Set a database password and encryption key',
+      step4: 'Start the stack',
+      ready: 'DevOne is running on http://localhost:3000',
+      note: 'The first person to sign in becomes the administrator. Afterwards, set DEVONE_ALLOW_BOOTSTRAP=false in .env and run docker compose up -d again.',
+      guide: 'Full self-hosting guide'
     },
     cta: {
       title: 'Bring the whole project home.',
