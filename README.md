@@ -32,15 +32,6 @@
 
 DevOne is a self-hosted developer workspace that connects project work, Git activity, databases, APIs, documentation, and deployments in one project context.
 
-![The DevOne board](docs/screenshots/board.png)
-
-<table>
-  <tr>
-    <td><img src="docs/screenshots/list.png" alt="List view" /></td>
-    <td><img src="docs/screenshots/calendar.png" alt="Calendar view" /></td>
-  </tr>
-</table>
-
 ## Current MVP
 
 - Next.js 16 and React 19
