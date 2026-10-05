@@ -11,7 +11,16 @@ module.exports = {
   // DevOne's logo (src/app/icon.svg) at 1024px; electron-builder makes the .icns,
   // .ico and Linux sizes from it.
   icon: 'icon.png',
-  files: ['main.js', 'database.js', 'icon.png', 'package.json'],
+  files: [
+    'main.js',
+    'database.js',
+    'settings.js',
+    'setup.html',
+    'setup.js',
+    'setup-preload.js',
+    'icon.png',
+    'package.json'
+  ],
   // Not packed into app.asar: embedded-postgres runs its Postgres binaries from
   // node_modules, and binaries inside an asar archive can't be executed.
   asar: false,

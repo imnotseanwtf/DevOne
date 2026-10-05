@@ -2,15 +2,46 @@
 
 `desktop/` is DevOne as an application that runs on your own computer. When it starts it runs:
 
-- its own **PostgreSQL** ([embedded-postgres](https://github.com/leinelissen/embedded-postgres)),
+- a **PostgreSQL** database: by default ([embedded-postgres](https://github.com/leinelissen/embedded-postgres)),
   listening on `127.0.0.1` only, with its data in the app's data folder (below). DevOne's Prisma
-  migrations are applied on every start, so updating the app updates the database too.
+  migrations are applied on every start, so updating the app updates the database too. You can
+  connect it to your own PostgreSQL server instead (see [Choosing the database](#choosing-the-database)).
 - the **DevOne server** (the Next.js standalone build) on `http://127.0.0.1:31337`, in demo mode
   off, and shows it in the app window.
 
 Nothing is loaded from a website. The first person to sign in (with a GitHub or GitLab personal
 access token) becomes the app's administrator. Git, pipelines and sign-in still talk to GitHub or
 GitLab; everything else stays on the machine.
+
+## Choosing the database
+
+On the first launch the app asks which database to use (`desktop/setup.html`):
+
+- **Built-in database** (recommended): the embedded PostgreSQL above. Nothing to set up; the data is
+  only on this computer.
+- **My own PostgreSQL server**: host, port, database, user, password and SSL (off, on with a
+  verified certificate for hosted servers such as Neon, or on with a self-signed certificate).
+  **Test connection** says whether it connected and whether the database is empty or already holds
+  DevOne data. The database must already exist; DevOne applies its migrations to it on every start.
+
+Change it later with **File > Database Settings…** (**DevOne > Database Settings…** on macOS,
+`Ctrl+,`/`Cmd+,`); saving restarts the app. If the chosen server can't be reached at startup, the
+app offers to edit the settings, switch to the built-in database, or quit. Switching databases
+doesn't move any data between them.
+
+Installs from before this screen existed keep using their built-in database without being asked.
+
+### Sharing a database between computers
+
+Every DevOne app connected to the same PostgreSQL shares the same projects, issues and drawings;
+live Excalidraw sketches sync between them with cursors, since the sync goes through the database.
+Each computer needs network access to the server (same network, a VPN, or a hosted database).
+
+They must also share the **encryption key** that protects saved tokens and passwords. The person
+who set the database up uses **Copy this computer's key** on the settings screen; everyone else
+pastes it under **Use a key from another DevOne**. If the database already holds tokens and the
+key can't read them, saving warns before going ahead. Replacing a key makes tokens saved with the
+old one unreadable.
 
 ## Develop
 
@@ -67,26 +98,31 @@ Everything the app keeps is in its data folder:
 - `encryption-key.*`: `DEVONE_ENCRYPTION_KEY`, generated on first launch. It protects stored
   provider tokens and SSH credentials; back it up with the database, since losing it makes them
   unrecoverable.
-- `database-password.*`: the local database's password, generated on first launch.
+- `database-password.*`: the built-in database's password, generated on first launch.
+- `external-database-password.*`: the password of a server chosen on the setup screen.
 - `devone.log`: what the database and server printed during the last launch. If DevOne can't
   start, the error dialog shows PostgreSQL's own message and points to this file.
 
-Both secrets are encrypted with the OS keychain (`safeStorage`, the `.bin` files). On Linux without
+The secrets are encrypted with the OS keychain (`safeStorage`, the `.bin` files). On Linux without
 a keyring (gnome-keyring or KWallet) they are stored as `.txt` files readable only by you.
 
-`config.json` is optional; the defaults need no changes:
+`config.json` is written by the app; you don't need to edit it:
 
 ```json
 {
   "url": "",
   "databaseUrl": "",
   "port": 31337,
-  "env": {}
+  "env": {},
+  "database": { "mode": "builtin" }
 }
 ```
 
-- `databaseUrl`: use this PostgreSQL instead of the built-in one. The app applies the migrations to
-  it on start.
+- `database`: what the setup screen saved: `{ "mode": "builtin" }`, or `{ "mode": "external",
+  "host", "port", "database", "user", "ssl" }` (`ssl` is `disable`, `verify-full` or `no-verify`).
+  The password is never stored here.
+- `databaseUrl`: a full PostgreSQL connection URL, which takes precedence over `database` and skips
+  the setup screen. Saving the setup screen clears it.
 - `port`: the local server listens on `http://127.0.0.1:<port>`, which is also its
   `DEVONE_APP_URL`. Register `http://127.0.0.1:31337/api/auth/<provider>/callback` with GitHub or
   GitLab if you want OAuth sign-in; personal access tokens work without it.
@@ -97,6 +133,9 @@ a keyring (gnome-keyring or KWallet) they are stored as `.txt` files readable on
 
 ## Troubleshooting
 
+- **"DevOne couldn't use the database at …"**: the server chosen on the setup screen refused the
+  connection or couldn't be reached. Pick **Edit Database Settings** to fix it, or **Use the
+  Built-in Database**.
 - **"DevOne could not start"**: the dialog includes PostgreSQL's output, and `devone.log` (with
   `postgres.log`, the database server's own log) in the data folder has the full launch log. The
   server is started with `pg_ctl`, which also lets it run from a Windows administrator account. A PostgreSQL left running by a DevOne that crashed is stopped
