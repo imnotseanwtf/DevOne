@@ -286,7 +286,11 @@ export const fil: MessageShape<typeof en> = {
   admin: {
     title: 'Admin',
     description: 'Mga tao, patakaran sa pag-sign in at audit log ng DevOne na ito.',
-    tabs: { users: 'Mga user', policy: 'Patakaran sa pag-sign in', audit: 'Audit log' },
+    tabs: {
+      users: 'Mga user',
+      policy: 'Patakaran sa pag-sign in',
+      audit: 'Audit log'
+    },
     users: {
       count: '{count} tao',
       user: 'User',
@@ -388,7 +392,87 @@ export const fil: MessageShape<typeof en> = {
       tryDemo: 'Subukan ang demo',
       secondary: 'I-self-host'
     },
-    demo: { label: 'Demo ng DevOne', play: 'I-play ang demo', pause: 'I-pause ang demo' },
+    demo: {
+      label: 'Demo ng DevOne',
+      play: 'I-play ang demo',
+      pause: 'I-pause ang demo',
+      scenes: {
+        board: {
+          project: 'Web platform',
+          todo: 'Gagawin',
+          inProgress: 'Ginagawa',
+          done: 'Tapos na',
+          urgent: 'apurahan',
+          high: 'mataas',
+          medium: 'katamtaman',
+          low: 'mababa',
+          streamLogs: 'I-stream ang job logs sa terminal',
+          rateLimit: 'Limitahan ang token sign-in',
+          exportSvg: 'I-export ang drawings bilang SVG',
+          pinHostKeys: 'I-pin ang SSH host keys sa unang connect',
+          calendarView: 'Calendar view para sa board'
+        },
+        git: {
+          ahead: '3 nauuna sa main',
+          mergeRequest: 'Merge request !42',
+          you: 'ikaw',
+          now: 'ngayon',
+          hours: '{count}o',
+          days: '{count}a',
+          pinHostKeys: 'I-pin ang host keys sa unang connect',
+          streamSsh: 'I-stream ang SSH output sa SSE',
+          encryptCredentials: 'I-encrypt ang naka-save na credentials',
+          hostAllowlist: 'Magdagdag ng SSH host allowlist'
+        },
+        database: {
+          run: 'Patakbuhin',
+          minutesAgo: '{count} min ang nakalipas',
+          hoursAgo: '{count} oras ang nakalipas',
+          result: '4 na row · 12 ms'
+        },
+        api: {
+          title: 'Issues API',
+          list: 'Ilista ang issues',
+          create: 'Gumawa ng issue',
+          move: 'Ilipat ang issue',
+          delete: 'Burahin ang issue',
+          send: 'Ipadala',
+          sending: 'Ipinapadala…',
+          empty: 'Magpadala ng request para makita ang response.',
+          body: 'Body',
+          response: 'Response',
+          issueTitle: 'Magdagdag ng dark mode sa docs'
+        },
+        docs: {
+          title: 'Docs',
+          gettingStarted: 'Pagsisimula',
+          architecture: 'Arkitektura',
+          deploying: 'Pag-deploy ng DevOne',
+          runbooks: 'Runbooks',
+          changelog: 'Changelog',
+          edited: 'Na-edit mo · ngayon lang',
+          body: 'Tumatakbo ang DevOne bilang iisang Docker Compose stack. Kopyahin ang halimbawang environment, gumawa ng encryption key at simulan ito.',
+          stepKey: 'Itakda ang DEVONE_ENCRYPTION_KEY',
+          stepMigrate: 'Patakbuhin ang migrations',
+          stepInvite: 'Imbitahan ang team mo'
+        },
+        drawings: { saved: 'Naka-save · 3 ang nanonood' },
+        devops: {
+          title: 'Magdagdag ng SSH terminal',
+          passed: 'Pumasa',
+          running: 'Tumatakbo',
+          installed: '812 package ang na-install',
+          compiled: 'Na-compile sa loob ng 41s',
+          testsPassed: '214 ang pumasa',
+          live: 'Live na sa staging.devone.local'
+        },
+        terminal: {
+          savedCredentials: 'naka-save na credentials',
+          hostKey: 'Tugma ang host key na SHA256:x9Fq…2kLw sa naka-pin na key',
+          connected: 'Nakakonekta sa prod-1 (Ubuntu 24.04)'
+        }
+      }
+    },
     features: {
       eyebrow: 'Ang workspace',
       title: 'Lahat ng kailangan ng project, nasa project.',
