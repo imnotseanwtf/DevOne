@@ -20,18 +20,48 @@ const SCENE_MS = 6500;
 const TICK_MS = 80;
 
 const SCENES: { key: string; icon: IconName; label: TKey; path: string }[] = [
-  { key: 'board', icon: 'kanban', label: 'landing.features.board.title', path: 'issues' },
-  { key: 'git', icon: 'gitBranch', label: 'landing.features.git.title', path: 'git' },
+  {
+    key: 'board',
+    icon: 'kanban',
+    label: 'landing.features.board.title',
+    path: 'issues'
+  },
+  {
+    key: 'git',
+    icon: 'gitBranch',
+    label: 'landing.features.git.title',
+    path: 'git'
+  },
   {
     key: 'database',
     icon: 'database',
     label: 'landing.features.database.title',
     path: 'database'
   },
-  { key: 'api', icon: 'braces', label: 'landing.features.api.title', path: 'api' },
-  { key: 'docs', icon: 'post', label: 'landing.features.docs.title', path: 'docs' },
-  { key: 'drawings', icon: 'drawing', label: 'landing.features.drawings.title', path: 'drawings' },
-  { key: 'devops', icon: 'checks', label: 'landing.features.devops.title', path: 'devops' },
+  {
+    key: 'api',
+    icon: 'braces',
+    label: 'landing.features.api.title',
+    path: 'api'
+  },
+  {
+    key: 'docs',
+    icon: 'post',
+    label: 'landing.features.docs.title',
+    path: 'docs'
+  },
+  {
+    key: 'drawings',
+    icon: 'drawing',
+    label: 'landing.features.drawings.title',
+    path: 'drawings'
+  },
+  {
+    key: 'devops',
+    icon: 'checks',
+    label: 'landing.features.devops.title',
+    path: 'devops'
+  },
   {
     key: 'terminal',
     icon: 'terminal',
@@ -305,15 +335,15 @@ interface BoardCard {
   label?: string;
 }
 
-const MOVING_CARD: BoardCard = {
-  id: 'DEV-46',
-  title: 'Stream job logs into the terminal',
-  priority: 'medium',
-  label: 'devops'
-};
-
 function BoardScene({ t }: { t: number }) {
+  const tr = useT();
   const moved = t >= 2600;
+  const movingCard: BoardCard = {
+    id: 'DEV-46',
+    title: tr('landing.demo.scenes.board.streamLogs'),
+    priority: 'medium',
+    label: 'devops'
+  };
   const columns: {
     name: string;
     icon: IconName;
@@ -322,36 +352,50 @@ function BoardScene({ t }: { t: number }) {
     cards: BoardCard[];
   }[] = [
     {
-      name: 'To do',
+      name: tr('landing.demo.scenes.board.todo'),
       icon: 'statusTodo',
       color: 'text-zinc-400',
       cards: [
-        { id: 'DEV-48', title: 'Rate-limit the token sign-in', priority: 'high', label: 'auth' },
-        { id: 'DEV-51', title: 'Export drawings as SVG', priority: 'low' }
+        {
+          id: 'DEV-48',
+          title: tr('landing.demo.scenes.board.rateLimit'),
+          priority: 'high',
+          label: 'auth'
+        },
+        {
+          id: 'DEV-51',
+          title: tr('landing.demo.scenes.board.exportSvg'),
+          priority: 'low'
+        }
       ]
     },
     {
-      name: 'In progress',
+      name: tr('landing.demo.scenes.board.inProgress'),
       icon: 'statusProgress',
       color: 'text-amber-400',
       cards: [
         {
           id: 'DEV-44',
-          title: 'Pin SSH host keys on first connect',
+          title: tr('landing.demo.scenes.board.pinHostKeys'),
           priority: 'urgent',
           label: 'ops'
         },
-        ...(moved ? [] : [MOVING_CARD])
+        ...(moved ? [] : [movingCard])
       ]
     },
     {
-      name: 'Done',
+      name: tr('landing.demo.scenes.board.done'),
       icon: 'statusDoneFilled',
       color: 'text-[#b6f23a]',
       hideOnMobile: true,
       cards: [
-        ...(moved ? [MOVING_CARD] : []),
-        { id: 'DEV-39', title: 'Calendar view for the board', priority: 'medium', label: 'board' }
+        ...(moved ? [movingCard] : []),
+        {
+          id: 'DEV-39',
+          title: tr('landing.demo.scenes.board.calendarView'),
+          priority: 'medium',
+          label: 'board'
+        }
       ]
     }
   ];
@@ -359,8 +403,8 @@ function BoardScene({ t }: { t: number }) {
   return (
     <div>
       <SceneHeader
-        title='Web platform'
-        chip='Board'
+        title={tr('landing.demo.scenes.board.project')}
+        chip={tr('landing.features.board.title')}
         right={
           <div className='flex items-center -space-x-1.5'>
             {['#b6f23a', '#a1a1aa', '#fafafa'].map((color) => (
@@ -378,7 +422,7 @@ function BoardScene({ t }: { t: number }) {
           const StatusIcon = Icons[column.icon];
           return (
             <div
-              key={column.name}
+              key={column.icon}
               className={cn('min-w-0', column.hideOnMobile && 'hidden sm:block')}
             >
               <div className='mb-2.5 flex items-center gap-2 px-1 text-xs'>
@@ -390,7 +434,7 @@ function BoardScene({ t }: { t: number }) {
                 {column.cards.map((card) => {
                   const priority = PRIORITY[card.priority];
                   const PriorityIcon = Icons[priority.icon];
-                  const justMoved = card === MOVING_CARD && moved;
+                  const justMoved = card.id === movingCard.id && moved;
                   return (
                     <div
                       key={card.id}
@@ -408,7 +452,7 @@ function BoardScene({ t }: { t: number }) {
                       <div className='mt-2.5 flex items-center gap-1.5'>
                         <span className='inline-flex items-center gap-1 rounded border border-white/[0.06] px-1.5 py-0.5 text-[10px] text-zinc-400 capitalize'>
                           <PriorityIcon className={cn('size-3', priority.className)} />
-                          {card.priority}
+                          {tr(`landing.demo.scenes.board.${card.priority}`)}
                         </span>
                         {card.label && (
                           <span className='rounded border border-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500'>
@@ -432,13 +476,6 @@ function BoardScene({ t }: { t: number }) {
 /* Git: commits land on the branch and the diff fills in.                   */
 /* ------------------------------------------------------------------------ */
 
-const COMMITS = [
-  { sha: 'a1c9e2f', message: 'Pin host keys on first connect', who: 'you', at: 'now' },
-  { sha: '7be0d41', message: 'Stream SSH output over SSE', who: 'mara', at: '2h' },
-  { sha: '3f8a6c0', message: 'Encrypt saved credentials', who: 'jo', at: '5h' },
-  { sha: 'e52b9d7', message: 'Add SSH host allowlist', who: 'mara', at: '1d' }
-];
-
 const DIFF: { kind: ' ' | '+' | '-'; text: string }[] = [
   { kind: ' ', text: 'const fingerprint = hash(key);' },
   { kind: '-', text: 'return true;' },
@@ -448,15 +485,43 @@ const DIFF: { kind: ' ' | '+' | '-'; text: string }[] = [
 ];
 
 function GitScene({ t }: { t: number }) {
+  const tr = useT();
+  const COMMITS = [
+    {
+      sha: 'a1c9e2f',
+      message: tr('landing.demo.scenes.git.pinHostKeys'),
+      who: tr('landing.demo.scenes.git.you'),
+      at: tr('landing.demo.scenes.git.now')
+    },
+    {
+      sha: '7be0d41',
+      message: tr('landing.demo.scenes.git.streamSsh'),
+      who: 'mara',
+      at: tr('landing.demo.scenes.git.hours', { count: 2 })
+    },
+    {
+      sha: '3f8a6c0',
+      message: tr('landing.demo.scenes.git.encryptCredentials'),
+      who: 'jo',
+      at: tr('landing.demo.scenes.git.hours', { count: 5 })
+    },
+    {
+      sha: 'e52b9d7',
+      message: tr('landing.demo.scenes.git.hostAllowlist'),
+      who: 'mara',
+      at: tr('landing.demo.scenes.git.days', { count: 1 })
+    }
+  ];
   const shown = COMMITS.length - Math.max(0, 3 - Math.floor(t / 500));
   return (
     <div>
       <SceneHeader
         title='feat/ssh-terminal'
-        chip='3 ahead of main'
+        chip={tr('landing.demo.scenes.git.ahead')}
         right={
           <span className='hidden items-center gap-1.5 rounded-md border border-white/10 px-2 py-1 text-[11px] text-zinc-300 sm:inline-flex'>
-            <Icons.gitPullRequest className='size-3.5 text-[#b6f23a]' /> Merge request !42
+            <Icons.gitPullRequest className='size-3.5 text-[#b6f23a]' />{' '}
+            {tr('landing.demo.scenes.git.mergeRequest')}
           </span>
         }
       />
@@ -523,14 +588,14 @@ function GitScene({ t }: { t: number }) {
 const QUERY = 'SELECT name, role, last_seen FROM users ORDER BY last_seen DESC LIMIT 4;';
 const QUERY_DONE = 300 + (QUERY.length * 1000) / 34;
 
-const ROWS = [
-  ['Mara Santos', 'owner', '2 min ago'],
-  ['Jo Reyes', 'member', '18 min ago'],
-  ['Ali Cruz', 'member', '1 h ago'],
-  ['Sam Lee', 'admin', '3 h ago']
-];
-
 function DatabaseScene({ t }: { t: number }) {
+  const tr = useT();
+  const ROWS = [
+    ['Mara Santos', 'owner', tr('landing.demo.scenes.database.minutesAgo', { count: 2 })],
+    ['Jo Reyes', 'member', tr('landing.demo.scenes.database.minutesAgo', { count: 18 })],
+    ['Ali Cruz', 'member', tr('landing.demo.scenes.database.hoursAgo', { count: 1 })],
+    ['Sam Lee', 'admin', tr('landing.demo.scenes.database.hoursAgo', { count: 3 })]
+  ];
   const ran = t >= QUERY_DONE + 500;
   return (
     <div className='flex h-full gap-4'>
@@ -559,7 +624,7 @@ function DatabaseScene({ t }: { t: number }) {
                 ran ? 'bg-[#b6f23a] text-[#0a0a0a]' : 'bg-white/[0.06] text-zinc-300'
               )}
             >
-              <Icons.run className='size-3' /> Run
+              <Icons.run className='size-3' /> {tr('landing.demo.scenes.database.run')}
             </span>
           </div>
           <p className='min-h-10 font-mono text-[12px] leading-5 break-words text-zinc-200'>
@@ -587,7 +652,7 @@ function DatabaseScene({ t }: { t: number }) {
           )}
         </div>
         <Appear at={QUERY_DONE + 1600} t={t} className='mt-2 font-mono text-[10px] text-zinc-500'>
-          4 rows · 12 ms
+          {tr('landing.demo.scenes.database.result')}
         </Appear>
       </div>
     </div>
@@ -599,16 +664,18 @@ function DatabaseScene({ t }: { t: number }) {
 /* ------------------------------------------------------------------------ */
 
 const API_URL = 'https://api.devone.local/v1/issues';
-const RESPONSE = [
-  '{',
-  '  "id": "DEV-52",',
-  '  "title": "Add dark mode to docs",',
-  '  "status": "todo",',
-  '  "priority": "medium"',
-  '}'
-];
 
 function ApiScene({ t }: { t: number }) {
+  const tr = useT();
+  const issueTitle = tr('landing.demo.scenes.api.issueTitle');
+  const RESPONSE = [
+    '{',
+    '  "id": "DEV-52",',
+    `  "title": "${issueTitle}",`,
+    '  "status": "todo",',
+    '  "priority": "medium"',
+    '}'
+  ];
   const sentAt = 300 + (API_URL.length * 1000) / 30 + 400;
   const sending = t >= sentAt && t < sentAt + 700;
   const answered = t >= sentAt + 700;
@@ -616,19 +683,19 @@ function ApiScene({ t }: { t: number }) {
     <div className='flex h-full gap-4'>
       <div className='hidden w-36 shrink-0 sm:block'>
         <p className='mb-2 font-mono text-[10px] tracking-wider text-zinc-500 uppercase'>
-          Issues API
+          {tr('landing.demo.scenes.api.title')}
         </p>
         {[
-          ['GET', 'List issues'],
-          ['POST', 'Create issue'],
-          ['PATCH', 'Move issue'],
-          ['DEL', 'Delete issue']
+          ['GET', tr('landing.demo.scenes.api.list')],
+          ['POST', tr('landing.demo.scenes.api.create')],
+          ['PATCH', tr('landing.demo.scenes.api.move')],
+          ['DEL', tr('landing.demo.scenes.api.delete')]
         ].map(([method, name]) => (
           <div
-            key={name}
+            key={method}
             className={cn(
               'flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] text-zinc-400',
-              name === 'Create issue' && 'bg-white/[0.06] text-zinc-100'
+              method === 'POST' && 'bg-white/[0.06] text-zinc-100'
             )}
           >
             <span className='w-9 font-mono text-[9px] font-semibold text-[#b6f23a]'>{method}</span>
@@ -656,22 +723,22 @@ function ApiScene({ t }: { t: number }) {
             ) : (
               <Icons.send className='size-3.5' />
             )}
-            Send
+            {tr('landing.demo.scenes.api.send')}
           </span>
         </div>
         <div className='mt-3 grid gap-3 sm:grid-cols-2'>
           <div className='hidden rounded-lg border border-white/[0.06] bg-[#0b0b0c] p-3 font-mono text-[11px] leading-5 text-zinc-400 sm:block'>
-            <p className='mb-1 text-[10px] text-zinc-600'>Body</p>
+            <p className='mb-1 text-[10px] text-zinc-600'>{tr('landing.demo.scenes.api.body')}</p>
             {'{'}
             <br />
             &nbsp;&nbsp;&quot;title&quot;:{' '}
-            <span className='text-[#d5f78f]'>&quot;Add dark mode to docs&quot;</span>
+            <span className='text-[#d5f78f]'>&quot;{issueTitle}&quot;</span>
             <br />
             {'}'}
           </div>
           <div className='rounded-lg border border-white/[0.06] bg-[#0b0b0c] p-3 font-mono text-[11px] leading-5'>
             <div className='mb-1 flex items-center justify-between text-[10px]'>
-              <span className='text-zinc-600'>Response</span>
+              <span className='text-zinc-600'>{tr('landing.demo.scenes.api.response')}</span>
               {answered && (
                 <span className='animate-in fade-in text-[#b6f23a] duration-300'>
                   201 Created · 84 ms
@@ -682,7 +749,7 @@ function ApiScene({ t }: { t: number }) {
               RESPONSE.map((line, index) =>
                 t >= sentAt + 700 + index * 120 ? (
                   <div
-                    key={line}
+                    key={index}
                     className='animate-in fade-in whitespace-pre text-zinc-300 duration-200'
                   >
                     {line}
@@ -691,7 +758,9 @@ function ApiScene({ t }: { t: number }) {
               )
             ) : (
               <p className='text-zinc-600'>
-                {sending ? 'Sending…' : 'Send a request to see the response.'}
+                {sending
+                  ? tr('landing.demo.scenes.api.sending')
+                  : tr('landing.demo.scenes.api.empty')}
               </p>
             )}
           </div>
@@ -705,38 +774,43 @@ function ApiScene({ t }: { t: number }) {
 /* Docs: a page writes itself.                                              */
 /* ------------------------------------------------------------------------ */
 
-const DOC_TITLE = 'Deploying DevOne';
-const DOC_BODY =
-  'DevOne runs as a single Docker Compose stack. Copy the example environment, generate an encryption key and start it.';
-
 function DocsScene({ t }: { t: number }) {
+  const tr = useT();
+  const DOC_TITLE = tr('landing.demo.scenes.docs.deploying');
+  const DOC_BODY = tr('landing.demo.scenes.docs.body');
   const bodyStart = 300 + (DOC_TITLE.length * 1000) / 22 + 200;
   const bodyEnd = bodyStart + (DOC_BODY.length * 1000) / 60;
   return (
     <div className='flex h-full gap-4'>
       <div className='hidden w-36 shrink-0 sm:block'>
-        <p className='mb-2 font-mono text-[10px] tracking-wider text-zinc-500 uppercase'>Docs</p>
-        {['Getting started', 'Architecture', 'Deploying DevOne', 'Runbooks', 'Changelog'].map(
-          (page) => (
-            <div
-              key={page}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] text-zinc-400',
-                page === 'Deploying DevOne' && 'bg-white/[0.06] text-zinc-100'
-              )}
-            >
-              <Icons.post className='size-3.5 text-zinc-500' />
-              <span className='truncate'>{page}</span>
-            </div>
-          )
-        )}
+        <p className='mb-2 font-mono text-[10px] tracking-wider text-zinc-500 uppercase'>
+          {tr('landing.demo.scenes.docs.title')}
+        </p>
+        {[
+          tr('landing.demo.scenes.docs.gettingStarted'),
+          tr('landing.demo.scenes.docs.architecture'),
+          DOC_TITLE,
+          tr('landing.demo.scenes.docs.runbooks'),
+          tr('landing.demo.scenes.docs.changelog')
+        ].map((page, index) => (
+          <div
+            key={index}
+            className={cn(
+              'flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] text-zinc-400',
+              index === 2 && 'bg-white/[0.06] text-zinc-100'
+            )}
+          >
+            <Icons.post className='size-3.5 text-zinc-500' />
+            <span className='truncate'>{page}</span>
+          </div>
+        ))}
       </div>
       <div className='min-w-0 flex-1 px-1 sm:px-4'>
         <h3 className='text-xl font-semibold tracking-tight text-zinc-100'>
           {typed(DOC_TITLE, t, 300, 22)}
           {t < bodyStart && <Caret />}
         </h3>
-        <p className='mt-1 text-[11px] text-zinc-500'>Edited by you · just now</p>
+        <p className='mt-1 text-[11px] text-zinc-500'>{tr('landing.demo.scenes.docs.edited')}</p>
         <p className='mt-4 text-[13px] leading-relaxed text-zinc-300'>
           {typed(DOC_BODY, t, bodyStart, 60)}
           {t >= bodyStart && t < bodyEnd && <Caret />}
@@ -747,26 +821,28 @@ function DocsScene({ t }: { t: number }) {
           </pre>
         </Appear>
         <div className='mt-4 space-y-2'>
-          {['Set DEVONE_ENCRYPTION_KEY', 'Run the migrations', 'Invite your team'].map(
-            (item, index) => {
-              const at = bodyEnd + 600 + index * 350;
-              if (t < at) return null;
-              const done = t >= at + 250;
-              return (
-                <div
-                  key={item}
-                  className='animate-in fade-in flex items-center gap-2 text-[12px] text-zinc-300 duration-300'
-                >
-                  {done ? (
-                    <Icons.statusDoneFilled className='size-4 text-[#b6f23a]' />
-                  ) : (
-                    <Icons.statusTodo className='size-4 text-zinc-500' />
-                  )}
-                  <span className={cn(done && 'text-zinc-500 line-through')}>{item}</span>
-                </div>
-              );
-            }
-          )}
+          {[
+            tr('landing.demo.scenes.docs.stepKey'),
+            tr('landing.demo.scenes.docs.stepMigrate'),
+            tr('landing.demo.scenes.docs.stepInvite')
+          ].map((item, index) => {
+            const at = bodyEnd + 600 + index * 350;
+            if (t < at) return null;
+            const done = t >= at + 250;
+            return (
+              <div
+                key={index}
+                className='animate-in fade-in flex items-center gap-2 text-[12px] text-zinc-300 duration-300'
+              >
+                {done ? (
+                  <Icons.statusDoneFilled className='size-4 text-[#b6f23a]' />
+                ) : (
+                  <Icons.statusTodo className='size-4 text-zinc-500' />
+                )}
+                <span className={cn(done && 'text-zinc-500 line-through')}>{item}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -791,6 +867,7 @@ const EDGES = [
 ];
 
 function DrawingsScene({ t }: { t: number }) {
+  const tr = useT();
   return (
     <div className='flex h-full gap-3'>
       <div className='hidden shrink-0 flex-col gap-1 rounded-lg border border-white/[0.06] bg-[#0b0b0c] p-1 sm:flex'>
@@ -890,7 +967,7 @@ function DrawingsScene({ t }: { t: number }) {
         </svg>
         {t >= 2700 && (
           <span className='animate-in fade-in absolute right-3 bottom-3 rounded-md bg-white/[0.06] px-2 py-1 font-mono text-[10px] text-zinc-400 duration-300'>
-            Saved · 3 people viewing
+            {tr('landing.demo.scenes.drawings.saved')}
           </span>
         )}
       </div>
@@ -920,17 +997,6 @@ const STAGES = [
   { name: 'deploy', jobs: [{ name: 'staging', start: 3400, end: 4600 }] }
 ];
 
-const LOG = [
-  { at: 300, text: '$ bun install --frozen-lockfile' },
-  { at: 900, text: '✓ 812 packages installed' },
-  { at: 1300, text: '$ bun run build' },
-  { at: 2100, text: '✓ Compiled in 41s' },
-  { at: 2400, text: '$ bun run test' },
-  { at: 3300, text: '✓ 214 passed' },
-  { at: 3600, text: '$ deploy --env staging' },
-  { at: 4500, text: '✓ Live at staging.devone.local' }
-];
-
 function jobState(job: { start: number; end: number }, t: number) {
   if (t >= job.end) return 'passed';
   if (t >= job.start) return 'running';
@@ -938,11 +1004,22 @@ function jobState(job: { start: number; end: number }, t: number) {
 }
 
 function PipelineScene({ t }: { t: number }) {
+  const tr = useT();
+  const LOG = [
+    { at: 300, text: '$ bun install --frozen-lockfile' },
+    { at: 900, text: `✓ ${tr('landing.demo.scenes.devops.installed')}` },
+    { at: 1300, text: '$ bun run build' },
+    { at: 2100, text: `✓ ${tr('landing.demo.scenes.devops.compiled')}` },
+    { at: 2400, text: '$ bun run test' },
+    { at: 3300, text: `✓ ${tr('landing.demo.scenes.devops.testsPassed')}` },
+    { at: 3600, text: '$ deploy --env staging' },
+    { at: 4500, text: `✓ ${tr('landing.demo.scenes.devops.live')}` }
+  ];
   const passed = t >= 4600;
   return (
     <div>
       <SceneHeader
-        title='!42 Add SSH terminal'
+        title={`!42 ${tr('landing.demo.scenes.devops.title')}`}
         chip='feat/ssh-terminal → main'
         right={
           <span
@@ -956,7 +1033,9 @@ function PipelineScene({ t }: { t: number }) {
             ) : (
               <Icons.spinner className='size-3.5 animate-spin' />
             )}
-            {passed ? 'Passed' : 'Running'}
+            {passed
+              ? tr('landing.demo.scenes.devops.passed')
+              : tr('landing.demo.scenes.devops.running')}
           </span>
         }
       />
@@ -1001,7 +1080,7 @@ function PipelineScene({ t }: { t: number }) {
           .slice(-6)
           .map((line) => (
             <div
-              key={line.text}
+              key={line.at}
               className={cn(
                 'animate-in fade-in truncate duration-200',
                 line.text.startsWith('✓') ? 'text-[#b6f23a]' : 'text-zinc-300'
@@ -1023,6 +1102,7 @@ const SSH_COMMAND = 'ssh deploy@prod-1.devone.local';
 const PS_COMMAND = 'docker compose ps';
 
 function TerminalScene({ t }: { t: number }) {
+  const tr = useT();
   const sshDone = 300 + (SSH_COMMAND.length * 1000) / 26;
   const psStart = sshDone + 1500;
   const psDone = psStart + (PS_COMMAND.length * 1000) / 22;
@@ -1045,7 +1125,9 @@ function TerminalScene({ t }: { t: number }) {
           prod-1
         </span>
         <span className='text-zinc-600'>staging-db</span>
-        <span className='ml-auto font-mono text-[10px] text-zinc-600'>saved credentials</span>
+        <span className='ml-auto font-mono text-[10px] text-zinc-600'>
+          {tr('landing.demo.scenes.terminal.savedCredentials')}
+        </span>
       </div>
       <div className='flex-1 px-3 py-2.5 font-mono text-[12px] leading-6 text-zinc-300'>
         <div>
@@ -1055,12 +1137,13 @@ function TerminalScene({ t }: { t: number }) {
         </div>
         {t >= sshDone + 400 && (
           <div className='animate-in fade-in text-zinc-500 duration-200'>
-            Host key SHA256:x9Fq…2kLw matches the pinned key{' '}
-            <span className='text-[#b6f23a]'>✓</span>
+            {tr('landing.demo.scenes.terminal.hostKey')} <span className='text-[#b6f23a]'>✓</span>
           </div>
         )}
         {t >= sshDone + 900 && (
-          <div className='animate-in fade-in duration-200'>Connected to prod-1 (Ubuntu 24.04)</div>
+          <div className='animate-in fade-in duration-200'>
+            {tr('landing.demo.scenes.terminal.connected')}
+          </div>
         )}
         {t >= psStart && (
           <div>
