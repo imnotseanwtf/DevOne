@@ -425,6 +425,20 @@ export const fil: MessageShape<typeof en> = {
       saved: 'Na-save ang combo',
       removed: 'Naalis ang combo'
     },
+    settings: {
+      title: 'Mga setting',
+      description:
+        'Kung paano tinatrato ng router ang mga request mula sa mga tool tulad ng Claude Code.',
+      defaultModel: 'Default na model',
+      defaultModelHint:
+        'Ginagamit kapag walang nag-aalok ng model na hinihingi ng tool, halimbawa kapag humihingi ang Claude Code ng "claude-sonnet-…". Maglagay ng pangalan ng combo, "auto" o isang model.',
+      compress: 'Paliitin ang output ng tool bago ipadala',
+      maxChars: 'Pinakamahabang output ng tool (mga character)',
+      compressHint:
+        'Nililinis ang mga log ng command, listahan at diff, at ang mas mahaba ay nananatili ang simula at dulo. Magpadala ng "x-devone-token-saver: off" para laktawan ito sa isang request.',
+      save: 'I-save ang mga setting',
+      saved: 'Nai-save ang mga setting'
+    },
     usage: {
       title: 'Paggamit',
       description: 'Mga request sa nakaraang 24 na oras, at ang pinakabagong 50.',

@@ -34,3 +34,9 @@ export const fetchModelsSchema = z.object({
   baseUrl: z.string().trim().min(1).max(500),
   apiKey: z.string().trim().max(1000).optional()
 });
+
+export const routerSettingsSchema = z.object({
+  defaultModel: z.string().trim().max(200).nullable(),
+  compressToolOutput: z.boolean(),
+  maxToolOutputChars: z.number().int().min(1000, 'Use at least 1000').max(200_000)
+});

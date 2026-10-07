@@ -89,8 +89,29 @@ curl https://your-devone/api/ai/v1/chat/completions \
 }
 ```
 
+**Claude Code** speaks Anthropic's Messages API, which the router translates to chat completions
+and back (text, images, tools, streaming). Point it at the router and pick a model it can serve:
+
+```bash
+export ANTHROPIC_BASE_URL=https://your-devone/api/ai   # Claude Code adds /v1/messages
+export ANTHROPIC_AUTH_TOKEN=$DEVONE_AI_KEY
+export ANTHROPIC_MODEL=free-stack                       # a combo, "auto" or a model name
+claude
+```
+
+Claude Code also asks for `claude-…` model names for its helper tasks. Set a **Default model** in
+Admin → AI router → Settings and any name nothing serves goes there.
+
 **Cursor, Cline, Continue and other tools:** pick the OpenAI-compatible provider, set the base URL
 and key, and enter `auto` or a combo as the model.
+
+## Shrinking tool output
+
+Agents send long command logs, listings and diffs back to the model with every turn. With
+**Shrink tool output** on (Settings), the router strips colour codes and trailing spaces, folds
+repeated lines and blank runs, and keeps only the beginning and end of anything longer than the
+limit (30,000 characters by default). The characters saved are recorded per request. Send the
+header `x-devone-token-saver: off` to skip it for one request.
 
 ## Things to know
 
@@ -99,8 +120,11 @@ and key, and enter `auto` or a combo as the model.
   provider's terms before sending them private code.
 - **Only real API keys.** 9router can also reuse the logins of paid subscriptions (Claude Code,
   Codex, Copilot). DevOne leaves that out: it is usually against those services' terms.
-- **OpenAI chat format only.** Providers must speak `POST /chat/completions`. Clients that only
-  speak Anthropic's `/v1/messages` (such as Claude Code) need a translating proxy in front.
+- **Providers speak OpenAI chat format.** Providers must offer `POST /chat/completions`. Clients
+  can use either that or Anthropic's `/v1/messages`; the router translates. Anthropic-only
+  features without an OpenAI equivalent (extended thinking, prompt caching markers) are dropped.
+- **Provider URLs.** Local and private addresses work (Ollama, LM Studio), but link-local and
+  reserved ones, such as the cloud metadata address 169.254.169.254, are refused when saving.
 - **One server process.** The rate limit is kept in memory, so it is per DevOne process and resets
   on restart.
 
@@ -109,8 +133,11 @@ and key, and enter `auto` or a combo as the model.
 | Path | What it does |
 | --- | --- |
 | `src/lib/ai-router/routing.ts` | Picks and orders the providers to try, decides when to fall back and for how long to rest a provider, reads token usage (pure functions) |
+| `src/lib/ai-router/anthropic.ts` | Anthropic Messages ⇄ chat completions, whole and streamed |
+| `src/lib/ai-router/compress.ts` | Tool output shrinking |
+| `src/lib/ai-router/safe-url.ts` | Refuses metadata and reserved provider addresses |
 | `src/lib/ai-router/forward.ts` | Tries each provider in turn, relays streams and reports the outcome |
 | `src/lib/ai-router/presets.ts` | The presets in the Add provider form |
 | `src/features/ai-router/` | Database service, server actions, admin and account screens |
-| `src/app/api/ai/v1/` | The `chat/completions` and `models` endpoints |
+| `src/app/api/ai/v1/` | The `chat/completions`, `messages`, `messages/count_tokens` and `models` endpoints |
 | `scripts/check-core.ts` | Checks for routing, fallback, streaming, keys and the rate limit |

@@ -2175,3 +2175,292 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
   assert.equal(limiter.take('u', 60_001), true);
   assert.equal(createRateLimiter(0).take('u'), true);
 }
+
+// AI router: provider URLs may be local, but never a metadata or reserved address.
+{
+  const { assertSafeProviderUrl, isForbiddenProviderAddress, UnsafeProviderUrlError } =
+    await import('../src/lib/ai-router/safe-url');
+  for (const address of [
+    '169.254.169.254',
+    '0.0.0.0',
+    '224.0.0.1',
+    'fe80::1',
+    '::',
+    '::ffff:169.254.169.254'
+  ]) {
+    assert.equal(isForbiddenProviderAddress(address), true, address);
+  }
+  for (const address of ['127.0.0.1', '10.0.0.5', '192.168.1.2', '8.8.8.8', '::1']) {
+    assert.equal(isForbiddenProviderAddress(address), false, address);
+  }
+  await assert.rejects(
+    assertSafeProviderUrl('http://169.254.169.254/latest'),
+    UnsafeProviderUrlError
+  );
+  await assert.rejects(
+    assertSafeProviderUrl('https://sneaky.example/v1', async () => ['169.254.169.254']),
+    UnsafeProviderUrlError
+  );
+  await assert.rejects(
+    assertSafeProviderUrl('https://gone.example/v1', async () => []),
+    UnsafeProviderUrlError
+  );
+  await assertSafeProviderUrl('http://localhost:11434/v1', async () => ['127.0.0.1']);
+  await assertSafeProviderUrl('https://api.groq.com/openai/v1', async () => ['104.18.1.1']);
+}
+
+// AI router: tool output compression.
+{
+  const { compressText, compressToolMessages, squeezeText } =
+    await import('../src/lib/ai-router/compress');
+  assert.equal(squeezeText('\u001b[31mred\u001b[0m  \n\n\n\nnext'), 'red\n\nnext');
+  assert.equal(squeezeText('a\na\na\nb'), 'a\n… (previous line repeated 2 more times)\nb');
+  const long = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join('\n');
+  const short = compressText(long, 2000);
+  assert.ok(short.length < 2400);
+  assert.ok(short.startsWith('line 0\n') && short.endsWith('line 4999'));
+  assert.match(short, /characters omitted by DevOne/);
+  assert.equal(compressText('small', 2000), 'small');
+
+  const messages = [
+    { role: 'user', content: long },
+    { role: 'tool', tool_call_id: 'c1', content: long },
+    { role: 'tool', tool_call_id: 'c2', content: 'ok' },
+    {
+      role: 'tool',
+      tool_call_id: 'c3',
+      content: [{ type: 'text', text: long }]
+    }
+  ];
+  const result = compressToolMessages(messages, 2000);
+  assert.equal((result.messages[0] as { content: string }).content, long);
+  assert.ok((result.messages[1] as { content: string }).content.length < long.length);
+  assert.equal((result.messages[2] as { content: string }).content, 'ok');
+  assert.equal(result.messages[3], messages[3]);
+  assert.equal(
+    result.savedChars,
+    long.length - (result.messages[1] as { content: string }).content.length
+  );
+}
+
+// AI router: Anthropic Messages <-> OpenAI chat completions.
+{
+  const { anthropicError, anthropicToOpenAI, openAIToAnthropic, translateStream } =
+    await import('../src/lib/ai-router/anthropic');
+
+  const request = anthropicToOpenAI({
+    model: 'claude-sonnet-4-5',
+    max_tokens: 100,
+    stream: true,
+    system: [{ type: 'text', text: 'Be brief.' }],
+    stop_sequences: ['END'],
+    tools: [
+      {
+        name: 'read',
+        description: 'Read a file',
+        input_schema: { type: 'object', properties: {} }
+      }
+    ],
+    tool_choice: { type: 'any' },
+    messages: [
+      { role: 'user', content: 'Open a.txt' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '…' },
+          { type: 'text', text: 'Sure.' },
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'read',
+            input: { path: 'a.txt' }
+          }
+        ]
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu_1',
+            content: [{ type: 'text', text: 'hello' }]
+          },
+          { type: 'text', text: 'Thanks' }
+        ]
+      }
+    ]
+  }) as { messages: Record<string, unknown>[]; [key: string]: unknown };
+  assert.equal(request.stream, true);
+  assert.deepEqual(request.stop, ['END']);
+  assert.equal(request.tool_choice, 'required');
+  assert.deepEqual(request.messages[0], {
+    role: 'system',
+    content: 'Be brief.'
+  });
+  assert.deepEqual(request.messages[1], {
+    role: 'user',
+    content: 'Open a.txt'
+  });
+  assert.deepEqual(request.messages[2], {
+    role: 'assistant',
+    content: 'Sure.',
+    tool_calls: [
+      {
+        id: 'toolu_1',
+        type: 'function',
+        function: { name: 'read', arguments: '{"path":"a.txt"}' }
+      }
+    ]
+  });
+  assert.deepEqual(request.messages[3], {
+    role: 'tool',
+    tool_call_id: 'toolu_1',
+    content: 'hello'
+  });
+  assert.deepEqual(request.messages[4], { role: 'user', content: 'Thanks' });
+  assert.equal((request.tools as { function: { name: string } }[])[0].function.name, 'read');
+
+  const image = anthropicToOpenAI({
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/png', data: 'AAA' }
+          },
+          { type: 'text', text: 'What is this?' }
+        ]
+      }
+    ]
+  }) as { messages: { content: { type: string }[] }[] };
+  assert.equal(image.messages[0].content[0].type, 'image_url');
+
+  const message = openAIToAnthropic(
+    {
+      id: 'chatcmpl-9',
+      choices: [
+        {
+          finish_reason: 'tool_calls',
+          message: {
+            content: 'Looking.',
+            tool_calls: [
+              {
+                id: 'c1',
+                function: { name: 'read', arguments: '{"path":"b"}' }
+              }
+            ]
+          }
+        }
+      ],
+      usage: { prompt_tokens: 12, completion_tokens: 5 }
+    },
+    'claude-sonnet-4-5'
+  ) as {
+    content: unknown[];
+    stop_reason: string;
+    usage: unknown;
+    id: string;
+    model: string;
+  };
+  assert.equal(message.id, 'msg_9');
+  assert.equal(message.model, 'claude-sonnet-4-5');
+  assert.equal(message.stop_reason, 'tool_use');
+  assert.deepEqual(message.content, [
+    { type: 'text', text: 'Looking.' },
+    { type: 'tool_use', id: 'c1', name: 'read', input: { path: 'b' } }
+  ]);
+  assert.deepEqual(message.usage, { input_tokens: 12, output_tokens: 5 });
+
+  assert.deepEqual(anthropicError(429, 'slow down'), {
+    type: 'error',
+    error: { type: 'rate_limit_error', message: 'slow down' }
+  });
+
+  const chunks = [
+    {
+      id: 'chatcmpl-1',
+      choices: [{ delta: { role: 'assistant', content: 'Hel' } }]
+    },
+    { choices: [{ delta: { content: 'lo' } }] },
+    {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'c1',
+                function: { name: 'read', arguments: '{"pa' }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: 0, function: { arguments: 'th":"x"}' } }]
+          }
+        }
+      ]
+    },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+    { choices: [], usage: { prompt_tokens: 7, completion_tokens: 3 } }
+  ];
+  const wire =
+    chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n';
+  // Split mid-line to check that buffering across reads works.
+  const bytes = new TextEncoder().encode(wire);
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes.slice(0, 40));
+      controller.enqueue(bytes.slice(40));
+      controller.close();
+    }
+  });
+  const translated = await new Response(translateStream(upstream, 'claude-sonnet-4-5')).text();
+  const events = translated
+    .split('\n\n')
+    .filter(Boolean)
+    .map((block) => ({
+      event: block.match(/^event: (.+)$/m)?.[1],
+      data: JSON.parse(block.match(/^data: (.+)$/m)?.[1] ?? 'null') as Record<string, any>
+    }));
+  assert.deepEqual(
+    events.map((event) => event.event),
+    [
+      'message_start',
+      'content_block_start',
+      'content_block_delta',
+      'content_block_delta',
+      'content_block_stop',
+      'content_block_start',
+      'content_block_delta',
+      'content_block_delta',
+      'content_block_stop',
+      'message_delta',
+      'message_stop'
+    ]
+  );
+  assert.equal(events[2].data.delta.text, 'Hel');
+  assert.equal(events[5].data.content_block.type, 'tool_use');
+  assert.equal(
+    events[6].data.delta.partial_json + events[7].data.delta.partial_json,
+    '{"path":"x"}'
+  );
+  assert.equal(events[9].data.delta.stop_reason, 'tool_use');
+  assert.deepEqual(events[9].data.usage, { input_tokens: 7, output_tokens: 3 });
+
+  // A stream that ends without [DONE] still closes cleanly.
+  const cut = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunks[0])}\n\n`));
+      controller.close();
+    }
+  });
+  const cutText = await new Response(translateStream(cut, 'm')).text();
+  assert.ok(cutText.trimEnd().endsWith('data: {"type":"message_stop"}'));
+}

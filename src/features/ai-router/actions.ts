@@ -9,10 +9,16 @@ import {
   deleteProvider,
   fetchProviderModels,
   saveCombo,
+  saveRouterSettings,
   saveProvider,
   setProviderEnabled
 } from '@/features/ai-router/service';
-import { comboSchema, fetchModelsSchema, providerSchema } from '@/features/ai-router/schema';
+import {
+  comboSchema,
+  fetchModelsSchema,
+  providerSchema,
+  routerSettingsSchema
+} from '@/features/ai-router/schema';
 import { requireUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { revalidatePath } from 'next/cache';
@@ -21,7 +27,10 @@ import { z } from 'zod';
 export type AiRouterResult = { ok: true } | { ok: false; error: string };
 
 function fail(error: unknown, fallback: string): { ok: false; error: string } {
-  return { ok: false, error: error instanceof AiRouterError ? error.message : fallback };
+  return {
+    ok: false,
+    error: error instanceof AiRouterError ? error.message : fallback
+  };
 }
 
 const firstIssue = (error: z.ZodError) => error.issues[0]?.message ?? 'Check the form';
@@ -84,7 +93,10 @@ export async function fetchProviderModelsAction(
   const parsed = fetchModelsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Enter the base URL' };
   try {
-    return { ok: true, models: await fetchProviderModels(user.id, parsed.data) };
+    return {
+      ok: true,
+      models: await fetchProviderModels(user.id, parsed.data)
+    };
   } catch (error) {
     return fail(error, 'Could not list the models');
   }
@@ -126,4 +138,10 @@ export async function deleteApiKeyAction(input: unknown): Promise<AiRouterResult
     'Could not delete the key',
     '/account'
   );
+}
+
+export async function saveRouterSettingsAction(input: unknown): Promise<AiRouterResult> {
+  const parsed = routerSettingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  return run((userId) => saveRouterSettings(userId, parsed.data), 'Could not save the settings');
 }

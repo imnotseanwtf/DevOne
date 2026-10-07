@@ -406,6 +406,19 @@ export const en = {
       saved: 'Combo saved',
       removed: 'Combo removed'
     },
+    settings: {
+      title: 'Settings',
+      description: 'How the router treats requests from tools such as Claude Code.',
+      defaultModel: 'Default model',
+      defaultModelHint:
+        'Used when nothing serves the model a tool asks for, for example Claude Code asking for "claude-sonnet-…". Enter a combo name, "auto" or a model.',
+      compress: 'Shrink tool output before sending',
+      maxChars: 'Longest tool output (characters)',
+      compressHint:
+        'Command logs, listings and diffs are cleaned up, and anything longer keeps its beginning and end. Send "x-devone-token-saver: off" to skip it for one request.',
+      save: 'Save settings',
+      saved: 'Settings saved'
+    },
     usage: {
       title: 'Usage',
       description: 'Requests in the last 24 hours, and the latest 50.',

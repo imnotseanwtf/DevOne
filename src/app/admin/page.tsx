@@ -5,10 +5,16 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UsersTable } from '@/features/admin/components/users-table';
 import { AiCombosSettings } from '@/features/ai-router/components/ai-combos-settings';
+import { AiRouterSettings } from '@/features/ai-router/components/ai-router-settings';
 import { AiProvidersSettings } from '@/features/ai-router/components/ai-providers-settings';
 import { AiUsageCard } from '@/features/ai-router/components/ai-usage-card';
 import { routerEndpoint } from '@/features/ai-router/endpoint';
-import { listCombos, listProviders, usageOverview } from '@/features/ai-router/service';
+import {
+  listCombos,
+  listProviders,
+  loadRouterSettings,
+  usageOverview
+} from '@/features/ai-router/service';
 import { listAuditEvents, listUsers, signInPolicy } from '@/features/admin/service';
 import { getT } from '@/i18n/server';
 import { requireUser } from '@/lib/auth/session';
@@ -69,11 +75,12 @@ async function AiRouterTab({ adminId }: { adminId: string }) {
   if (isDemoMode()) {
     return <p className='text-muted-foreground text-sm'>{t('aiRouter.keys.disabledInDemo')}</p>;
   }
-  const [providers, combos, usage, endpoint] = await Promise.all([
+  const [providers, combos, usage, endpoint, settings] = await Promise.all([
     listProviders(adminId),
     listCombos(adminId),
     usageOverview(adminId),
-    routerEndpoint()
+    routerEndpoint(),
+    loadRouterSettings()
   ]);
   return (
     <div className='space-y-6'>
@@ -86,6 +93,7 @@ async function AiRouterTab({ adminId }: { adminId: string }) {
       </div>
       <AiProvidersSettings providers={providers} />
       <AiCombosSettings combos={combos} providers={providers} />
+      <AiRouterSettings settings={settings} />
       <AiUsageCard usage={usage} />
     </div>
   );

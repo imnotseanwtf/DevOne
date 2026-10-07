@@ -11,6 +11,7 @@ import {
 } from '@/lib/ai-router/routing';
 import { createAiApiKey, hashAiApiKey } from '@/lib/ai-router/keys';
 import type { AttemptFailure, ForwardOutcome } from '@/lib/ai-router/forward';
+import { assertSafeProviderUrl, UnsafeProviderUrlError } from '@/lib/ai-router/safe-url';
 import { recordAudit } from '@/lib/audit/record';
 import { getPrisma } from '@/lib/db/prisma';
 import { decryptSecret, encryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
@@ -23,8 +24,20 @@ export class AiRouterError extends Error {
   }
 }
 
+async function assertSafeUrl(baseUrl: string) {
+  try {
+    await assertSafeProviderUrl(baseUrl);
+  } catch (error) {
+    if (error instanceof UnsafeProviderUrlError) throw new AiRouterError(error.message);
+    throw error;
+  }
+}
+
 async function requireAdmin(userId: string) {
-  const user = await getPrisma().user.findUnique({ where: { id: userId }, select: { role: true } });
+  const user = await getPrisma().user.findUnique({
+    where: { id: userId },
+    select: { role: true }
+  });
   if (user?.role !== UserRole.ADMIN) throw new AiRouterError('Administrators only');
 }
 
@@ -59,7 +72,10 @@ export async function loadRouterState(): Promise<RouterState> {
       enabled,
       cooldownUntil
     })),
-    combos: combos.map((combo) => ({ name: combo.name, steps: readSteps(combo.steps) })),
+    combos: combos.map((combo) => ({
+      name: combo.name,
+      steps: readSteps(combo.steps)
+    })),
     apiKeyFor: (providerId) => {
       const value = encrypted.get(providerId);
       return value ? decryptSecret(value, getEncryptionKey()) : null;
@@ -83,7 +99,10 @@ export async function findCallerByKey(key: string): Promise<RouterCaller | null>
   // Touch at most once a minute: every request would otherwise write here.
   if (!record.lastUsedAt || Date.now() - record.lastUsedAt.getTime() > 60_000) {
     await getPrisma()
-      .aiApiKey.update({ where: { id: record.id }, data: { lastUsedAt: new Date() } })
+      .aiApiKey.update({
+        where: { id: record.id },
+        data: { lastUsedAt: new Date() }
+      })
       .catch(() => undefined);
   }
   return { userId: record.userId, apiKeyId: record.id };
@@ -108,7 +127,8 @@ export async function recordUsage(
   caller: RouterCaller,
   requestedModel: string,
   startedAt: number,
-  outcome: ForwardOutcome
+  outcome: ForwardOutcome,
+  savedChars = 0
 ): Promise<void> {
   const provider = outcome.target?.provider ?? null;
   const prisma = getPrisma();
@@ -127,6 +147,7 @@ export async function recordUsage(
           promptTokens: outcome.usage.promptTokens,
           completionTokens: outcome.usage.completionTokens,
           latencyMs: Date.now() - startedAt,
+          savedChars: savedChars > 0 ? savedChars : null,
           error: outcome.error?.slice(0, 500) ?? null
         }
       })
@@ -134,10 +155,56 @@ export async function recordUsage(
     // An answer means the provider is healthy again.
     provider && outcome.status < 400
       ? prisma.aiProvider
-          .update({ where: { id: provider.id }, data: { cooldownUntil: null, lastError: null } })
+          .update({
+            where: { id: provider.id },
+            data: { cooldownUntil: null, lastError: null }
+          })
           .catch(() => undefined)
       : undefined
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Router settings
+
+export interface RouterSettings {
+  defaultModel: string | null;
+  compressToolOutput: boolean;
+  maxToolOutputChars: number;
+}
+
+const DEFAULT_SETTINGS: RouterSettings = {
+  defaultModel: null,
+  compressToolOutput: true,
+  maxToolOutputChars: 30_000
+};
+
+export async function loadRouterSettings(): Promise<RouterSettings> {
+  const row = await getPrisma().aiRouterSettings.findUnique({
+    where: { id: 'default' }
+  });
+  return row
+    ? {
+        defaultModel: row.defaultModel,
+        compressToolOutput: row.compressToolOutput,
+        maxToolOutputChars: row.maxToolOutputChars
+      }
+    : DEFAULT_SETTINGS;
+}
+
+export async function saveRouterSettings(adminId: string, input: RouterSettings) {
+  await requireAdmin(adminId);
+  const data = { ...input, defaultModel: input.defaultModel?.trim() || null };
+  await getPrisma().aiRouterSettings.upsert({
+    where: { id: 'default' },
+    create: { id: 'default', ...data },
+    update: data
+  });
+  await recordAudit({
+    actorId: adminId,
+    action: 'admin.ai.settings',
+    target: 'default'
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -160,12 +227,16 @@ export async function saveProvider(adminId: string, input: ProviderInput) {
   await requireAdmin(adminId);
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   if (!baseUrl) throw new AiRouterError('Enter an http:// or https:// base URL');
+  await assertSafeUrl(baseUrl);
   if (input.name.trim().toLowerCase() === AUTO_MODEL) {
     throw new AiRouterError(`"${AUTO_MODEL}" is reserved`);
   }
   const prisma = getPrisma();
   const clash = await prisma.aiProvider.findFirst({
-    where: { name: { equals: input.name, mode: 'insensitive' }, NOT: { id: input.id ?? '' } },
+    where: {
+      name: { equals: input.name, mode: 'insensitive' },
+      NOT: { id: input.id ?? '' }
+    },
     select: { id: true }
   });
   if (clash) throw new AiRouterError('Another provider has that name');
@@ -185,7 +256,9 @@ export async function saveProvider(adminId: string, input: ProviderInput) {
   };
 
   if (input.id) {
-    const existing = await prisma.aiProvider.findUnique({ where: { id: input.id } });
+    const existing = await prisma.aiProvider.findUnique({
+      where: { id: input.id }
+    });
     if (!existing) throw new AiRouterError('Provider not found');
     await prisma.aiProvider.update({
       where: { id: input.id },
@@ -198,7 +271,9 @@ export async function saveProvider(adminId: string, input: ProviderInput) {
       }
     });
   } else {
-    await prisma.aiProvider.create({ data: { ...data, encryptedApiKey: apiKey ?? null } });
+    await prisma.aiProvider.create({
+      data: { ...data, encryptedApiKey: apiKey ?? null }
+    });
   }
   await recordAudit({
     actorId: adminId,
@@ -232,7 +307,9 @@ export async function clearProviderCooldown(adminId: string, providerId: string)
 export async function deleteProvider(adminId: string, providerId: string) {
   await requireAdmin(adminId);
   const prisma = getPrisma();
-  const provider = await prisma.aiProvider.delete({ where: { id: providerId } });
+  const provider = await prisma.aiProvider.delete({
+    where: { id: providerId }
+  });
   // Drop the provider from every combo that used it.
   const combos = await prisma.aiCombo.findMany();
   await Promise.all(
@@ -241,7 +318,10 @@ export async function deleteProvider(adminId: string, providerId: string) {
       const kept = steps.filter((step) => step.providerId !== providerId);
       return kept.length === steps.length
         ? undefined
-        : prisma.aiCombo.update({ where: { id: combo.id }, data: { steps: kept } });
+        : prisma.aiCombo.update({
+            where: { id: combo.id },
+            data: { steps: kept }
+          });
     })
   );
   await recordAudit({
@@ -263,6 +343,7 @@ export async function fetchProviderModels(
   await requireAdmin(adminId);
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   if (!baseUrl) throw new AiRouterError('Enter an http:// or https:// base URL');
+  await assertSafeUrl(baseUrl);
   let apiKey = input.apiKey || null;
   if (!apiKey && input.providerId) {
     const saved = await getPrisma().aiProvider.findUnique({
@@ -293,8 +374,14 @@ export async function fetchProviderModels(
 
 export async function listCombos(adminId: string) {
   await requireAdmin(adminId);
-  const combos = await getPrisma().aiCombo.findMany({ orderBy: { name: 'asc' } });
-  return combos.map((combo) => ({ id: combo.id, name: combo.name, steps: readSteps(combo.steps) }));
+  const combos = await getPrisma().aiCombo.findMany({
+    orderBy: { name: 'asc' }
+  });
+  return combos.map((combo) => ({
+    id: combo.id,
+    name: combo.name,
+    steps: readSteps(combo.steps)
+  }));
 }
 
 export type AiComboSummary = Awaited<ReturnType<typeof listCombos>>[number];
@@ -327,7 +414,11 @@ export async function saveCombo(adminId: string, input: ComboInput) {
 export async function deleteCombo(adminId: string, comboId: string) {
   await requireAdmin(adminId);
   const combo = await getPrisma().aiCombo.delete({ where: { id: comboId } });
-  await recordAudit({ actorId: adminId, action: 'admin.ai.combo.delete', target: combo.name });
+  await recordAudit({
+    actorId: adminId,
+    action: 'admin.ai.combo.delete',
+    target: combo.name
+  });
 }
 
 /** Requests, tokens and failures per provider over the last day, and the latest requests. */
@@ -376,7 +467,13 @@ export type AiUsageOverview = Awaited<ReturnType<typeof usageOverview>>;
 export async function listApiKeys(userId: string) {
   return getPrisma().aiApiKey.findMany({
     where: { userId },
-    select: { id: true, name: true, prefix: true, lastUsedAt: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      prefix: true,
+      lastUsedAt: true,
+      createdAt: true
+    },
     orderBy: { createdAt: 'desc' }
   });
 }
@@ -392,13 +489,21 @@ export async function createApiKey(userId: string, name: string): Promise<string
     throw new AiRouterError(`You can have at most ${MAX_KEYS} keys`);
   }
   const { key, hash, prefix } = createAiApiKey();
-  await prisma.aiApiKey.create({ data: { userId, name, tokenHash: hash, prefix } });
-  await recordAudit({ actorId: userId, action: 'account.ai_key.create', target: name });
+  await prisma.aiApiKey.create({
+    data: { userId, name, tokenHash: hash, prefix }
+  });
+  await recordAudit({
+    actorId: userId,
+    action: 'account.ai_key.create',
+    target: name
+  });
   return key;
 }
 
 export async function deleteApiKey(userId: string, keyId: string) {
-  const { count } = await getPrisma().aiApiKey.deleteMany({ where: { id: keyId, userId } });
+  const { count } = await getPrisma().aiApiKey.deleteMany({
+    where: { id: keyId, userId }
+  });
   if (count === 0) throw new AiRouterError('Key not found');
   await recordAudit({ actorId: userId, action: 'account.ai_key.delete' });
 }
