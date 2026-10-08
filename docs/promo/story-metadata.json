@@ -1,47 +1,59 @@
 {
-  "duration": 58.766666666666666,
+  "duration": 72.23333333333332,
   "fps": 30,
-  "size": [1920, 1080],
+  "size": [
+    1920,
+    1080
+  ],
   "opening_seconds": 8.5,
-  "actual_clicks": 25,
+  "closing_seconds": 7.0,
+  "closing_message": "DevOne is open source. Feel free to contribute.",
+  "contribution_url": "https://github.com/imnotseanwtf/devone",
+  "project_setup_note": "Public-demo capture of repository selection and project naming; saving new projects is disabled in the demo.",
+  "actual_clicks": 30,
   "feature_introductions": [
     {
       "time": 8.5,
+      "title": "Start with a project.",
+      "description": "Choose your repository. Name your workspace."
+    },
+    {
+      "time": 17.96666666666667,
       "title": "This is your board.",
       "description": "Plan your work. Keep every task moving."
     },
     {
-      "time": 17.7,
+      "time": 27.166666666666664,
       "title": "This is your Git workspace.",
       "description": "Open files. Write code. Review your changes."
     },
     {
-      "time": 24.833333333333332,
+      "time": 34.3,
       "title": "This is your database.",
       "description": "Query your data. Understand your schema."
     },
     {
-      "time": 34.63333333333333,
+      "time": 44.099999999999994,
       "title": "This is your API client.",
       "description": "Your requests, organized by project."
     },
     {
-      "time": 41.166666666666664,
+      "time": 50.633333333333326,
       "title": "This is your docs hub.",
       "description": "Keep the knowledge beside the work."
     },
     {
-      "time": 44.56666666666666,
+      "time": 54.033333333333324,
       "title": "This is your drawing canvas.",
       "description": "Turn ideas into architecture."
     },
     {
-      "time": 47.233333333333334,
+      "time": 56.69999999999999,
       "title": "These are your pipelines.",
       "description": "See what is building and shipping."
     },
     {
-      "time": 49.50333333333334,
+      "time": 58.96999999999999,
       "title": "This is your terminal.",
       "description": "Run commands right inside the workspace."
     }
@@ -49,33 +61,38 @@
   "music_loudness_target_lufs": -16,
   "chapters": [
     {
-      "name": "board",
+      "name": "project",
       "start": 8.5,
+      "duration": 9.466666666666667
+    },
+    {
+      "name": "board",
+      "start": 17.96666666666667,
       "duration": 9.2
     },
     {
       "name": "git",
-      "start": 17.7,
+      "start": 27.166666666666664,
       "duration": 7.133333333333334
     },
     {
       "name": "database",
-      "start": 24.833333333333332,
+      "start": 34.3,
       "duration": 9.8
     },
     {
       "name": "api",
-      "start": 34.63333333333333,
+      "start": 44.099999999999994,
       "duration": 6.533333333333333
     },
     {
       "name": "docs",
-      "start": 41.166666666666664,
+      "start": 50.633333333333326,
       "duration": 6.066666666666666
     },
     {
       "name": "terminal",
-      "start": 47.233333333333334,
+      "start": 56.69999999999999,
       "duration": 8.533333333333333
     }
   ]

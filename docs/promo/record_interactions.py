@@ -23,8 +23,8 @@ POINTER = 'promo-mouse'
 
 
 class Browser:
-    def __init__(self):
-        self.socket = socket.create_connection(('127.0.0.1', 2829), timeout=60)
+    def __init__(self, port=2829):
+        self.socket = socket.create_connection(('127.0.0.1', port), timeout=60)
         self.serial = 0
         self.receive()
         self.command('WebDriver:NewSession', {'capabilities': {}})
@@ -78,7 +78,7 @@ class Browser:
 def text_element(text, exact=True):
     # Prefer actual interactive controls; fall back to the smallest matching text element.
     check = f'e.textContent.trim() === {json.dumps(text)}' if exact else f'e.textContent.includes({json.dumps(text)})'
-    return f'([...[...document.querySelectorAll("button,a,[role=button],[role=tab]")], ...document.querySelectorAll("p,h3,span,label")].find(e=>e.getBoundingClientRect().width>0 && ({check})))'
+    return f'([...[...document.querySelectorAll("button,a,[role=button],[role=tab],[role=menuitem],[role=option]")], ...document.querySelectorAll("p,h3,span,label")].find(e=>e.getBoundingClientRect().width>0 && ({check})))'
 
 
 class Recorder:
@@ -167,7 +167,22 @@ class Recorder:
 
 
 def record(name, b, r):
-    if name == 'board':
+    if name == 'project':
+        origin = BASE_FILE.read_text().strip().split('/projects/')[0]
+        b.command('WebDriver:Navigate', {'url': origin + '/projects'})
+        time.sleep(2)
+        r.hold(0.6)
+        r.css('button[data-sidebar="menu-button"]', hold=0.5, focus=(400, 320), zoom=1.10)
+        r.text('Create project', hold=1.1, focus=(960, 540), zoom=1.24)
+        r.css('[role=dialog] button[role=combobox]', hold=0.6)
+        r.click(text_element('acme/web-app'), hold=0.6)
+        r.css('#fab-project-name', hold=0.2)
+        r.type('#fab-project-name', 'Acme web app', clear=True, interval=0.09)
+        # Public-demo saving is disabled: show setup without inventing a successful submission.
+        target = r.target(text_element('Create project & link'))
+        r.move(target['x'], target['y'], 0.5)
+        r.hold(1.5)
+    elif name == 'board':
         b.navigate('/issues')
         r.hold(0.7)
         r.click(text_element('Redesign the pricing page', False), hold=0.8, focus=(960, 540), zoom=1.24)

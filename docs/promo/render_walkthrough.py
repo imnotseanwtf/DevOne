@@ -149,12 +149,12 @@ def compose(t, duration):
     return im
 
 
-def soundtrack(duration):
+def soundtrack(duration, closing_seconds=3):
     audio_out = OUT / 'walkthrough-audio'
     audio_out.mkdir(exist_ok=True)
     brand.OUT = audio_out
     brand.DURATION = math.ceil(duration)
-    brand.CUTS = [clip['start'] for clip in CLIPS[1:]] + [duration - 3]
+    brand.CUTS = [clip['start'] for clip in CLIPS[1:]] + [duration - closing_seconds]
     brand.score()
     with wave.open(str(audio_out / 'soundtrack.wav'), 'rb') as source:
         rate = source.getframerate()

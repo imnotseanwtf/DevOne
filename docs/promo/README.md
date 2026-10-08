@@ -1,34 +1,45 @@
 # DevOne promotional film
 
-## Latest cut: opening story and feature introductions
+## Latest cut: project setup and an open-source invitation
 
 [`devone-promo-story.mp4`](devone-promo-story.mp4) keeps the real clicks and typing
 from the interaction-led cut and adds an opening about juggling projects:
 “Too many projects?” → “Ever feel a little lost?” → “Meet DevOne.”
 
-Eight animated captions introduce the board, Git workspace, database, API client,
+The new setup sequence opens **Create project**, selects the sample repository,
+and types a project name before the feature tour. Saving new projects is disabled
+in the public demo, so the capture shows the real setup controls and transitions
+into the existing sample workspace without showing a successful submission.
+
+Nine animated captions introduce project setup, the board, Git workspace, database, API client,
 docs hub, drawing canvas, pipelines, and terminal. Each caption includes a short
 benefit, then clears to let the interaction continue. The original electronic
 music is mixed more prominently, with click effects aligned to the recorded input
 and a −16 LUFS loudness target.
 
+A seven-second closing card says **“DevOne is open source. Feel free to contribute.”**
+and displays `github.com/imnotseanwtf/devone`, welcoming ideas, issues, docs, and code.
+
 - [`story-poster.png`](story-poster.png) — latest cover image.
 - [`story-storyboard.jpg`](story-storyboard.jpg) — latest contact sheet.
 - [`render_story.py`](render_story.py) — opening, captions, and music mix source.
 - [`story-metadata.json`](story-metadata.json) — caption timing and export details.
+- [`recordings/project.mp4`](recordings/project.mp4) — new browser capture of project setup.
+- [`check_story.py`](check_story.py) — timeline and composition boundary check.
 
 Re-render from the same bundled browser recordings:
 
 ```sh
 python3 docs/promo/render_story.py --preview-only
+python3 docs/promo/check_story.py
 python3 docs/promo/render_story.py
 ```
 
 The latest export fully decodes with FFmpeg without errors. FFprobe verifies
-58.766667 seconds, 1,763 frames, 1920 × 1080 at 30 fps, H.264 video, and 48 kHz
-stereo AAC audio. Measured integrated audio loudness is −16.13 LUFS. Exported
-frames were inspected for the opening and all eight feature captions, and the
-input timelines retain the original 25 clicks.
+72.233333 seconds, 2,167 frames, 1920 × 1080 at 30 fps, H.264 video, and 48 kHz
+stereo AAC audio. Exported frames were inspected for project setup and the closing
+invitation. The input timelines contain 30 real clicks across seven recordings.
+Measured integrated audio loudness is −16.21 LUFS.
 
 ## Revised cut: real website interactions
 
@@ -109,6 +120,8 @@ interface with seeded sample project data. The terminal is the app's simulated
 demo terminal; its simulation label remains in the captured screen. These are
 screen captures animated in the film, rather than continuous browser recordings.
 The original public-demo banner is outside the composition's screenshot crop.
+The new project-setup browser recording was captured on 2026-10-04 in another
+temporary sample account in the same demo.
 
 The creative brief comes from `README.md`, the landing-page feature copy,
 `docs/brand-board.png`, the feature implementations, and the actual demo.
