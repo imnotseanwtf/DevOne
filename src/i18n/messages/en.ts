@@ -377,7 +377,87 @@ export const en = {
       tryDemo: 'Try the demo',
       secondary: 'Self-host it'
     },
-    demo: { label: 'DevOne product demo', play: 'Play demo', pause: 'Pause demo' },
+    demo: {
+      label: 'DevOne product demo',
+      play: 'Play demo',
+      pause: 'Pause demo',
+      scenes: {
+        board: {
+          project: 'Web platform',
+          todo: 'To do',
+          inProgress: 'In progress',
+          done: 'Done',
+          urgent: 'urgent',
+          high: 'high',
+          medium: 'medium',
+          low: 'low',
+          streamLogs: 'Stream job logs into the terminal',
+          rateLimit: 'Rate-limit the token sign-in',
+          exportSvg: 'Export drawings as SVG',
+          pinHostKeys: 'Pin SSH host keys on first connect',
+          calendarView: 'Calendar view for the board'
+        },
+        git: {
+          ahead: '3 ahead of main',
+          mergeRequest: 'Merge request !42',
+          you: 'you',
+          now: 'now',
+          hours: '{count}h',
+          days: '{count}d',
+          pinHostKeys: 'Pin host keys on first connect',
+          streamSsh: 'Stream SSH output over SSE',
+          encryptCredentials: 'Encrypt saved credentials',
+          hostAllowlist: 'Add SSH host allowlist'
+        },
+        database: {
+          run: 'Run',
+          minutesAgo: '{count} min ago',
+          hoursAgo: '{count} h ago',
+          result: '4 rows · 12 ms'
+        },
+        api: {
+          title: 'Issues API',
+          list: 'List issues',
+          create: 'Create issue',
+          move: 'Move issue',
+          delete: 'Delete issue',
+          send: 'Send',
+          sending: 'Sending…',
+          empty: 'Send a request to see the response.',
+          body: 'Body',
+          response: 'Response',
+          issueTitle: 'Add dark mode to docs'
+        },
+        docs: {
+          title: 'Docs',
+          gettingStarted: 'Getting started',
+          architecture: 'Architecture',
+          deploying: 'Deploying DevOne',
+          runbooks: 'Runbooks',
+          changelog: 'Changelog',
+          edited: 'Edited by you · just now',
+          body: 'DevOne runs as a single Docker Compose stack. Copy the example environment, generate an encryption key and start it.',
+          stepKey: 'Set DEVONE_ENCRYPTION_KEY',
+          stepMigrate: 'Run the migrations',
+          stepInvite: 'Invite your team'
+        },
+        drawings: { saved: 'Saved · 3 people viewing' },
+        devops: {
+          title: 'Add SSH terminal',
+          passed: 'Passed',
+          running: 'Running',
+          installed: '812 packages installed',
+          compiled: 'Compiled in 41s',
+          testsPassed: '214 passed',
+          live: 'Live at staging.devone.local'
+        },
+        terminal: {
+          savedCredentials: 'saved credentials',
+          hostKey: 'Host key SHA256:x9Fq…2kLw matches the pinned key',
+          connected: 'Connected to prod-1 (Ubuntu 24.04)'
+        }
+      }
+    },
     features: {
       eyebrow: 'The workspace',
       title: 'Everything a project needs, in the project.',

@@ -635,7 +635,7 @@ export function RepositoryWorkbench({
       </footer>
 
       <NameDialog
-        key={prompt ? JSON.stringify(prompt) : 'closed'}
+        key={prompt ? `name:${JSON.stringify(prompt)}` : 'name:closed'}
         copy={promptCopy}
         validate={validatePrompt}
         onClose={() => setPrompt(null)}
@@ -643,7 +643,7 @@ export function RepositoryWorkbench({
       />
 
       <CreateBranchDialog
-        key={creatingBranch ? `open:${branch}` : 'closed'}
+        key={creatingBranch ? `branch:${branch}` : 'branch:closed'}
         open={creatingBranch}
         branches={branches}
         current={branch}
