@@ -436,21 +436,39 @@ export async function LandingPage({ workspaceHref }: { workspaceHref?: string } 
       </main>
 
       <footer className='border-t border-white/[0.06]'>
-        <div className='mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-8 text-sm text-zinc-500 sm:flex-row sm:px-6'>
-          <span className='flex items-center gap-2' translate='no'>
-            <Icons.logo aria-hidden='true' className='size-4 text-zinc-300' />
-            DevOne
-          </span>
-          <span>{t('landing.footer.tagline')}</span>
-          <a
-            href={GITHUB_URL}
-            target='_blank'
-            rel='noopener noreferrer'
-            className='flex items-center gap-1.5 transition-colors hover:text-zinc-300'
-          >
-            <Icons.github aria-hidden='true' className='size-4' />
-            {t('landing.footer.github')}
-          </a>
+        <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 text-sm text-zinc-500 sm:px-6'>
+          <div className='flex flex-col items-center justify-between gap-3 sm:flex-row'>
+            <span className='flex items-center gap-2' translate='no'>
+              <Icons.logo aria-hidden='true' className='size-4 text-zinc-300' />
+              DevOne
+            </span>
+            <span>{t('landing.footer.tagline')}</span>
+            <a
+              href={GITHUB_URL}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='flex items-center gap-1.5 transition-colors hover:text-zinc-300'
+            >
+              <Icons.github aria-hidden='true' className='size-4' />
+              {t('landing.footer.github')}
+            </a>
+          </div>
+          <div className='flex flex-col items-center gap-2 text-center text-zinc-400'>
+            <p>
+              {t('landing.footer.createdBy')}{' '}
+              <span translate='no' className='font-medium text-zinc-300'>
+                Sean Gulliver Doctora
+              </span>
+            </p>
+            <a
+              href={`${GITHUB_URL}/blob/main/CONTRIBUTING.md`}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='rounded-sm text-[#b6f23a] underline underline-offset-4 transition-colors hover:text-[#c8f76a] focus-visible:ring-2 focus-visible:ring-[#b6f23a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] focus-visible:outline-none'
+            >
+              {t('landing.footer.contribute')}
+            </a>
+          </div>
         </div>
       </footer>
     </div>
