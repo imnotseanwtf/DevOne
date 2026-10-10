@@ -28,6 +28,7 @@ import { requireUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { connectOAuthProvider } from './oauth-service';
 
 export type AiRouterResult = { ok: true; providerId?: string } | { ok: false; error: string };
 
@@ -36,6 +37,22 @@ function fail(error: unknown, fallback: string): { ok: false; error: string } {
 }
 
 const firstIssue = (error: z.ZodError) => error.issues[0]?.message ?? 'Check the form';
+
+export async function connectOAuthProviderAction(
+  input: unknown
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const parsed = z.enum(['claude', 'codex']).safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Invalid OAuth provider' };
+  const user = await requireUser();
+  if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
+  try {
+    const url = await connectOAuthProvider(user.id, parsed.data);
+    revalidatePath('/admin');
+    return { ok: true, url };
+  } catch (error) {
+    return fail(error, 'Could not start provider sign-in');
+  }
+}
 
 async function run(
   work: (userId: string) => Promise<unknown>,

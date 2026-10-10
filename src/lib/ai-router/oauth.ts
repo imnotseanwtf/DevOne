@@ -11,7 +11,12 @@ export interface ProviderTokens {
 export interface OAuthProvider {
   flowType: 'authorization_code_pkce';
   buildAuthUrl(redirectUri: string, state: string, challenge: string): string;
-  exchangeToken(code: string, redirectUri: string, verifier: string): Promise<ProviderTokens>;
+  exchangeToken(
+    code: string,
+    redirectUri: string,
+    verifier: string,
+    state?: string
+  ): Promise<ProviderTokens>;
   mapTokens(value: unknown): ProviderTokens;
   postExchange?(tokens: ProviderTokens): Promise<ProviderTokens>;
 }
@@ -44,6 +49,8 @@ export function buildProviderAuthorizeUrl(
   challenge: string
 ): string {
   const url = oauthUrl(config.authorizeUrl);
+  for (const [key, value] of Object.entries(config.authorizeParams ?? {}))
+    url.searchParams.set(key, value);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', config.clientId);
   url.searchParams.set('redirect_uri', redirectUri);
@@ -131,9 +138,10 @@ export function exchangeProviderCode(
   code: string,
   redirectUri: string,
   verifier: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  state?: string
 ): Promise<ProviderTokens> {
-  return createOAuthProvider(config, fetchImpl).exchangeToken(code, redirectUri, verifier);
+  return createOAuthProvider(config, fetchImpl).exchangeToken(code, redirectUri, verifier, state);
 }
 
 export async function refreshProviderToken(
@@ -161,15 +169,22 @@ export function createOAuthProvider(
       buildProviderAuthorizeUrl(config, redirectUri, state, challenge),
     mapTokens: parseProviderTokens,
     postExchange,
-    async exchangeToken(code, redirectUri, verifier) {
+    async exchangeToken(code, redirectUri, verifier, state) {
       try {
+        if (config.includeStateInToken && state && code.includes('#')) {
+          const [authorizationCode, returnedState, extra] = code.split('#');
+          if (!authorizationCode || returnedState !== state || extra !== undefined)
+            throw new Error('Invalid authorization code state');
+          code = authorizationCode;
+        }
         const response = await requestTokens(
           config,
           {
             grant_type: 'authorization_code',
             code,
             redirect_uri: redirectUri,
-            code_verifier: verifier
+            code_verifier: verifier,
+            ...(config.includeStateInToken && state ? { state } : {})
           },
           fetchImpl
         );

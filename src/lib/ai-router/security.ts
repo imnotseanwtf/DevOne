@@ -138,7 +138,10 @@ export function oauthConfigFingerprint(providerType: string, config: ProviderOAu
         authorizeUrl: config.authorizeUrl,
         tokenUrl: config.tokenUrl,
         scope: config.scope,
-        encoding: config.encoding
+        encoding: config.encoding,
+        redirectUri: config.redirectUri,
+        authorizeParams: config.authorizeParams,
+        includeStateInToken: config.includeStateInToken
       })
     )
     .digest('hex');

@@ -434,6 +434,10 @@ export const fil: MessageShape<typeof en> = {
     },
     connections: {
       title: 'Mga account ng provider',
+      addConnection: 'Magdagdag ng koneksyon',
+      chooseProvider: 'Pumili ng provider',
+      chooseHint:
+        'Bubuksan ng OAuth provider ang pahina para mag-sign in. Credential ang ginagamit ng ibang provider.',
       description:
         'Magdagdag ng maraming account sa bawat provider. May sariling priyoridad, access sa model at cooldown ang bawat account. Naka-encrypt ang mga credential at hindi ipinapakita.',
       noProviders: 'Magdagdag muna ng provider bago magkonekta ng account.',

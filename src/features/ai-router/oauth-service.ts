@@ -14,7 +14,7 @@ import {
   oauthConfigFingerprint
 } from '@/lib/ai-router/security';
 import { recordAudit } from '@/lib/audit/record';
-import { AiRouterError, requireAiAdmin, gatewayFetch } from './service';
+import { AiRouterError, requireAiAdmin, gatewayFetch, saveProvider } from './service';
 
 function stateHash(state: string): string {
   return createHash('sha256').update(state).digest('hex');
@@ -22,6 +22,38 @@ function stateHash(state: string): string {
 
 function encrypt(value: string | undefined): string | null {
   return value ? encryptSecret(value, getEncryptionKey()) : null;
+}
+
+/** Selecting a built-in OAuth provider needs no intermediate provider or credential form. */
+export async function connectOAuthProvider(
+  userId: string,
+  providerType: 'claude' | 'codex'
+): Promise<string> {
+  await requireAiAdmin(userId);
+  const definition = getProviderDefinition(providerType);
+  if (!definition?.authTypes?.includes('oauth'))
+    throw new AiRouterError('This provider does not support OAuth sign-in');
+  if (!definition.oauth)
+    throw new AiRouterError(`${definition.name} sign-in is not configured for this installation.`);
+  const existing = await getPrisma().aiProvider.findMany({
+    where: { providerType },
+    orderBy: { priority: 'asc' },
+    select: { id: true }
+  });
+  const providerId =
+    existing[0]?.id ??
+    (await saveProvider(userId, {
+      name: providerType === 'claude' ? 'Claude' : definition.name,
+      providerType,
+      alias: definition.alias,
+      baseUrl: definition.transport.baseUrl,
+      format: definition.transport.format,
+      authType: 'oauth',
+      models: definition.models.map((model) => model.id),
+      priority: 100,
+      enabled: true
+    }));
+  return startProviderOAuth(userId, providerId);
 }
 
 /** The installation's registered public URL supplies redirect URIs, never request headers. */
@@ -41,7 +73,18 @@ export async function startProviderOAuth(userId: string, providerId: string): Pr
     throw new AiRouterError('OAuth requires an HTTPS public URL or localhost for development');
   }
   await Promise.all([assertGatewayUrl(config.authorizeUrl), assertGatewayUrl(config.tokenUrl)]);
-  const redirectUri = `${appUrl}/api/ai/oauth/${encodeURIComponent(providerId)}/callback`;
+  const providerCallback = `/api/ai/oauth/${encodeURIComponent(providerId)}/callback`;
+  const redirectUri = config.redirectUri ?? `${appUrl}${providerCallback}`;
+  const redirect = new URL(redirectUri);
+  if (
+    redirect.origin !== publicUrl.origin ||
+    redirect.username ||
+    redirect.password ||
+    redirect.search ||
+    redirect.hash ||
+    ![providerCallback, '/callback'].includes(redirect.pathname)
+  )
+    throw new AiRouterError('OAuth callback must use this installation’s callback address');
   const pkce = generatePkce();
   const now = new Date();
   await prisma.aiOAuthSession.deleteMany({
@@ -91,7 +134,8 @@ export async function finishProviderOAuth(
     code,
     session.redirectUri,
     decryptSecret(session.encryptedCodeVerifier, getEncryptionKey()),
-    gatewayFetch
+    gatewayFetch,
+    state
   );
   const metadata: Record<string, string> = {
     oauthConfigHash: session.configHash,

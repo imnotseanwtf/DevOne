@@ -22,6 +22,9 @@ export interface ProviderOAuthConfig {
   scope: string;
   encoding: 'form' | 'json';
   refreshLeadMs: number;
+  redirectUri?: string;
+  authorizeParams?: Record<string, string>;
+  includeStateInToken?: boolean;
 }
 
 export interface ProviderDefinition {

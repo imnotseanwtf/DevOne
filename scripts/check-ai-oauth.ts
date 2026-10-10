@@ -70,6 +70,28 @@ assert.equal(
 );
 
 const pkce = oauth.generatePkce();
+const claudeConfig = registry.getProviderDefinition('claude', {
+  DEVONE_AI_CLAUDE_CLIENT_ID: 'installed-client',
+  DEVONE_AI_CLAUDE_REDIRECT_URI: 'http://localhost:3000/callback'
+})!.oauth!;
+const claudeAuthorize = new URL(oauth.buildProviderAuthorizeUrl(
+  claudeConfig, 'http://localhost:3000/callback', pkce.state, pkce.codeChallenge
+));
+assert.equal(claudeAuthorize.searchParams.get('code'), 'true', 'Claude sign-in uses its provider-specific code mode');
+assert.equal(claudeConfig.redirectUri, 'http://localhost:3000/callback');
+let claudeExchange: Record<string, unknown> = {};
+await oauth.exchangeProviderCode(claudeConfig, `authorization-code#${pkce.state}`,
+  'http://localhost:3000/callback', pkce.codeVerifier,
+  (async (_url, init) => {
+    claudeExchange = JSON.parse(String(init?.body));
+    return Response.json({ access_token: 'access', refresh_token: 'rotation' });
+  }) as typeof fetch, pkce.state);
+assert.equal(claudeExchange.code, 'authorization-code');
+assert.equal(claudeExchange.state, pkce.state, 'Claude token exchange must carry the validated state');
+await assert.rejects(oauth.exchangeProviderCode(claudeConfig, 'code#wrong-state',
+  'http://localhost:3000/callback', pkce.codeVerifier,
+  (async () => { throw new Error('mismatched state must not reach the token endpoint'); }) as typeof fetch,
+  pkce.state));
 assert.match(pkce.state, /^[A-Za-z0-9_-]{43}$/);
 assert.match(pkce.codeVerifier, /^[A-Za-z0-9_-]{43,128}$/);
 assert.equal(

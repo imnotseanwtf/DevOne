@@ -39,7 +39,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppForm } from '@/lib/form';
 import type { AiProviderSummary } from '../api/types';
 import { aiGatewayKeys } from '../api/queries';
-import { authorizeProvider, useGatewayMutation } from './gateway-mutation';
+import { authorizeProvider, authorizeProviderType, useGatewayMutation } from './gateway-mutation';
 import { toast } from 'sonner';
 
 export type AiProviderRow = AiProviderSummary;
@@ -243,6 +243,10 @@ function ProviderDialog({
   const queryClient = useQueryClient();
   const connectAfterSave = useRef(false);
   const initial = AI_PROVIDER_PRESETS[0];
+  const quickConnect = useMutation({
+    mutationFn: authorizeProviderType,
+    onError: (error) => toast.error(error.message)
+  });
   const save = useMutation({
     mutationFn: async (value: ProviderFormValues) => {
       const result = await saveProviderAction({
@@ -368,7 +372,7 @@ function ProviderDialog({
               }}
             </form.Subscribe>
           </DialogHeader>
-          <fieldset disabled={save.isPending} className='space-y-4'>
+          <fieldset disabled={save.isPending || quickConnect.isPending} className='space-y-4'>
             {!provider && (
               <form.AppField
                 name='presetId'
@@ -385,6 +389,9 @@ function ProviderDialog({
                       'authType',
                       next.authType ?? (next.needsKey ? 'api_key' : 'none')
                     );
+                    if (next.providerType === 'claude' || next.providerType === 'codex') {
+                      quickConnect.mutate(next.providerType);
+                    }
                   }
                 }}
                 children={(field) => (

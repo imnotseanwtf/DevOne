@@ -25,7 +25,7 @@ const database = {
   aiCombo: { findMany: async () => [] },
   aiRouterSettings: { findUnique: async () => null },
   aiOAuthSession: { deleteMany: async ({ where }) => { const previous = sessions.length; sessions = sessions.filter((entry) => !matches(entry, where)); return { count: previous - sessions.length }; } },
-  $queryRaw: async () => [],
+  $executeRaw: async () => 1,
   $transaction: async (work) => { const previous = structuredClone({ providers, connections, sessions }); try { return await work(database); } catch (error) { ({ providers, connections, sessions } = previous); throw error; } }
 };
 mock.module('../src/lib/db/prisma.ts', () => ({ getPrisma: () => database }));

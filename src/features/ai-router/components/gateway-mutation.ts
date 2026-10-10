@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useT } from '@/i18n/client';
 import { aiGatewayKeys } from '../api/queries';
+import { connectOAuthProviderAction } from '../actions';
+
+export async function authorizeProviderType(providerType: 'claude' | 'codex'): Promise<void> {
+  const result = await connectOAuthProviderAction(providerType);
+  if (!result.ok) throw new Error(result.error);
+  window.location.assign(result.url);
+}
 
 export function useGatewayMutation(onSaved?: () => void) {
   const t = useT();
@@ -38,7 +45,14 @@ export async function authorizeProvider(providerId: string): Promise<void> {
     !('url' in result) ||
     typeof result.url !== 'string'
   ) {
-    throw new Error('oauth');
+    throw new Error(
+      typeof result === 'object' &&
+        result !== null &&
+        'error' in result &&
+        typeof result.error === 'string'
+        ? result.error
+        : 'Could not start provider sign-in'
+    );
   }
   window.location.assign(result.url);
 }

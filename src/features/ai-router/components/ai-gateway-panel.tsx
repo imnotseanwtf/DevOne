@@ -44,7 +44,7 @@ import type {
 } from '../api/types';
 import { AiProvidersSettings } from './ai-providers-settings';
 import { Button } from './gateway-button';
-import { authorizeProvider, useGatewayMutation } from './gateway-mutation';
+import { authorizeProvider, authorizeProviderType, useGatewayMutation } from './gateway-mutation';
 
 interface AiGatewayPanelProps {
   userId: string;
@@ -82,16 +82,35 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
     connection?: AiConnectionSummary;
   } | null>(null);
   const [removing, setRemoving] = useState<AiConnectionSummary | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const mutation = useGatewayMutation();
   const oauth = useMutation({
     mutationFn: authorizeProvider,
-    onError: () => toast.error(t('aiRouter.oauth.failed'))
+    onError: (error) => toast.error(error.message)
   });
+  const quickConnect = useMutation({
+    mutationFn: authorizeProviderType,
+    onError: (error) => toast.error(error.message)
+  });
+  const connecting = oauth.isPending || quickConnect.isPending;
+  const addAccount = (provider: AiProviderSummary) => {
+    if (provider.authType === 'oauth' || provider.providerType === 'claude') {
+      oauth.mutate(provider.id);
+    } else {
+      setChoosing(false);
+      setEditing({ provider });
+    }
+  };
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{t('aiRouter.connections.title')}</CardTitle>
-        <CardDescription>{t('aiRouter.connections.description')}</CardDescription>
+      <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-4'>
+        <div className='space-y-1.5'>
+          <CardTitle>{t('aiRouter.connections.title')}</CardTitle>
+          <CardDescription>{t('aiRouter.connections.description')}</CardDescription>
+        </div>
+        <Button size='sm' disabled={connecting} onClick={() => setChoosing(true)}>
+          <Icons.add /> {t('aiRouter.connections.addConnection')}
+        </Button>
       </CardHeader>
       <CardContent className='space-y-5'>
         {providers.length === 0 ? (
@@ -110,18 +129,13 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
                 <div className='flex flex-wrap items-center justify-between gap-3'>
                   <h3 className='text-sm font-medium'>{provider.name}</h3>
                   <div className='flex gap-2'>
-                    {provider.authType === 'oauth' && (
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        disabled={!provider.oauthConfigured || oauth.isPending}
-                        isLoading={oauth.isPending && oauth.variables === provider.id}
-                        onClick={() => oauth.mutate(provider.id)}
-                      >
-                        {t('aiRouter.oauth.connect')}
-                      </Button>
-                    )}
-                    <Button size='sm' variant='outline' onClick={() => setEditing({ provider })}>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={connecting}
+                      isLoading={oauth.isPending && oauth.variables === provider.id}
+                      onClick={() => addAccount(provider)}
+                    >
                       <Icons.add />
                       {t('aiRouter.connections.add')}
                     </Button>
@@ -265,6 +279,40 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
           })
         )}
       </CardContent>
+      <Dialog open={choosing} onOpenChange={(open) => !connecting && setChoosing(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('aiRouter.connections.chooseProvider')}</DialogTitle>
+            <DialogDescription>{t('aiRouter.connections.chooseHint')}</DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-2'>
+            {(['claude', 'codex'] as const)
+              .filter((type) => !providers.some((provider) => provider.providerType === type))
+              .map((type) => (
+                <Button
+                  key={type}
+                  variant='outline'
+                  disabled={connecting}
+                  isLoading={quickConnect.isPending && quickConnect.variables === type}
+                  onClick={() => quickConnect.mutate(type)}
+                >
+                  <Icons.login /> {type === 'claude' ? 'Claude' : 'Codex'}
+                </Button>
+              ))}
+            {providers.map((provider) => (
+              <Button
+                key={provider.id}
+                variant='outline'
+                disabled={connecting}
+                isLoading={oauth.isPending && oauth.variables === provider.id}
+                onClick={() => addAccount(provider)}
+              >
+                {provider.name}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
       {editing && (
         <ConnectionDialog
           provider={editing.provider}

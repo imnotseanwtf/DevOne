@@ -7,22 +7,27 @@ expiry and cooldown. Existing provider keys, gateway keys and combos keep workin
 
 ## Set it up
 
-1. Open **Admin → AI router → Add provider**. Choose a preset, upstream format and
+1. For Claude OAuth, open **Admin → AI router → Provider accounts → Add connection → Claude**.
+   Selecting Claude starts sign-in immediately, creating or reusing its provider definition.
+   Approve access on the provider's page; the callback saves an encrypted account. **Add account**
+   on an OAuth provider also starts sign-in directly. Selecting Claude or Codex in **Add provider**
+   starts the same flow. A configured OAuth client is required.
+2. For other providers, open **Add provider**. Choose a preset, upstream format and
    authentication mode. Use **Fetch models**, or enter model IDs one per line. Discovery is
    provider-dependent; manual model entry works when an upstream has no model-list endpoint.
-2. For API-key or access-token authentication, enter the credential in the provider form or
+3. For API-key or access-token authentication, enter the credential in the provider form or
    **Provider accounts → Add account**. Add more accounts to the same provider when needed.
    Empty credentials keep the saved value during editing. Disable or remove an account to stop
    routing through it. Credential values are encrypted with `DEVONE_ENCRYPTION_KEY` and never
    returned to the browser after saving.
-3. For OAuth, save the provider and use **Connect OAuth account**, or **Save and connect**.
+4. For custom OAuth providers, save the provider and use **Add account**, or **Save and connect**.
    Each authorization creates an account. Your installation must have its own configured OAuth
    application. Reconnect after revocation or when refresh is no longer available.
-4. Optionally create a **combo**, an ordered list of provider/model pairs such as `free-stack`.
-5. Under **Router settings**, set a default model and optionally shorten large tool results.
-6. Open **My account → AI keys → Create key**. Copy the `dvo_…` key when shown; it cannot be
+5. Optionally create a **combo**, an ordered list of provider/model pairs such as `free-stack`.
+6. Under **Router settings**, set a default model and optionally shorten large tool results.
+7. Open **My account → AI keys → Create key**. Copy the `dvo_…` key when shown; it cannot be
    displayed again. Each person has independent gateway keys and usage.
-7. Configure your tool with the gateway base URL and personal gateway key.
+8. Configure your tool with the gateway base URL and personal gateway key.
 
 Gateway keys authenticate clients to DevOne. Provider credentials authenticate DevOne to the
 upstream; these are separate. A signed-in browser on the same site can use its DevOne session.
@@ -57,6 +62,13 @@ Set `DEVONE_APP_URL` to the public HTTPS address of DevOne. Register the exact c
 `https://your-devone/api/ai/oauth/<provider-record-id>/callback` with your OAuth application;
 the ID belongs to the saved provider record, not the preset name. Use an OAuth application and
 scopes that the upstream supports for your installation.
+
+For a client registered with a loopback `/callback` address, set
+`DEVONE_AI_CLAUDE_REDIRECT_URI=http://localhost:3000/callback` (adjust to your app address).
+The override must have the same origin as `DEVONE_APP_URL` and use `/callback` or the provider's
+normal callback path. Start sign-in from that same app address so its session cookie is present
+when authorization returns. The shared callback resolves the provider from the saved state;
+the browser does not choose which account receives the authorization code.
 
 Claude and Codex configuration use these prefixes:
 
@@ -189,6 +201,11 @@ request using an existing gateway key before adding OAuth accounts.
 Run the repository's AI protocol, OAuth and gateway checks alongside typecheck, lint and build.
 They use controlled test transports; real-provider validation still requires real credentials,
 a reachable upstream and an installed OAuth application.
+
+`bun run test:ai:db` also checks provider creation and concurrent credential locks against the
+configured, migrated PostgreSQL database. It removes only the temporary records it creates.
+Development logging suppresses Server Function arguments because they can contain sign-in
+tokens and provider credentials.
 
 With a test installation, verify:
 

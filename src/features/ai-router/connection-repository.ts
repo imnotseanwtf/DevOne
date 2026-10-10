@@ -76,7 +76,7 @@ export function createConnectionRepository(
       getPrisma().$transaction(
         async (transaction) => {
           // Transaction-scoped advisory locks also serialize refreshes across server processes.
-          await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+          await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
           return work(createConnectionRepository(transaction, true));
         },
         { timeout: 30_000, maxWait: 10_000 }

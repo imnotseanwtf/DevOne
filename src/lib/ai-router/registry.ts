@@ -90,6 +90,8 @@ const oauthDefaults: Record<string, Omit<ProviderOAuthConfig, 'clientId'>> = {
     tokenUrl: 'https://api.anthropic.com/v1/oauth/token',
     scope: 'org:create_api_key user:profile user:inference',
     encoding: 'json',
+    authorizeParams: { code: 'true' },
+    includeStateInToken: true,
     refreshLeadMs: 14_400_000
   },
   codex: {
@@ -155,7 +157,10 @@ export function getProviderDefinition(
     tokenUrl,
     scope: read('SCOPE') ?? defaults?.scope ?? '',
     encoding,
-    refreshLeadMs
+    refreshLeadMs,
+    redirectUri: read('REDIRECT_URI'),
+    authorizeParams: defaults?.authorizeParams ? { ...defaults.authorizeParams } : undefined,
+    includeStateInToken: defaults?.includeStateInToken
   };
   return result;
 }

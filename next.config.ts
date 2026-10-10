@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Server Function arguments can contain sign-in tokens and provider credentials.
+  logging: { serverFunctions: false },
   output: process.env.BUILD_STANDALONE === 'true' ? 'standalone' : undefined,
   // ssh2 loads optional native crypto bindings at runtime; bundling breaks them.
   serverExternalPackages: ['ssh2'],

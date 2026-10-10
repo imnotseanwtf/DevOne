@@ -413,6 +413,10 @@ export const en = {
     },
     connections: {
       title: 'Provider accounts',
+      addConnection: 'Add connection',
+      chooseProvider: 'Choose a provider',
+      chooseHint:
+        'OAuth providers open their sign-in page. Other providers use account credentials.',
       description:
         'Add several accounts per provider. Each account has its own priority, model access and cooldown. Credentials are encrypted and never shown.',
       noProviders: 'Add a provider before connecting accounts.',

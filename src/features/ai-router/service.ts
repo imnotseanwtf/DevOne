@@ -321,7 +321,7 @@ export async function saveProvider(adminId: string, input: ProviderInput): Promi
 
   const providerId = await prisma.$transaction(async (transaction) => {
     // Names and aliases share one routing namespace. Serialize the check and write together.
-    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended('devone-ai-provider-namespace', 0))`;
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('devone-ai-provider-namespace', 0))`;
     const others = await transaction.aiProvider.findMany({
       where: { NOT: { id: input.id ?? '' } },
       select: { name: true, alias: true, providerType: true }
