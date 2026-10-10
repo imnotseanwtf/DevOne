@@ -14,9 +14,14 @@ const {encryptSecret,parseEncryptionKey}=repo('./src/lib/encryption/secrets.ts')
 const db=new Pool({connectionString:env.DATABASE_URL});
 const id='chat-ui-'+crypto.randomBytes(6).toString('hex');
 const token=createSessionToken(),secretA=crypto.randomBytes(16).toString('hex'),secretB=crypto.randomBytes(16).toString('hex');
-let browser,page,requests=[],slowStarted,slowAborted;
+let browser,page,requests=[],metadataRequests=[],slowStarted,slowAborted;
 const started=new Promise(resolve=>slowStarted=resolve),aborted=new Promise(resolve=>slowAborted=resolve);
 const upstream=http.createServer(async(req,res)=>{
+ if(req.method==='GET'&&req.url==='/v1/models'){
+   metadataRequests.push(req.headers.authorization);
+   res.writeHead(200,{'content-type':'application/json'});
+   res.end(JSON.stringify({data:[{id:'test-model'},{id:'refreshed-model'}]}));return;
+ }
  let raw='';for await(const bytes of req)raw+=bytes;
  const body=JSON.parse(raw);requests.push({body,authorization:req.headers.authorization});
  const last=body.messages.at(-1).content;
@@ -38,6 +43,18 @@ const upstream=http.createServer(async(req,res)=>{
  await ctx.addCookies([{name:'devone_session',value:token,url:env.DEVONE_APP_URL,httpOnly:true,sameSite:'Lax'}]);
  page=await ctx.newPage();page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(env.DEVONE_APP_URL+'/router?tab=providers&provider='+id,{waitUntil:'networkidle'});
+ // Model refresh works during cooldown and updates the UI without modifying accounts.
+ await db.query('UPDATE "AiConnection" SET "rateLimitedUntil"=now()+interval \'1 hour\',"lastError"=\'HTTP 429: fixture\' WHERE "providerId"=$1',[id]);
+ const accountSnapshot=(await db.query('SELECT * FROM "AiConnection" WHERE "providerId"=$1 ORDER BY id',[id])).rows;
+ await page.reload({waitUntil:'networkidle'});
+ await page.getByRole('button',{name:'Refresh models',exact:true}).click();
+ await page.getByText(/3 models.*refreshed-model/).waitFor();
+ assert.deepEqual(metadataRequests,['Bearer '+secretA]);
+ assert.deepEqual((await db.query('SELECT models FROM "AiProvider" WHERE id=$1',[id])).rows[0].models,['test-model','other-model','refreshed-model']);
+ assert.ok(JSON.stringify((await db.query('SELECT * FROM "AiConnection" WHERE "providerId"=$1 ORDER BY id',[id])).rows)===JSON.stringify(accountSnapshot),'refresh must preserve credentials, restrictions and cooldowns');
+ await db.query('UPDATE "AiConnection" SET "rateLimitedUntil"=NULL,"lastError"=NULL WHERE "providerId"=$1',[id]);
+ await page.reload({waitUntil:'networkidle'});
+ console.log('PASS model refresh during cooldown, persisted catalog and query invalidation');
  await page.getByRole('button',{name:'Test connection Test account B',exact:true}).click();
  const dialog=page.getByRole('dialog');await dialog.getByRole('heading',{name:'Test Test account B',exact:true}).waitFor();
  await dialog.getByLabel(/^Model/).click();await page.getByRole('option',{name:'test-model',exact:true}).waitFor();assert.equal(await page.getByRole('option',{name:'other-model',exact:true}).count(),0);await page.getByRole('option',{name:'test-model',exact:true}).click();

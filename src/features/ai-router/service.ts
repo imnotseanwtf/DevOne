@@ -520,9 +520,11 @@ export async function fetchProviderModels(
     providerType = input.providerType ?? saved.providerType;
     format = input.format ?? (saved.format as ProviderFormat);
     authType = saved.authType as ProviderAuthType;
-    const account = saved.connections.find(
-      (connection) => !connection.rateLimitedUntil || connection.rateLimitedUntil <= new Date()
-    );
+    // Inference cooldowns do not prevent authenticated metadata discovery.
+    const account =
+      saved.connections.find(
+        (connection) => !connection.rateLimitedUntil || connection.rateLimitedUntil <= new Date()
+      ) ?? saved.connections[0];
     if (account) {
       const manager = createCredentialManager(
         createConnectionRepository(),
@@ -544,6 +546,9 @@ export async function fetchProviderModels(
   const tokenAuth = authType === 'oauth' || authType === 'access_token';
   const headers = new Headers({ ...definition?.transport.headers, accept: 'application/json' });
   if (format === 'claude') headers.set('anthropic-version', '2023-06-01');
+  if (format === 'claude' && tokenAuth && ['claude', 'anthropic'].includes(providerType)) {
+    headers.append('anthropic-beta', 'oauth-2025-04-20');
+  }
   if (apiKey) {
     const authHeader = tokenAuth
       ? 'authorization'
@@ -559,7 +564,9 @@ export async function fetchProviderModels(
   }
   let response: Response;
   try {
-    response = await fetchImpl(providerUrl(baseUrl, 'models'), {
+    const url = new URL(providerUrl(baseUrl, 'models'));
+    if (format === 'claude') url.searchParams.set('limit', '1000');
+    response = await fetchImpl(url.toString(), {
       headers,
       signal: AbortSignal.timeout(15_000),
       redirect: 'error'
@@ -568,13 +575,54 @@ export async function fetchProviderModels(
     throw new AiRouterError('Could not reach the provider');
   }
   if (response.status === 401 || response.status === 403) {
-    throw new AiRouterError('The provider refused the API key');
+    throw new AiRouterError('The provider refused the credentials');
   }
   if (!response.ok) throw new AiRouterError(`The provider answered HTTP ${response.status}`);
   const listed = parseModelList(await response.json().catch(() => null));
   const models = providerType === 'opencode' ? openCodeFreeModels(listed) : listed;
   if (models.length === 0) throw new AiRouterError('The provider listed no models');
   return models;
+}
+
+/** Refresh only the catalog; keep configured defaults, accounts and cooldowns intact. */
+export async function refreshProviderModels(
+  adminId: string,
+  providerId: string,
+  fetchImpl: typeof fetch = gatewayFetch
+): Promise<void> {
+  await requireAdmin(adminId);
+  const prisma = getPrisma();
+  const provider = await prisma.aiProvider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new AiRouterError('Provider not found');
+  const models = await fetchProviderModels(
+    adminId,
+    { providerId, baseUrl: provider.baseUrl },
+    fetchImpl
+  );
+  const name = await prisma.$transaction(async (transaction) => {
+    // Share saveProvider's lock so an edit during discovery keeps its model order and additions.
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('devone-ai-provider-namespace', 0))`;
+    const current = await transaction.aiProvider.findUnique({ where: { id: providerId } });
+    if (!current) throw new AiRouterError('Provider not found');
+    if (
+      current.baseUrl !== provider.baseUrl ||
+      current.providerType !== provider.providerType ||
+      current.format !== provider.format ||
+      current.authType !== provider.authType
+    ) {
+      throw new AiRouterError('Provider configuration changed. Refresh the models again.');
+    }
+    await transaction.aiProvider.update({
+      where: { id: providerId },
+      data: { models: [...new Set([...current.models, ...models])] }
+    });
+    return current.name;
+  });
+  await recordAudit({
+    actorId: adminId,
+    action: 'admin.ai.provider.models.refresh',
+    target: name
+  });
 }
 
 /** Create the anonymous free provider only when explicitly selected in the catalog. */

@@ -32,6 +32,9 @@ the model catalog is documented in [OpenCode Zen](https://opencode.ai/docs/zen/)
    activation and cooldown. Empty credentials keep the saved value during editing. Credentials
    are encrypted with `DEVONE_ENCRYPTION_KEY` and never returned after saving. Catalog counts
    show saved accounts and locally available accounts, rather than a live upstream health check.
+   **Refresh models** adds IDs from the provider's live catalog without changing your first
+   model, credentials or account cooldowns. Claude OAuth discovery authenticates with the saved
+   account even during an inference cooldown; listing a model does not guarantee inference access.
 4. For custom OAuth providers, save the provider and use **Add account** or **Save and connect**.
    Each authorization creates an account. Configure the installation's OAuth application before
    connecting. Reconnect after revocation or when refresh is no longer available.

@@ -413,6 +413,8 @@ export const en = {
       models: 'Models',
       modelsHint: 'One per line, as the provider names them. The first is used for "auto".',
       fetchModels: 'Fetch models',
+      refreshModels: 'Refresh models',
+      modelsRefreshed: 'Models refreshed',
       fetched: '{count} models found',
       priority: 'Priority',
       priorityHint: 'When several providers serve a model, lower numbers are tried first.',

@@ -434,6 +434,8 @@ export const fil: MessageShape<typeof en> = {
       modelsHint:
         'Isa bawat linya, ayon sa pangalan sa provider. Ang una ang ginagamit para sa "auto".',
       fetchModels: 'Kunin ang mga model',
+      refreshModels: 'I-refresh ang mga model',
+      modelsRefreshed: 'Na-refresh ang mga model',
       fetched: '{count} model ang nakita',
       priority: 'Priyoridad',
       priorityHint:

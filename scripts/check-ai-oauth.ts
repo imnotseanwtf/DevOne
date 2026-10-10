@@ -21,6 +21,12 @@ const config: ProviderOAuthConfig = {
 };
 
 assert.equal(registry.getProviderDefinition('cc', {})?.id, 'claude');
+for (const providerType of ['claude', 'anthropic']) {
+  const models = registry.getProviderDefinition(providerType, {})!.models.map((model) => model.id);
+  for (const model of ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5', 'claude-fable-5-1']) {
+    assert.ok(models.includes(model), `${providerType} must offer the current Claude models`);
+  }
+}
 assert.equal(registry.getProviderDefinition('an', {})?.transport.auth.header, 'x-api-key');
 assert.equal(registry.getProviderDefinition('cx', {})?.transport.format, 'openai-responses');
 assert.equal(registry.getProviderDefinition('cx', {})?.transport.forceStream, true);

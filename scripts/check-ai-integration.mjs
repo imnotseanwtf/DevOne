@@ -12,7 +12,7 @@ const database = {
   user: { findUnique: async ({ where }) => ({ role: where.id === 'admin' ? 'ADMIN' : 'MEMBER' }) },
   aiProvider: {
     findMany: async ({ where } = {}) => providers.filter((entry) => matches(entry, where)).map((entry) => structuredClone({ ...entry, connections: connections.filter((account) => account.providerId === entry.id) })),
-    findUnique: async ({ where }) => { const entry = providers.find((record) => record.id === where.id); return entry ? structuredClone({ ...entry, connections: connections.filter((account) => account.providerId === entry.id) }) : null; },
+    findUnique: async ({ where, select }) => { const entry = providers.find((record) => record.id === where.id); return entry ? structuredClone({ ...entry, connections: connections.filter((account) => account.providerId === entry.id && matches(account, select?.connections?.where)) }) : null; },
     create: async ({ data }) => { const row = { id: `p-${nextId++}`, alias: null, cooldownUntil: null, ...data }; providers.push(row); return structuredClone(row); },
     update: async ({ where, data }) => { const entry = providers.find((record) => record.id === where.id); Object.assign(entry, data); return structuredClone(entry); }
   },
@@ -30,7 +30,7 @@ const database = {
 };
 mock.module('../src/lib/db/prisma.ts', () => ({ getPrisma: () => database }));
 mock.module('../src/lib/audit/record.ts', () => ({ recordAudit: async () => undefined }));
-const { saveProvider, loadRouterState, fetchProviderModels } = await import('../src/features/ai-router/service.ts');
+const { saveProvider, loadRouterState, fetchProviderModels, refreshProviderModels } = await import('../src/features/ai-router/service.ts');
 const { createConnectionRepository } = await import('../src/features/ai-router/connection-repository.ts');
 const { oauthConfigFingerprint } = await import('../src/lib/ai-router/security.ts');
 const { getProviderDefinition } = await import('../src/lib/ai-router/registry.ts');
@@ -65,6 +65,7 @@ assert.equal(sessions.length, 0);
 assert.equal(connections.find((entry) => entry.id === 'oauth-1').isActive, false);
 connections.find((entry) => entry.id === 'oauth-1').isActive = true;
 assert.equal(await createConnectionRepository().findById('oauth-1'), null, 'reactivating cannot send bound OAuth credentials to a changed upstream');
+connections.find((entry) => entry.id === 'oauth-1').isActive = false;
 
 let headers;
 const discovered = await fetchProviderModels('admin', { baseUrl: 'https://8.8.8.8', providerType: 'anthropic', format: 'claude', authType: 'api_key', apiKey: 'test-api-key' }, async (_url, init) => { headers = new Headers(init.headers); return Response.json({ data: [{ id: 'model-a' }] }); });
@@ -72,6 +73,39 @@ assert.deepEqual(discovered, ['model-a']);
 assert.equal(headers.get('x-api-key'), 'test-api-key');
 assert.equal(headers.get('anthropic-version'), '2023-06-01');
 assert.equal(headers.get('authorization'), null);
+assert.equal(headers.get('anthropic-beta'), null, 'API-key discovery does not need OAuth beta');
+
+// Metadata discovery can use a cooling account without clearing its inference cooldown.
+const coolingUntil = new Date(Date.now() + 60_000);
+connections.push({ id: 'oauth-cooling', providerId: oauthId, authType: 'oauth', isActive: true, encryptedApiKey: null, encryptedAccessToken: encryptSecret('catalog-secret', key), encryptedRefreshToken: null, encryptedIdToken: null, expiresAt: null, lastRefreshAt: null, rateLimitedUntil: coolingUntil, modelLocks: {}, lastError: 'HTTP 429: Error', providerSpecificData: { oauthConfigHash: oauthConfigFingerprint('claude', config), upstreamBaseUrl: 'https://1.1.1.1' } });
+const discoveryRequest = { providerId: oauthId, baseUrl: 'https://1.1.1.1' };
+const modelResponse = async (url, init) => {
+  headers = new Headers(init.headers);
+  assert.equal(headers.get('authorization'), 'Bearer catalog-secret');
+  assert.equal(headers.get('anthropic-beta'), 'oauth-2025-04-20');
+  assert.equal(new URL(url).searchParams.get('limit'), '1000');
+  return Response.json({ data: [{ id: 'claude-sonnet-5-5' }, { id: 'claude-opus-5-5' }] });
+};
+assert.deepEqual(await fetchProviderModels('admin', discoveryRequest, modelResponse), ['claude-opus-5-5', 'claude-sonnet-5-5']);
+const beforeRefresh = structuredClone(connections);
+await assert.rejects(refreshProviderModels('member', oauthId, modelResponse), /Administrators only/);
+await refreshProviderModels('admin', oauthId, modelResponse);
+assert.deepEqual(providers.find((provider) => provider.id === oauthId).models, ['m', 'claude-opus-5-5', 'claude-sonnet-5-5'], 'refresh retains configured defaults and adds discovered models');
+assert.deepEqual(connections, beforeRefresh, 'catalog refresh must preserve account secrets, errors and cooldowns');
+await assert.rejects(refreshProviderModels('admin', oauthId, async () => new Response(null, { status: 429 })), /HTTP 429/);
+assert.deepEqual(providers.find((provider) => provider.id === oauthId).models, ['m', 'claude-opus-5-5', 'claude-sonnet-5-5'], 'failed discovery must preserve the catalog');
+await refreshProviderModels('admin', oauthId, async (url, init) => {
+  providers.find((provider) => provider.id === oauthId).models = ['new-default', 'custom-model'];
+  return modelResponse(url, init);
+});
+assert.deepEqual(providers.find((provider) => provider.id === oauthId).models, ['new-default', 'custom-model', 'claude-opus-5-5', 'claude-sonnet-5-5'], 'refresh merges against the current catalog, preserving concurrent model edits');
+const currentModels = [...providers.find((provider) => provider.id === oauthId).models];
+await assert.rejects(refreshProviderModels('admin', oauthId, async (url, init) => {
+  providers.find((provider) => provider.id === oauthId).baseUrl = 'https://8.8.4.4';
+  return modelResponse(url, init);
+}), /configuration changed/);
+assert.deepEqual(providers.find((provider) => provider.id === oauthId).models, currentModels, 'models from a previous upstream must not be saved after a configuration change');
+providers.find((provider) => provider.id === oauthId).baseUrl = 'https://1.1.1.1';
 await assert.rejects(fetchProviderModels('admin', { providerId, baseUrl: 'https://1.1.1.1' }, async () => { throw new Error('must not fetch'); }), /saved provider URL/);
 const state = await loadRouterState();
 assert.equal(state.providers.find((entry) => entry.id === oauthId).authHeader, 'x-api-key');

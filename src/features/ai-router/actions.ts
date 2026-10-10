@@ -9,6 +9,7 @@ import {
   deleteCombo,
   deleteProvider,
   fetchProviderModels,
+  refreshProviderModels,
   saveCombo,
   saveProvider,
   setProviderEnabled,
@@ -131,6 +132,15 @@ export async function fetchProviderModelsAction(
   } catch (error) {
     return fail(error, 'Could not list the models');
   }
+}
+
+export async function refreshProviderModelsAction(input: unknown): Promise<AiRouterResult> {
+  const parsed = z.object({ providerId: z.string().min(1) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Invalid provider' };
+  return run(
+    (userId) => refreshProviderModels(userId, parsed.data.providerId),
+    'Could not refresh the models'
+  );
 }
 
 export async function saveComboAction(input: unknown): Promise<AiRouterResult> {

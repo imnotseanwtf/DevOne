@@ -27,6 +27,7 @@ import {
   clearProviderCooldownAction,
   deleteProviderAction,
   fetchProviderModelsAction,
+  refreshProviderModelsAction,
   saveProviderAction,
   setProviderEnabledAction
 } from '@/features/ai-router/actions';
@@ -113,6 +114,20 @@ export function AiProvidersSettings({ providers }: { providers: AiProviderRow[] 
                     )}
                   </div>
                   <div className='flex gap-1'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={pending}
+                      onClick={() =>
+                        run(
+                          () => refreshProviderModelsAction({ providerId: provider.id }),
+                          t('aiRouter.providers.modelsRefreshed')
+                        )
+                      }
+                    >
+                      <Icons.refresh />
+                      {t('aiRouter.providers.refreshModels')}
+                    </Button>
                     {(resting || provider.lastError) && (
                       <Button
                         variant='ghost'

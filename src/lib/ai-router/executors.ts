@@ -84,6 +84,21 @@ export async function executeTarget(
   if (format === 'claude' && !headers.has('anthropic-version'))
     headers.set('anthropic-version', '2023-06-01');
   const tokenAuth = credential?.authType === 'oauth' || credential?.authType === 'access_token';
+  if (
+    format === 'claude' &&
+    tokenAuth &&
+    (provider.providerType === 'claude' || provider.providerType === 'anthropic')
+  ) {
+    const beta = 'oauth-2025-04-20';
+    if (
+      !headers
+        .get('anthropic-beta')
+        ?.split(',')
+        .map((value) => value.trim())
+        .includes(beta)
+    )
+      headers.append('anthropic-beta', beta);
+  }
   const secret =
     credential?.authType === 'none'
       ? null

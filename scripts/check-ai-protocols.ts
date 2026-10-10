@@ -16,6 +16,18 @@ function sse(text: string, split = 7): Response {
 }
 const chatBody = { model: 'm', messages: [{ role: 'user', content: 'Hello' }] };
 
+// Native Claude OAuth needs its beta header; API-key and custom transports keep their auth.
+for (const [providerType, authType] of [['claude', 'oauth'], ['claude', 'access_token'], ['claude', 'api_key'], ['anthropic', 'api_key'], ['custom', 'oauth']] as const) {
+  let sentHeaders: Headers | undefined;
+  const response = await forwardChatCompletion({ body: chatBody, targets: [target('claude-auth', { providerType, format: 'claude', headers: { 'anthropic-beta': 'other-beta' } })], apiKeyFor: () => null,
+    credentialFor: async () => ({ id: 'account', providerId: 'claude-auth', authType, accessToken: 'test-token', apiKey: 'test-key' }),
+    fetchImpl: (async (_url, init) => { sentHeaders = new Headers(init?.headers); return Response.json({ id: 'msg', model: 'm', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }); }) as typeof fetch });
+  assert.equal(response.status, 200);
+  const oauth = providerType === 'claude' && authType !== 'api_key';
+  assert.equal(sentHeaders?.get('anthropic-beta'), oauth ? 'other-beta, oauth-2025-04-20' : 'other-beta');
+  assert.equal(sentHeaders?.get(authType === 'api_key' ? 'x-api-key' : 'authorization'), authType === 'api_key' ? 'test-key' : 'Bearer test-token');
+}
+
 // HTTP 200 error frames must permit fallback before any output is committed.
 {
   const response = await forwardChatCompletion({ body: { ...chatBody, stream: true }, targets: [target('a'), target('b')], apiKeyFor: () => null,
