@@ -4,20 +4,31 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Icons } from '@/components/icons';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from '@/components/ui/empty';
+import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group';
+import { Marker, MarkerContent } from '@/components/ui/marker';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Bubble, BubbleContent } from '@/components/ui/bubble';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { FieldGroup } from '@/components/ui/field';
-import { Message, MessageContent, MessageHeader } from '@/components/ui/message';
+import { Field, FieldError, FieldLabel } from '@/components/ui/field';
+import { Message, MessageAvatar, MessageContent } from '@/components/ui/message';
 import {
   MessageScroller,
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -98,140 +109,258 @@ export function ConnectionTestDialog({ provider, connection, onClose }: Connecti
     controller.current?.abort();
     onClose();
   };
+  const visibleMessages: AiTestMessage[] =
+    mutation.isPending && mutation.variables
+      ? [
+          ...(mutation.variables.model === conversationModel ? messages : []),
+          { role: 'user', content: mutation.variables.message }
+        ]
+      : messages;
+  const status = mutation.isPending
+    ? t('aiRouter.test.thinking')
+    : mutation.isError
+      ? t('aiRouter.test.failed')
+      : mutation.isSuccess
+        ? t('aiRouter.test.readyConnected')
+        : t('aiRouter.test.ready');
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className='flex max-h-[90dvh] flex-col overflow-y-auto sm:max-w-2xl'>
-        <DialogHeader>
-          <DialogTitle>{t('aiRouter.test.title', { name: connection.name })}</DialogTitle>
-          <DialogDescription>
-            {t('aiRouter.test.description', { provider: provider.name })}
-          </DialogDescription>
+      <DialogContent className='bg-card flex h-[min(44rem,90dvh)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl'>
+        <DialogHeader className='flex shrink-0 flex-row items-center gap-3 border-b px-4 py-3 pr-12 text-left'>
+          <div className='bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg'>
+            <Icons.sparkles className='size-4' />
+          </div>
+          <div className='min-w-0 flex-1'>
+            <DialogTitle className='truncate text-sm'>
+              {t('aiRouter.test.title', { name: connection.name })}
+            </DialogTitle>
+            <DialogDescription className='truncate text-xs'>{provider.name}</DialogDescription>
+          </div>
+          <Badge variant={mutation.isError ? 'destructive' : 'outline'} role='status'>
+            {status}
+          </Badge>
         </DialogHeader>
-        <MessageScrollerProvider>
-          <MessageScroller className='h-[min(32dvh,16rem)] shrink-0 rounded-md border'>
-            <MessageScrollerViewport>
-              <MessageScrollerContent
-                className='p-3'
-                role='log'
-                aria-label={t('aiRouter.test.conversation')}
-                aria-live='polite'
-              >
-                {messages.length ? (
-                  messages.map((message, index) => (
-                    <MessageScrollerItem key={index}>
-                      <Message align={message.role === 'user' ? 'end' : 'start'}>
-                        <MessageContent>
-                          <MessageHeader>
-                            {message.role === 'user' ? t('aiRouter.test.you') : connection.name}
-                          </MessageHeader>
-                          <Bubble variant={message.role === 'user' ? 'default' : 'muted'}>
-                            <BubbleContent className='whitespace-pre-wrap'>
-                              {message.content}
-                            </BubbleContent>
-                          </Bubble>
-                        </MessageContent>
-                      </Message>
-                    </MessageScrollerItem>
-                  ))
-                ) : (
-                  <p className='text-muted-foreground text-sm'>{t('aiRouter.test.empty')}</p>
-                )}
-              </MessageScrollerContent>
-            </MessageScrollerViewport>
-          </MessageScroller>
-        </MessageScrollerProvider>
-        {mutation.isSuccess && (
-          <p role='status' className='text-muted-foreground text-sm'>
-            {t('aiRouter.test.connected', {
-              model: mutation.data.result.model,
-              time: (mutation.data.result.elapsedMs / 1000).toFixed(2)
-            })}
-            {mutation.data.result.truncated && (
-              <span className='block'>{t('aiRouter.test.truncated')}</span>
-            )}
-          </p>
-        )}
-        {mutation.isError && (
-          <Alert variant='destructive'>
-            <AlertDescription>{mutation.error.message}</AlertDescription>
-          </Alert>
-        )}
-        {(unavailable || !models.length) && (
-          <Alert>
-            <AlertDescription>
-              {t(!models.length ? 'aiRouter.test.noModels' : 'aiRouter.test.unavailable')}
-            </AlertDescription>
-          </Alert>
-        )}
         <form
-          className='flex min-h-0 flex-col gap-4 overflow-y-auto'
+          className='flex min-h-0 flex-1 flex-col'
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
             void form.handleSubmit();
           }}
         >
-          <fieldset disabled={mutation.isPending || Boolean(unavailable) || !models.length}>
-            <FieldGroup>
-              <form.AppField
-                name='model'
-                children={(field) => (
-                  <field.SelectField
-                    label={t('aiRouter.test.model')}
-                    options={models.map((model) => ({ value: model, label: model }))}
-                    required
-                  />
-                )}
-              />
-              <form.AppField
-                name='message'
-                children={(field) => (
-                  <field.TextareaField
-                    label={t('aiRouter.test.message')}
-                    placeholder={t('aiRouter.test.placeholder')}
-                    rows={2}
-                    maxLength={8000}
-                    required
-                  />
-                )}
-              />
-            </FieldGroup>
-          </fieldset>
-          <DialogFooter className='flex-wrap'>
-            <Button
-              type='button'
-              variant='outline'
-              disabled={mutation.isPending}
-              onClick={() => {
-                setMessages([]);
-                setConversationModel('');
-                mutation.reset();
-              }}
-            >
-              {t('aiRouter.test.clear')}
-            </Button>
-            <form.Subscribe selector={(state) => state.values.model}>
-              {(model) => (
-                <Button
-                  type='button'
-                  variant='outline'
-                  isLoading={mutation.isPending && !mutation.variables?.clearComposer}
-                  disabled={mutation.isPending || Boolean(unavailable) || !models.includes(model)}
-                  onClick={() => mutation.mutate({ model, message: t('aiRouter.test.probe') })}
-                >
-                  {t('aiRouter.test.quick')}
-                </Button>
+          <fieldset
+            disabled={mutation.isPending || Boolean(unavailable) || !models.length}
+            className='shrink-0 border-b px-4 py-3'
+          >
+            <form.AppField
+              name='model'
+              children={(field) => (
+                <field.SelectField
+                  label={t('aiRouter.test.model')}
+                  options={models.map((model) => ({ value: model, label: model }))}
+                  required
+                />
               )}
-            </form.Subscribe>
-            <Button
-              type='submit'
-              isLoading={mutation.isPending && Boolean(mutation.variables?.clearComposer)}
-              disabled={mutation.isPending || Boolean(unavailable) || !models.length}
-            >
-              <Icons.send />
-              {t('aiRouter.test.send')}
-            </Button>
-          </DialogFooter>
+            />
+          </fieldset>
+          <MessageScrollerProvider defaultScrollPosition='end' scrollPreviousItemPeek={64}>
+            <MessageScroller className='min-h-0 flex-1'>
+              <MessageScrollerViewport>
+                <MessageScrollerContent
+                  className='px-4 py-4'
+                  role='log'
+                  aria-label={t('aiRouter.test.conversation')}
+                  aria-live='polite'
+                >
+                  {visibleMessages.length ? (
+                    visibleMessages.map((message, index) => {
+                      const isUser = message.role === 'user';
+                      return (
+                        <MessageScrollerItem
+                          key={index}
+                          messageId={String(index)}
+                          scrollAnchor={isUser}
+                        >
+                          <Message align={isUser ? 'end' : 'start'}>
+                            <MessageAvatar
+                              className={cn(
+                                'size-8 self-start',
+                                isUser
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-primary/10 text-primary'
+                              )}
+                            >
+                              {isUser ? (
+                                <Icons.user className='size-4' />
+                              ) : (
+                                <Icons.sparkles className='size-4' />
+                              )}
+                              <span className='sr-only'>
+                                {isUser ? t('aiRouter.test.you') : connection.name}
+                              </span>
+                            </MessageAvatar>
+                            <MessageContent>
+                              <Bubble
+                                variant={isUser ? 'default' : 'muted'}
+                                align={isUser ? 'end' : 'start'}
+                              >
+                                <BubbleContent className='whitespace-pre-wrap'>
+                                  {message.content}
+                                </BubbleContent>
+                              </Bubble>
+                            </MessageContent>
+                          </Message>
+                        </MessageScrollerItem>
+                      );
+                    })
+                  ) : (
+                    <MessageScrollerItem messageId='empty' className='flex min-h-48 items-center'>
+                      <Empty>
+                        <EmptyHeader>
+                          <EmptyMedia variant='icon'>
+                            <Icons.sparkles />
+                          </EmptyMedia>
+                          <EmptyTitle>{t('aiRouter.test.assistant')}</EmptyTitle>
+                          <EmptyDescription>{t('aiRouter.test.empty')}</EmptyDescription>
+                        </EmptyHeader>
+                      </Empty>
+                    </MessageScrollerItem>
+                  )}
+                  {mutation.isPending && (
+                    <MessageScrollerItem messageId='pending'>
+                      <Message>
+                        <MessageAvatar className='bg-primary/10 text-primary size-8 self-start'>
+                          <Icons.sparkles className='size-4' />
+                        </MessageAvatar>
+                        <MessageContent>
+                          <Marker>
+                            <MarkerContent className='shimmer'>
+                              {t('aiRouter.test.thinking')}
+                            </MarkerContent>
+                          </Marker>
+                        </MessageContent>
+                      </Message>
+                    </MessageScrollerItem>
+                  )}
+                </MessageScrollerContent>
+              </MessageScrollerViewport>
+              <MessageScrollerButton>
+                <Icons.chevronDown />
+                <span className='sr-only'>{t('aiRouter.test.latest')}</span>
+              </MessageScrollerButton>
+            </MessageScroller>
+          </MessageScrollerProvider>
+          <div className='flex shrink-0 flex-col gap-3 border-t px-4 py-3'>
+            {mutation.isSuccess && (
+              <Marker role='status'>
+                <MarkerContent>
+                  {t('aiRouter.test.connected', {
+                    model: mutation.data.result.model,
+                    time: (mutation.data.result.elapsedMs / 1000).toFixed(2)
+                  })}
+                  {mutation.data.result.truncated && (
+                    <span className='block'>{t('aiRouter.test.truncated')}</span>
+                  )}
+                </MarkerContent>
+              </Marker>
+            )}
+            {mutation.isError && (
+              <Alert variant='destructive'>
+                <AlertDescription>{mutation.error.message}</AlertDescription>
+              </Alert>
+            )}
+            {(unavailable || !models.length) && (
+              <Alert>
+                <AlertDescription>
+                  {t(!models.length ? 'aiRouter.test.noModels' : 'aiRouter.test.unavailable')}
+                </AlertDescription>
+              </Alert>
+            )}
+            <form.Field
+              name='message'
+              children={(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                return (
+                  <Field data-invalid={invalid}>
+                    <FieldLabel htmlFor='connection-test-message' className='sr-only'>
+                      {t('aiRouter.test.message')}
+                    </FieldLabel>
+                    <InputGroup>
+                      <InputGroupTextarea
+                        id='connection-test-message'
+                        name={field.name}
+                        value={field.state.value}
+                        onChange={(event) => field.handleChange(event.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder={t('aiRouter.test.placeholder')}
+                        rows={2}
+                        maxLength={8000}
+                        aria-invalid={invalid}
+                        aria-describedby={invalid ? 'connection-test-message-error' : undefined}
+                        disabled={mutation.isPending || Boolean(unavailable) || !models.length}
+                      />
+                      <InputGroupAddon align='block-end' className='flex-wrap gap-2'>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='ghost'
+                          disabled={mutation.isPending || !messages.length}
+                          onClick={() => {
+                            setMessages([]);
+                            setConversationModel('');
+                            mutation.reset();
+                          }}
+                        >
+                          {t('aiRouter.test.clear')}
+                        </Button>
+                        <form.Subscribe selector={(state) => state.values.model}>
+                          {(model) => (
+                            <Button
+                              type='button'
+                              size='sm'
+                              variant='outline'
+                              className='ml-auto'
+                              isLoading={mutation.isPending && !mutation.variables?.clearComposer}
+                              disabled={
+                                mutation.isPending ||
+                                Boolean(unavailable) ||
+                                !models.includes(model)
+                              }
+                              onClick={() =>
+                                mutation.mutate({ model, message: t('aiRouter.test.probe') })
+                              }
+                            >
+                              {t('aiRouter.test.quick')}
+                            </Button>
+                          )}
+                        </form.Subscribe>
+                        <Button
+                          type='submit'
+                          size='sm'
+                          isLoading={
+                            mutation.isPending && Boolean(mutation.variables?.clearComposer)
+                          }
+                          disabled={mutation.isPending || Boolean(unavailable) || !models.length}
+                        >
+                          <Icons.send />
+                          {t('aiRouter.test.send')}
+                        </Button>
+                      </InputGroupAddon>
+                    </InputGroup>
+                    {invalid && (
+                      <FieldError
+                        id='connection-test-message-error'
+                        errors={field.state.meta.errors}
+                      />
+                    )}
+                  </Field>
+                );
+              }}
+            />
+            <p className='text-muted-foreground text-center text-xs'>
+              {t('aiRouter.test.usageHint')}
+            </p>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

@@ -40,11 +40,12 @@ const upstream=http.createServer(async(req,res)=>{
  await page.goto(env.DEVONE_APP_URL+'/router?tab=providers&provider='+id,{waitUntil:'networkidle'});
  await page.getByRole('button',{name:'Test connection Test account B',exact:true}).click();
  const dialog=page.getByRole('dialog');await dialog.getByRole('heading',{name:'Test Test account B',exact:true}).waitFor();
- await dialog.getByLabel(/^Model/).click();assert.equal(await page.getByRole('option',{name:'other-model',exact:true}).count(),0);await page.keyboard.press('Escape');
+ await dialog.getByLabel(/^Model/).click();await page.getByRole('option',{name:'test-model',exact:true}).waitFor();assert.equal(await page.getByRole('option',{name:'other-model',exact:true}).count(),0);await page.getByRole('option',{name:'test-model',exact:true}).click();
  await dialog.getByRole('textbox',{name:/^Message/}).fill('Unsent draft');
  await dialog.getByRole('button',{name:'Quick test',exact:true}).click();
  await dialog.getByText('Reply from test account B',{exact:true}).waitFor();
  await dialog.getByText(/^Connected · test-model/).waitFor();
+ await page.screenshot({path:'/tmp/devone-router-chat-template.png',fullPage:true});
  assert.equal(requests[0].authorization,'Bearer '+secretB,'The lower-priority selected account must be used');
  assert.equal(requests[0].body.max_tokens,512);
  assert.equal(await dialog.getByRole('textbox',{name:/^Message/}).inputValue(),'Unsent draft','Quick tests must preserve an unsent draft');
@@ -68,7 +69,7 @@ const upstream=http.createServer(async(req,res)=>{
  await page.getByRole('button',{name:'Test connection Test account B',exact:true}).click();
  await page.setViewportSize({width:390,height:844});
  await dialog.getByRole('textbox',{name:/^Message/}).fill('slow check');await dialog.getByRole('button',{name:'Send',exact:true}).click();
- await started;assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+ await started;await dialog.getByRole('log').getByText('Thinking…',{exact:true}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
  await page.screenshot({path:'/tmp/devone-router-chat-mobile.png',fullPage:true});
  await dialog.getByRole('button',{name:'Close',exact:true}).click();
  await Promise.race([aborted,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('Closing test chat did not cancel its upstream request')),5000);timer.unref();})]);

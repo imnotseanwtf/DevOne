@@ -476,6 +476,13 @@ export const fil: MessageShape<typeof en> = {
         'Awtomatikong pinapamahalaan ang OAuth credential. Kumonekta ulit para palitan ang mga ito.'
     },
     test: {
+      assistant: 'Assistant ng koneksyon',
+      ready: 'Handa',
+      readyConnected: 'Nakakonekta',
+      thinking: 'Nag-iisip…',
+      failed: 'Nabigo',
+      latest: 'Pumunta sa pinakabagong mensahe',
+      usageHint: 'Ginagamit ng mga mensahe ang account na ito at kasama sa paggamit ng provider.',
       button: 'Subukan ang koneksyon',
       account: 'Subukan ang koneksyon {name}',
       title: 'Subukan ang {name}',

@@ -46,6 +46,8 @@ Old `/admin?tab=ai` and `/account?tab=ai` bookmarks redirect to Router.
 
 Each provider account has **Test connection**. Choose one of its allowed models, run **Quick test**
 or send a message in the test chat. The dialog shows the reply, upstream errors and elapsed time.
+Its layout adapts the starter's [AI Chat design](https://github.com/Kiranism/next-shadcn-dashboard-starter/blob/main/src/features/ai-chat/components/ai-chat-demo.tsx):
+assistant header, status badge, avatars, anchored messages, thinking indicator and bottom composer.
 Tests use the exact selected account with its normal credential refresh and usage tracking;
 enable the provider/account and clear any cooldown first. Closing the dialog cancels the request.
 Chat stays in the browser for the open dialog. Tests have a 30-second deadline and a 512-token

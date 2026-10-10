@@ -452,6 +452,13 @@ export const en = {
       managed: 'OAuth credentials are managed automatically. Reconnect to replace them.'
     },
     test: {
+      assistant: 'Connection assistant',
+      ready: 'Ready',
+      readyConnected: 'Connected',
+      thinking: 'Thinking…',
+      failed: 'Failed',
+      latest: 'Scroll to latest message',
+      usageHint: 'Messages use this account and count toward provider usage.',
       button: 'Test connection',
       account: 'Test connection {name}',
       title: 'Test {name}',
