@@ -36,6 +36,9 @@ export function UserMenu({ username, isAdmin }: UserMenuProps) {
         <DropdownMenuItem render={<Link href='/account' aria-label={t('userMenu.account')} />}>
           <Icons.user /> {t('userMenu.account')}
         </DropdownMenuItem>
+        <DropdownMenuItem render={<Link href='/router' aria-label={t('userMenu.router')} />}>
+          <Icons.diagram /> {t('userMenu.router')}
+        </DropdownMenuItem>
         {isAdmin && (
           <DropdownMenuItem render={<Link href='/admin' aria-label={t('userMenu.admin')} />}>
             <Icons.lock /> {t('userMenu.admin')}

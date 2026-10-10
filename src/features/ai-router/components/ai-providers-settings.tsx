@@ -32,7 +32,6 @@ import {
 } from '@/features/ai-router/actions';
 import { useLocale, useT } from '@/i18n/client';
 import { AI_PROVIDER_PRESETS } from '@/lib/ai-router/presets';
-import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -44,12 +43,11 @@ import { toast } from 'sonner';
 
 export type AiProviderRow = AiProviderSummary;
 
-type Editing = { mode: 'add' } | { mode: 'edit'; provider: AiProviderRow } | null;
+type Editing = { provider: AiProviderRow } | null;
 
 export function AiProvidersSettings({ providers }: { providers: AiProviderRow[] }) {
   const t = useT();
   const locale = useLocale();
-  const router = useRouter();
   const mutation = useGatewayMutation();
   const pending = mutation.isPending;
   const [editing, setEditing] = useState<Editing>(null);
@@ -64,12 +62,11 @@ export function AiProvidersSettings({ providers }: { providers: AiProviderRow[] 
     <Card>
       <CardHeader className='flex flex-row flex-wrap items-start justify-between gap-4'>
         <div className='space-y-1.5'>
-          <CardTitle>{t('aiRouter.providers.title')}</CardTitle>
+          <CardTitle className='break-all'>
+            {providers[0]?.name ?? t('aiRouter.providers.title')}
+          </CardTitle>
           <CardDescription>{t('aiRouter.providers.description')}</CardDescription>
         </div>
-        <Button size='sm' onClick={() => setEditing({ mode: 'add' })}>
-          <Icons.add /> {t('aiRouter.providers.add')}
-        </Button>
       </CardHeader>
       <CardContent>
         {providers.length === 0 ? (
@@ -77,7 +74,7 @@ export function AiProvidersSettings({ providers }: { providers: AiProviderRow[] 
         ) : (
           <ul className='divide-border divide-y rounded-md border'>
             {providers.map((provider) => {
-              const resting = provider.cooldownUntil && provider.cooldownUntil > now;
+              const resting = provider.cooldownUntil && new Date(provider.cooldownUntil) > now;
               return (
                 <li key={provider.id} className='flex flex-wrap items-center gap-x-4 gap-y-2 p-3'>
                   <Switch
@@ -89,24 +86,21 @@ export function AiProvidersSettings({ providers }: { providers: AiProviderRow[] 
                     }
                   />
                   <div className='min-w-48 flex-1 space-y-1'>
-                    <p className='flex flex-wrap items-center gap-2 text-sm font-medium'>
+                    <p className='flex flex-wrap items-center gap-2 text-sm font-medium break-all'>
                       {provider.name}
                       <Badge variant='outline'>#{provider.priority}</Badge>
                       {!provider.enabled && (
                         <Badge variant='secondary'>{t('aiRouter.providers.off')}</Badge>
                       )}
-                      {provider.authType === 'api_key' && !provider.hasApiKey && (
-                        <Badge variant='secondary'>{t('aiRouter.providers.noKey')}</Badge>
-                      )}
                       {resting && provider.cooldownUntil && (
                         <Badge variant='destructive'>
                           {t('aiRouter.providers.resting', {
-                            time: timeFormat.format(provider.cooldownUntil)
+                            time: timeFormat.format(new Date(provider.cooldownUntil))
                           })}
                         </Badge>
                       )}
                     </p>
-                    <p className='text-muted-foreground text-xs'>
+                    <p className='text-muted-foreground text-xs break-all'>
                       <code>{provider.baseUrl}</code> ·{' '}
                       {t('aiRouter.providers.modelCount', { count: provider.models.length })}
                       {provider.models.length > 0 &&
@@ -138,7 +132,7 @@ export function AiProvidersSettings({ providers }: { providers: AiProviderRow[] 
                       size='icon'
                       aria-label={t('aiRouter.providers.editTitle', { name: provider.name })}
                       disabled={pending}
-                      onClick={() => setEditing({ mode: 'edit', provider })}
+                      onClick={() => setEditing({ provider })}
                     >
                       <Icons.edit />
                     </Button>
@@ -161,13 +155,12 @@ export function AiProvidersSettings({ providers }: { providers: AiProviderRow[] 
 
       {editing && (
         <ProviderDialog
-          provider={editing.mode === 'edit' ? editing.provider : null}
+          provider={editing.provider}
           nextPriority={(providers.at(-1)?.priority ?? 0) + 10}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
             toast.success(t('aiRouter.providers.saved'));
-            router.refresh();
           }}
         />
       )}
@@ -227,22 +220,26 @@ interface ProviderFormValues {
   enabled: boolean;
 }
 
-function ProviderDialog({
+export function ProviderDialog({
   provider,
   nextPriority,
   onClose,
-  onSaved
+  onSaved,
+  presetId = 'opencode-zen',
+  initialFormat
 }: {
   provider: AiProviderRow | null;
   nextPriority: number;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (providerId?: string) => void;
+  presetId?: string;
+  initialFormat?: 'openai' | 'claude';
 }) {
   const t = useT();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const connectAfterSave = useRef(false);
-  const initial = AI_PROVIDER_PRESETS[0];
+  const initial =
+    AI_PROVIDER_PRESETS.find((preset) => preset.id === presetId) ?? AI_PROVIDER_PRESETS[0];
   const quickConnect = useMutation({
     mutationFn: authorizeProviderType,
     onError: (error) => toast.error(error.message)
@@ -261,7 +258,6 @@ function ProviderDialog({
       });
       if (!result.ok) throw new Error(result.error);
       await queryClient.invalidateQueries({ queryKey: aiGatewayKeys.all });
-      router.refresh();
       if (connectAfterSave.current && value.authType === 'oauth') {
         const id = result.providerId ?? provider?.id;
         try {
@@ -271,6 +267,7 @@ function ProviderDialog({
           toast.error(t('aiRouter.oauth.failed'));
         }
       }
+      return result.providerId;
     },
     onSuccess: onSaved
   });
@@ -280,7 +277,7 @@ function ProviderDialog({
       name: provider?.name ?? initial.name,
       providerType: provider?.providerType ?? initial.providerType ?? 'custom',
       alias: provider?.alias ?? '',
-      format: provider?.format ?? initial.format ?? 'openai',
+      format: provider?.format ?? initialFormat ?? initial.format ?? 'openai',
       authType: provider?.authType ?? initial.authType ?? 'api_key',
       baseUrl: provider?.baseUrl ?? initial.baseUrl,
       apiKey: '',
@@ -425,7 +422,9 @@ function ProviderDialog({
                 )}
               />
             </div>
-            <p className='text-muted-foreground text-xs'>{t('aiRouter.providers.priorityHint')}</p>
+            <p className='text-muted-foreground text-xs break-all'>
+              {t('aiRouter.providers.priorityHint')}
+            </p>
             <form.AppField
               name='providerType'
               children={(field) => (

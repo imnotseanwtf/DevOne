@@ -4,26 +4,15 @@ import { SettingsTabs } from '@/components/layout/settings-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UsersTable } from '@/features/admin/components/users-table';
-import { AiCombosSettings } from '@/features/ai-router/components/ai-combos-settings';
-import { AiGatewayPanel } from '@/features/ai-router/components/ai-gateway-panel';
-import { gatewayAdminQueryOptions } from '@/features/ai-router/api/queries';
-import { getQueryClient } from '@/lib/query-client';
-import { HydrationBoundary, dehydrate } from '@tanstack/react-query';
-import { Suspense } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
-import { AiUsageCard } from '@/features/ai-router/components/ai-usage-card';
-import { routerEndpoint } from '@/features/ai-router/endpoint';
-import { listCombos, listProviders, usageOverview } from '@/features/ai-router/service';
 import { listAuditEvents, listUsers, signInPolicy } from '@/features/admin/service';
 import { getT } from '@/i18n/server';
 import { requireUser } from '@/lib/auth/session';
-import { isDemoMode } from '@/lib/demo';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 export const metadata: Metadata = { title: 'Admin' };
 
-const TABS = ['users', 'ai', 'policy', 'audit'] as const;
+const TABS = ['users', 'policy', 'audit'] as const;
 type AdminTab = (typeof TABS)[number];
 
 interface AdminPageProps {
@@ -36,6 +25,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   if (user.role !== 'ADMIN') notFound();
   const t = await getT();
   const { tab, aiOAuth } = await searchParams;
+  if (tab === 'ai') redirect(`/router${aiOAuth ? `?aiOAuth=${encodeURIComponent(aiOAuth)}` : ''}`);
   const active: AdminTab = TABS.includes(tab as AdminTab) ? (tab as AdminTab) : 'users';
 
   return (
@@ -48,7 +38,6 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           tabs={TABS.map((id) => ({ id, label: t(`admin.tabs.${id}`) }))}
         />
         {active === 'users' && <UsersTab adminId={user.id} />}
-        {active === 'ai' && <AiRouterTab adminId={user.id} oauthResult={aiOAuth} />}
         {active === 'policy' && <PolicyTab />}
         {active === 'audit' && <AuditTab adminId={user.id} />}
       </div>
@@ -65,39 +54,6 @@ async function UsersTab({ adminId }: { adminId: string }) {
         {t('admin.users.count', { count: users.length })}
       </p>
       <UsersTable users={users} currentUserId={adminId} />
-    </div>
-  );
-}
-
-async function AiRouterTab({ adminId, oauthResult }: { adminId: string; oauthResult?: string }) {
-  const t = await getT();
-  if (isDemoMode()) {
-    return <p className='text-muted-foreground text-sm'>{t('aiRouter.keys.disabledInDemo')}</p>;
-  }
-  const queryClient = getQueryClient();
-  void queryClient.prefetchQuery(gatewayAdminQueryOptions(adminId));
-  const [providers, combos, usage, endpoint] = await Promise.all([
-    listProviders(adminId),
-    listCombos(adminId),
-    usageOverview(adminId),
-    routerEndpoint()
-  ]);
-  return (
-    <div className='space-y-6'>
-      <div className='text-muted-foreground space-y-2 text-sm'>
-        <p>{t('aiRouter.intro')}</p>
-        <p>
-          {t('aiRouter.endpoint')}:{' '}
-          <code className='bg-muted rounded px-1.5 py-0.5'>{endpoint}</code>
-        </p>
-      </div>
-      <HydrationBoundary state={dehydrate(queryClient)}>
-        <Suspense fallback={<Skeleton className='h-72 w-full' />}>
-          <AiGatewayPanel userId={adminId} oauthResult={oauthResult} />
-        </Suspense>
-      </HydrationBoundary>
-      <AiCombosSettings combos={combos} providers={providers} />
-      <AiUsageCard usage={usage} />
     </div>
   );
 }

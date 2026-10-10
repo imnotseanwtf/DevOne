@@ -48,6 +48,7 @@ export const fil: MessageShape<typeof en> = {
   userMenu: {
     signedInAs: 'Naka-sign in bilang @{username}',
     account: 'Aking account',
+    router: 'Router',
     admin: 'Admin',
     signOut: 'Mag-sign out'
   },
@@ -368,6 +369,46 @@ export const fil: MessageShape<typeof en> = {
     account_ai_key_delete: 'nagbura ng AI key'
   },
   aiRouter: {
+    workspace: {
+      title: 'Router',
+      description:
+        'Ikonekta ang iyong mga AI account at gamitin ang iisang endpoint para sa bawat tool.',
+      tabs: {
+        providers: 'Mga provider',
+        endpoint: 'Endpoint at mga key',
+        combos: 'Mga combo',
+        usage: 'Paggamit',
+        settings: 'Mga setting'
+      },
+      providerHint: 'Pumili ng provider para pamahalaan ang mga account, credential at model nito.',
+      customProviders: 'Mga custom provider (OpenAI / Anthropic compatible)',
+      oauthProviders: 'Mga OAuth provider',
+      apiProviders: 'Mga API key provider',
+      localProviders: 'Mga lokal na provider',
+      addAnthropic: 'Magdagdag ng Anthropic compatible',
+      addOpenai: 'Magdagdag ng OpenAI compatible',
+      emptyCustom:
+        'Wala pang custom provider — magdagdag ng OpenAI o Anthropic compatible na endpoint.',
+      search: 'Maghanap ng provider…',
+      filter: 'Salain ang mga provider',
+      all: 'Lahat',
+      connected: 'Nakakonekta',
+      available: 'Magagamit',
+      accountCount: '{total} account · {available} magagamit',
+      noConnections: 'Walang koneksyon',
+      noResults: 'Walang provider na tugma sa iyong paghahanap.',
+      backProviders: 'Lahat ng provider',
+      providerMissing: 'Wala na ang provider na ito.',
+      apiEndpoint: 'API endpoint',
+      endpointHint:
+        'Gamitin ang base URL na ito sa iyong mga tool. Kailangan ng personal na API key sa mga panlabas na request.',
+      personalKeys: 'Mga API key',
+      protocol: 'Format ng API',
+      example: 'Halimbawang request',
+      copyModel: 'Kopyahin ang model ID',
+      modelsHint:
+        'Gamitin ang auto para sa fallback, pangalan ng combo, o provider/model para sa isang provider.'
+    },
     intro:
       'Iisang OpenAI-compatible na endpoint para sa lahat ng model na naka-set up dito. Napupunta ang request sa unang provider na sumagot; kapag rate-limited, ubos ang quota o down ang isa, ipapasa ito sa susunod.',
     endpoint: 'Endpoint',

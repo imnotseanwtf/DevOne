@@ -7,27 +7,34 @@ expiry and cooldown. Existing provider keys, gateway keys and combos keep workin
 
 ## Set it up
 
-1. For Claude OAuth, open **Admin → AI router → Provider accounts → Add connection → Claude**.
-   Selecting Claude starts sign-in immediately, creating or reusing its provider definition.
-   Approve access on the provider's page; the callback saves an encrypted account. **Add account**
-   on an OAuth provider also starts sign-in directly. Selecting Claude or Codex in **Add provider**
-   starts the same flow. A configured OAuth client is required.
-2. For other providers, open **Add provider**. Choose a preset, upstream format and
-   authentication mode. Use **Fetch models**, or enter model IDs one per line. Discovery is
-   provider-dependent; manual model entry works when an upstream has no model-list endpoint.
-3. For API-key or access-token authentication, enter the credential in the provider form or
-   **Provider accounts → Add account**. Add more accounts to the same provider when needed.
-   Empty credentials keep the saved value during editing. Disable or remove an account to stop
-   routing through it. Credential values are encrypted with `DEVONE_ENCRYPTION_KEY` and never
-   returned to the browser after saving.
-4. For custom OAuth providers, save the provider and use **Add account**, or **Save and connect**.
-   Each authorization creates an account. Your installation must have its own configured OAuth
-   application. Reconnect after revocation or when refresh is no longer available.
-5. Optionally create a **combo**, an ordered list of provider/model pairs such as `free-stack`.
-6. Under **Router settings**, set a default model and optionally shorten large tool results.
-7. Open **My account → AI keys → Create key**. Copy the `dvo_…` key when shown; it cannot be
-   displayed again. Each person has independent gateway keys and usage.
-8. Configure your tool with the gateway base URL and personal gateway key.
+Open **Router** from the username menu. It has its own screen with tabs and no sidebar:
+**Providers**, **Endpoint & Keys**, **Combos**, **Usage** and **Settings**. Administrators manage
+shared providers and accounts; everyone can create their own keys under **Endpoint & Keys**.
+
+1. For Claude OAuth, choose **Providers → Claude**, then **Add account** if the provider already
+   exists. An unconfigured Claude card starts sign-in immediately and creates its provider.
+   Approve access on the provider's page; the callback saves an encrypted account and returns
+   to Router. A configured OAuth client is required. Codex follows the same flow.
+2. For API providers, choose a provider card to start from its preset. For custom endpoints,
+   choose **Add OpenAI Compatible** or **Add Anthropic Compatible**. Choose authentication,
+   enter a credential and use **Fetch models**, or enter model IDs one per line. Discovery is
+   provider-dependent; manual entry works when an upstream has no model-list endpoint.
+3. Open a configured provider card to manage its accounts and models. **Add account** adds
+   another credential under that provider. Each account has independent priority, model access,
+   activation and cooldown. Empty credentials keep the saved value during editing. Credentials
+   are encrypted with `DEVONE_ENCRYPTION_KEY` and never returned after saving. Catalog counts
+   show saved accounts and locally available accounts, rather than a live upstream health check.
+4. For custom OAuth providers, save the provider and use **Add account** or **Save and connect**.
+   Each authorization creates an account. Configure the installation's OAuth application before
+   connecting. Reconnect after revocation or when refresh is no longer available.
+5. Use **Combos** to create an ordered list of provider/model pairs such as `free-stack`.
+6. Under **Settings**, set a default model and optionally shorten large tool results. **Usage**
+   shows installation requests, failures, token counts and saved tool-output characters.
+7. Open **Endpoint & Keys → Create key**. Copy the `dvo_…` key when shown; it cannot be displayed
+   again. Use the copyable base URL, model IDs and Chat, Messages or Responses request examples
+   to configure your tools. Each person has independent gateway keys.
+
+Old `/admin?tab=ai` and `/account?tab=ai` bookmarks redirect to Router.
 
 Gateway keys authenticate clients to DevOne. Provider credentials authenticate DevOne to the
 upstream; these are separate. A signed-in browser on the same site can use its DevOne session.
@@ -147,8 +154,7 @@ stops the upstream request. Fallback stops after output begins; a stream cannot 
 restarted on another account once the client has received it. Streaming error events are
 reported as failures.
 
-Responses expose `x-devone-provider`, `x-devone-model` and `x-devone-attempts`. **Admin → AI router
-→ Usage** shows recent requests, token counts, attempts, status and saved characters from tool
+Responses expose `x-devone-provider`, `x-devone-model` and `x-devone-attempts`. **Router → Usage** shows recent requests, token counts, attempts, status and saved characters from tool
 output compression. Compression changes tool-result text only; IDs and tool-call structure are
 preserved. Compression is enabled by default; turn it off in router settings or send
 `X-DevOne-Token-Saver: off` for a single request.
@@ -193,7 +199,7 @@ OAuth sessions; every existing provider receives a primary account carrying its 
 priority and cooldown. Existing providers, combo steps and gateway keys retain their IDs.
 Changing the encryption key without re-encrypting data makes saved credentials unreadable.
 
-Confirm the provider and primary account appear under **Admin → AI router**, then make a test
+Confirm the provider and primary account appear under **Router → Providers**, then make a test
 request using an existing gateway key before adding OAuth accounts.
 
 ## Verification
@@ -204,6 +210,13 @@ a reachable upstream and an installed OAuth application.
 
 `bun run test:ai:db` also checks provider creation and concurrent credential locks against the
 configured, migrated PostgreSQL database. It removes only the temporary records it creates.
+`bun run test:ai:ui` exercises the running local application with temporary PostgreSQL records:
+Router navigation, multiple-account add/toggle, key creation/copy-once/deletion, browser history,
+mobile layout, member boundaries and Claude OAuth navigation/cancellation. It requires a locally
+running server, migrated database and Playwright with Chromium. Set `DEVONE_PLAYWRIGHT_PATH` to
+an existing Playwright installation if it is outside the repository. The external consent screen
+is intercepted; this check does not sign in to a real provider account.
+
 Development logging suppresses Server Function arguments because they can contain sign-in
 tokens and provider credentials.
 

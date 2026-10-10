@@ -54,4 +54,25 @@ export interface AiGatewayAdminData {
   providers: AiProviderSummary[];
   connections: AiConnectionSummary[];
   settings: AiRouterSettings;
+  combos: AiComboSummary[];
+}
+
+export interface AiComboSummary {
+  id: string;
+  name: string;
+  steps: { providerId: string; model: string }[];
+}
+
+export interface AiKeySummary {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface AiGatewayEndpointData {
+  keys: AiKeySummary[];
+  endpoint: string;
+  models: string[];
 }

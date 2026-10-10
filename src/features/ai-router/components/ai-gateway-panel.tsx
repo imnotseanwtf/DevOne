@@ -42,18 +42,29 @@ import type {
   AiRouterSettings,
   ConnectionInput
 } from '../api/types';
+import { AiCombosSettings } from './ai-combos-settings';
+import { ProviderCatalog } from './provider-catalog';
+import Link from 'next/link';
 import { AiProvidersSettings } from './ai-providers-settings';
 import { Button } from './gateway-button';
-import { authorizeProvider, authorizeProviderType, useGatewayMutation } from './gateway-mutation';
+import { authorizeProvider, useGatewayMutation } from './gateway-mutation';
 
 interface AiGatewayPanelProps {
   userId: string;
   oauthResult?: string;
+  view?: 'providers' | 'settings' | 'combos';
+  providerId?: string;
 }
 
-export function AiGatewayPanel({ userId, oauthResult }: AiGatewayPanelProps) {
+export function AiGatewayPanel({
+  userId,
+  oauthResult,
+  view = 'providers',
+  providerId
+}: AiGatewayPanelProps) {
   const t = useT();
   const { data } = useSuspenseQuery(gatewayAdminQueryOptions(userId));
+  const provider = data.providers.find((item) => item.id === providerId);
   return (
     <div className='space-y-6'>
       {oauthResult && (
@@ -61,9 +72,30 @@ export function AiGatewayPanel({ userId, oauthResult }: AiGatewayPanelProps) {
           {oauthResult === 'connected' ? t('aiRouter.oauth.connected') : t('aiRouter.oauth.failed')}
         </p>
       )}
-      <AiProvidersSettings providers={data.providers} />
-      <ConnectionsCard providers={data.providers} connections={data.connections} />
-      <RouterSettings key={JSON.stringify(data.settings)} settings={data.settings} />
+      {view === 'combos' ? (
+        <AiCombosSettings providers={data.providers} combos={data.combos} />
+      ) : view === 'settings' ? (
+        <RouterSettings key={JSON.stringify(data.settings)} settings={data.settings} />
+      ) : providerId ? (
+        <div className='space-y-5'>
+          <Link
+            href='/router?tab=providers'
+            className='inline-flex items-center gap-2 text-sm hover:underline'
+          >
+            <Icons.chevronLeft className='size-4' /> {t('aiRouter.workspace.backProviders')}
+          </Link>
+          {provider ? (
+            <>
+              <AiProvidersSettings providers={[provider]} />
+              <ConnectionsCard providers={[provider]} connections={data.connections} />
+            </>
+          ) : (
+            <p>{t('aiRouter.workspace.providerMissing')}</p>
+          )}
+        </div>
+      ) : (
+        <ProviderCatalog providers={data.providers} connections={data.connections} />
+      )}
     </div>
   );
 }
@@ -82,22 +114,16 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
     connection?: AiConnectionSummary;
   } | null>(null);
   const [removing, setRemoving] = useState<AiConnectionSummary | null>(null);
-  const [choosing, setChoosing] = useState(false);
   const mutation = useGatewayMutation();
   const oauth = useMutation({
     mutationFn: authorizeProvider,
     onError: (error) => toast.error(error.message)
   });
-  const quickConnect = useMutation({
-    mutationFn: authorizeProviderType,
-    onError: (error) => toast.error(error.message)
-  });
-  const connecting = oauth.isPending || quickConnect.isPending;
+  const connecting = oauth.isPending;
   const addAccount = (provider: AiProviderSummary) => {
     if (provider.authType === 'oauth' || provider.providerType === 'claude') {
       oauth.mutate(provider.id);
     } else {
-      setChoosing(false);
       setEditing({ provider });
     }
   };
@@ -108,9 +134,6 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
           <CardTitle>{t('aiRouter.connections.title')}</CardTitle>
           <CardDescription>{t('aiRouter.connections.description')}</CardDescription>
         </div>
-        <Button size='sm' disabled={connecting} onClick={() => setChoosing(true)}>
-          <Icons.add /> {t('aiRouter.connections.addConnection')}
-        </Button>
       </CardHeader>
       <CardContent className='space-y-5'>
         {providers.length === 0 ? (
@@ -180,7 +203,7 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
                             }
                           />
                           <div className='min-w-40 flex-1 space-y-1'>
-                            <p className='flex flex-wrap items-center gap-2 text-sm font-medium'>
+                            <p className='flex flex-wrap items-center gap-2 text-sm font-medium break-all'>
                               {connection.name}
                               <Badge variant='outline'>#{connection.priority}</Badge>
                               <Badge variant='secondary'>
@@ -279,40 +302,6 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
           })
         )}
       </CardContent>
-      <Dialog open={choosing} onOpenChange={(open) => !connecting && setChoosing(open)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('aiRouter.connections.chooseProvider')}</DialogTitle>
-            <DialogDescription>{t('aiRouter.connections.chooseHint')}</DialogDescription>
-          </DialogHeader>
-          <div className='grid gap-2'>
-            {(['claude', 'codex'] as const)
-              .filter((type) => !providers.some((provider) => provider.providerType === type))
-              .map((type) => (
-                <Button
-                  key={type}
-                  variant='outline'
-                  disabled={connecting}
-                  isLoading={quickConnect.isPending && quickConnect.variables === type}
-                  onClick={() => quickConnect.mutate(type)}
-                >
-                  <Icons.login /> {type === 'claude' ? 'Claude' : 'Codex'}
-                </Button>
-              ))}
-            {providers.map((provider) => (
-              <Button
-                key={provider.id}
-                variant='outline'
-                disabled={connecting}
-                isLoading={oauth.isPending && oauth.variables === provider.id}
-                onClick={() => addAccount(provider)}
-              >
-                {provider.name}
-              </Button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
       {editing && (
         <ConnectionDialog
           provider={editing.provider}

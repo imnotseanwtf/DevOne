@@ -1,7 +1,6 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useT } from '@/i18n/client';
 import { aiGatewayKeys } from '../api/queries';
@@ -15,7 +14,6 @@ export async function authorizeProviderType(providerType: 'claude' | 'codex'): P
 
 export function useGatewayMutation(onSaved?: () => void) {
   const t = useT();
-  const router = useRouter();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (action: () => Promise<{ ok: boolean; error?: string }>) => {
@@ -24,7 +22,6 @@ export function useGatewayMutation(onSaved?: () => void) {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: aiGatewayKeys.all });
-      router.refresh();
       onSaved?.();
     },
     onError: (error) => toast.error(error.message)

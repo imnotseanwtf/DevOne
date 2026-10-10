@@ -8,19 +8,15 @@ import { PreferencesForm } from '@/features/account/components/preferences-form'
 import { SessionsSettings } from '@/features/account/components/sessions-settings';
 import { SshServersSettings } from '@/features/account/components/ssh-servers-settings';
 import { getProfile, listConnections, listSessions } from '@/features/account/service';
-import { AiKeysSettings } from '@/features/ai-router/components/ai-keys-settings';
-import { routerEndpoint } from '@/features/ai-router/endpoint';
-import { listApiKeys, loadRouterState } from '@/features/ai-router/service';
 import { listAllSshHosts } from '@/features/devops/ssh-service';
 import { getLocale, getT } from '@/i18n/server';
-import { listModelIds } from '@/lib/ai-router/routing';
 import { getCurrentSessionId, requireUser } from '@/lib/auth/session';
-import { isDemoMode } from '@/lib/demo';
+import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'My account' };
 
-const TABS = ['profile', 'connections', 'ssh', 'sessions', 'ai', 'preferences'] as const;
+const TABS = ['profile', 'connections', 'ssh', 'sessions', 'preferences'] as const;
 type AccountTab = (typeof TABS)[number];
 
 interface AccountPageProps {
@@ -31,6 +27,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const user = await requireUser();
   const t = await getT();
   const { tab } = await searchParams;
+  if (tab === 'ai') redirect('/router?tab=endpoint');
   const active: AccountTab = TABS.includes(tab as AccountTab) ? (tab as AccountTab) : 'profile';
 
   return (
@@ -53,31 +50,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             currentSessionId={await getCurrentSessionId()}
           />
         )}
-        {active === 'ai' && <AiKeysTab userId={user.id} />}
         {active === 'preferences' && (
           <PreferencesForm preferences={(await getProfile(user.id)).preferences} />
         )}
       </div>
     </PageContainer>
-  );
-}
-
-async function AiKeysTab({ userId }: { userId: string }) {
-  if (isDemoMode()) {
-    const t = await getT();
-    return <p className='text-muted-foreground text-sm'>{t('aiRouter.keys.disabledInDemo')}</p>;
-  }
-  const [keys, state, endpoint] = await Promise.all([
-    listApiKeys(userId),
-    loadRouterState(),
-    routerEndpoint()
-  ]);
-  return (
-    <AiKeysSettings
-      keys={keys}
-      endpoint={endpoint}
-      models={listModelIds(state.providers, state.combos)}
-    />
   );
 }
 

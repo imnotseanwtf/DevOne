@@ -14,7 +14,9 @@ export async function GET(
   const appUrl = getAppUrl();
   if (!appUrl) return Response.json({ error: 'OAuth is not configured' }, { status: 503 });
   const back = (result: string) => {
-    const response = NextResponse.redirect(new URL(`/admin?tab=ai&aiOAuth=${result}`, appUrl));
+    const response = NextResponse.redirect(
+      new URL(`/router?tab=providers&aiOAuth=${result}`, appUrl)
+    );
     response.headers.set('cache-control', 'no-store');
     response.headers.set('referrer-policy', 'no-referrer');
     return response;

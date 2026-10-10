@@ -26,7 +26,6 @@ import {
 } from '@/features/ai-router/schema';
 import { requireUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
-import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { connectOAuthProvider } from './oauth-service';
 
@@ -47,7 +46,6 @@ export async function connectOAuthProviderAction(
   if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
   try {
     const url = await connectOAuthProvider(user.id, parsed.data);
-    revalidatePath('/admin');
     return { ok: true, url };
   } catch (error) {
     return fail(error, 'Could not start provider sign-in');
@@ -56,14 +54,13 @@ export async function connectOAuthProviderAction(
 
 async function run(
   work: (userId: string) => Promise<unknown>,
-  fallback: string,
-  path = '/admin'
+  fallback: string
 ): Promise<AiRouterResult> {
   const user = await requireUser();
   if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
   try {
     await work(user.id);
-    revalidatePath(path);
+    // Gateway mutations invalidate their queries; avoid racing tab navigation with RSC refreshes.
     return { ok: true };
   } catch (error) {
     return fail(error, fallback);
@@ -77,7 +74,6 @@ export async function saveProviderAction(input: unknown): Promise<AiRouterResult
   if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
   try {
     const providerId = await saveProvider(user.id, parsed.data);
-    revalidatePath('/admin');
     return { ok: true, providerId };
   } catch (error) {
     return fail(error, 'Could not save the provider');
@@ -147,7 +143,6 @@ export async function createApiKeyAction(
   if (!parsed.success) return { ok: false, error: 'Enter a name of at most 60 characters' };
   try {
     const key = await createApiKey(user.id, parsed.data.name);
-    revalidatePath('/account');
     return { ok: true, key };
   } catch (error) {
     return fail(error, 'Could not create the key');
@@ -157,11 +152,7 @@ export async function createApiKeyAction(
 export async function deleteApiKeyAction(input: unknown): Promise<AiRouterResult> {
   const parsed = z.object({ keyId: z.string().min(1) }).safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Invalid key' };
-  return run(
-    (userId) => deleteApiKey(userId, parsed.data.keyId),
-    'Could not delete the key',
-    '/account'
-  );
+  return run((userId) => deleteApiKey(userId, parsed.data.keyId), 'Could not delete the key');
 }
 
 export async function saveConnectionAction(input: unknown): Promise<AiRouterResult> {

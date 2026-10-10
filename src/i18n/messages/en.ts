@@ -44,6 +44,7 @@ export const en = {
   userMenu: {
     signedInAs: 'Signed in as @{username}',
     account: 'My account',
+    router: 'Router',
     admin: 'Admin',
     signOut: 'Sign out'
   },
@@ -352,6 +353,43 @@ export const en = {
     account_ai_key_delete: 'deleted an AI key'
   },
   aiRouter: {
+    workspace: {
+      title: 'Router',
+      description: 'Connect your AI accounts and route every tool through one endpoint.',
+      tabs: {
+        providers: 'Providers',
+        endpoint: 'Endpoint & Keys',
+        combos: 'Combos',
+        usage: 'Usage',
+        settings: 'Settings'
+      },
+      providerHint: 'Choose a provider to manage its accounts, credentials and models.',
+      customProviders: 'Custom Providers (OpenAI / Anthropic Compatible)',
+      oauthProviders: 'OAuth Providers',
+      apiProviders: 'API Key Providers',
+      localProviders: 'Local Providers',
+      addAnthropic: 'Add Anthropic Compatible',
+      addOpenai: 'Add OpenAI Compatible',
+      emptyCustom: 'No custom providers — add an OpenAI or Anthropic compatible endpoint.',
+      search: 'Search providers…',
+      filter: 'Filter providers',
+      all: 'All',
+      connected: 'Connected',
+      available: 'Available',
+      accountCount: '{total} accounts · {available} available',
+      noConnections: 'No connections',
+      noResults: 'No providers match your search.',
+      backProviders: 'All providers',
+      providerMissing: 'This provider no longer exists.',
+      apiEndpoint: 'API Endpoint',
+      endpointHint:
+        'Use this base URL in your tools. External requests require a personal API key.',
+      personalKeys: 'API Keys',
+      protocol: 'API format',
+      example: 'Request example',
+      copyModel: 'Copy model ID',
+      modelsHint: 'Use auto for fallback, a combo name, or provider/model for a specific provider.'
+    },
     intro:
       'One OpenAI-compatible endpoint for every model set up here. A request goes to the first provider that answers; one that is rate-limited, out of quota or down hands over to the next.',
     endpoint: 'Endpoint',
