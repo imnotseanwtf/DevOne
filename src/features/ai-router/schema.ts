@@ -66,3 +66,16 @@ export const routerSettingsSchema = z.object({
   compressToolOutput: z.boolean(),
   maxToolOutputChars: z.number().int().min(100).max(1000000)
 });
+
+export const connectionTestSchema = z.strictObject({
+  model: z.string().trim().min(1).max(400),
+  messages: z
+    .array(
+      z.strictObject({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().trim().min(1).max(8000)
+      })
+    )
+    .min(1)
+    .max(24)
+});

@@ -475,6 +475,32 @@ export const fil: MessageShape<typeof en> = {
       managed:
         'Awtomatikong pinapamahalaan ang OAuth credential. Kumonekta ulit para palitan ang mga ito.'
     },
+    test: {
+      button: 'Subukan ang koneksyon',
+      account: 'Subukan ang koneksyon {name}',
+      title: 'Subukan ang {name}',
+      description:
+        'Makipag-chat gamit ang account na ito sa {provider}. Ginagamit ng mga request ang napiling account at kasama sa paggamit ng provider.',
+      conversation: 'Usapan sa pagsubok',
+      you: 'Ikaw',
+      empty: 'Magsagawa ng mabilis na pagsubok o magpadala ng mensahe para suriin ang account.',
+      model: 'Model',
+      message: 'Mensahe',
+      placeholder: 'Magpadala ng mensahe para sa pagsubok…',
+      chooseModel: 'Pumili ng model.',
+      enterMessage: 'Maglagay ng mensahe.',
+      quick: 'Mabilis na pagsubok',
+      probe: 'Sumagot gamit lamang ang OK.',
+      send: 'Ipadala',
+      clear: 'Burahin ang chat',
+      connected: 'Nakakonekta · {model} · {time}s',
+      noText: 'Matagumpay na tumugon ang model nang walang text na sagot.',
+      truncated: 'Pinaikli ang sagot sa 8000 character para sa pagsubok na ito.',
+      noModels:
+        'Magdagdag ng mga model sa provider at payagan ang kahit isa para sa account bago subukan.',
+      unavailable:
+        'I-enable ang provider at account, o alisin ang cooldown ng account bago subukan.'
+    },
     connections: {
       title: 'Mga account ng provider',
       addConnection: 'Magdagdag ng koneksyon',

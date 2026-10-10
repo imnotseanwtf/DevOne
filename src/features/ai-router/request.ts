@@ -4,6 +4,7 @@ import {
   recordProviderFailure,
   recordUsage,
   gatewayFetch,
+  requireAiAdmin,
   type RouterCaller
 } from '@/features/ai-router/service';
 import { forwardChatCompletion, routerError, type ForwardOutcome } from '@/lib/ai-router/forward';
@@ -20,6 +21,7 @@ import {
 } from '@/lib/ai-router/security';
 import type { ProviderFormat } from '@/lib/ai-router/types';
 import { after } from 'next/server';
+import { connectionTestSchema } from './schema';
 
 const limiter = createRateLimiter(aiRateLimit());
 
@@ -69,11 +71,19 @@ export async function handleModels(request: Request): Promise<Response> {
 
 export async function handleChatCompletion(
   request: Request,
-  sourceFormat: ProviderFormat = 'openai'
+  sourceFormat: ProviderFormat = 'openai',
+  connectionId?: string
 ): Promise<Response> {
   if (isDemoMode()) return routerError(403, DEMO_DISABLED_MESSAGE, 'demo_mode');
   const caller = await authenticate(request);
   if (caller instanceof Response) return caller;
+  if (connectionId) {
+    try {
+      await requireAiAdmin(caller.userId);
+    } catch {
+      return routerError(403, 'Administrators only', 'forbidden');
+    }
+  }
   if (!limiter.take(caller.userId)) {
     return routerError(429, 'Too many requests. Wait a minute and try again.', 'rate_limited');
   }
@@ -87,6 +97,16 @@ export async function handleChatCompletion(
       error instanceof Error ? error.message : 'Invalid request',
       'invalid_request'
     );
+  }
+  if (connectionId) {
+    const parsed = connectionTestSchema.safeParse(body);
+    if (!parsed.success)
+      return routerError(
+        400,
+        'Choose a model and send up to 24 text messages, each at most 8000 characters.',
+        'invalid_request'
+      );
+    body = { ...parsed.data, stream: false };
   }
   if (typeof body.model !== 'string' || !body.model.trim()) {
     return routerError(400, 'Say which "model" to use', 'invalid_request');
@@ -110,21 +130,31 @@ export async function handleChatCompletion(
   if (!state.providers.some((provider) => provider.enabled)) {
     return routerError(
       503,
-      'No AI providers are set up. An administrator adds them under Admin → AI router.',
+      'No AI providers are set up. An administrator adds them under Router → Providers.',
       'no_providers'
     );
   }
   let selectedModel = requested;
-  let targets = resolveTargets(selectedModel, state.providers, state.combos);
-  const configured =
-    state.combos.some((combo) => combo.name === requested) ||
-    resolveTargets(
-      requested,
-      state.providers.map((provider) => ({ ...provider, enabled: true })),
-      state.combos
-    ).length > 0;
+  // Diagnostics use a raw model ID and the explicit account ID, independent of global model namespaces.
+  let targets = connectionId
+    ? state.providers
+        .filter((provider) => provider.enabled && provider.models.includes(requested))
+        .map((provider) => ({ provider, model: requested }))
+    : resolveTargets(selectedModel, state.providers, state.combos);
+  const configured = connectionId
+    ? state.providers.some((provider) => provider.models.includes(requested))
+    : state.combos.some((combo) => combo.name === requested) ||
+      resolveTargets(
+        requested,
+        state.providers.map((provider) => ({ ...provider, enabled: true })),
+        state.combos
+      ).length > 0;
+  if (connectionId && !configured) {
+    return routerError(400, 'Choose a model configured for this provider.', 'invalid_model');
+  }
   // Model defaults apply only to unknown models, never override a known exhausted account.
   if (
+    !connectionId &&
     !targets.length &&
     !configured &&
     state.settings.defaultModel &&
@@ -138,6 +168,17 @@ export async function handleChatCompletion(
       ? compressToolMessages(body, state.settings.maxToolOutputChars)
       : { body, savedChars: 0 };
   body = { ...compressed.body, model: selectedModel };
+  const accountTargets = state
+    .targetsFor(targets)
+    .filter((target) => !connectionId || target.connectionId === connectionId);
+  if (connectionId && !accountTargets.length)
+    return routerError(
+      503,
+      'This account is unavailable for the selected model. Enable the provider and account, or clear its cooldown before retrying.',
+      'account_unavailable'
+    );
+  // Codex rejects token-limit fields; its diagnostic still has the normal response-size bound and a deadline.
+  if (connectionId && accountTargets[0].provider.providerType !== 'codex') body.max_tokens = 512;
   const startedAt = Date.now();
   let complete!: (outcome: ForwardOutcome) => void;
   const finished = new Promise<ForwardOutcome>((resolve) => {
@@ -147,16 +188,25 @@ export async function handleChatCompletion(
   after(async () =>
     recordUsage(caller, requested, startedAt, await finished, compressed.savedChars)
   );
-  return forwardChatCompletion({
+  const deadline = connectionId ? AbortSignal.timeout(30_000) : undefined;
+  const timedOut = () => Boolean(deadline?.aborted && !request.signal.aborted);
+  const response = await forwardChatCompletion({
     body,
-    targets: state.targetsFor(targets),
+    targets: accountTargets,
     apiKeyFor: state.apiKeyFor,
-    signal: request.signal,
+    signal: deadline ? AbortSignal.any([request.signal, deadline]) : request.signal,
     sourceFormat,
     credentialFor: state.credentialFor,
     refreshCredential: state.refreshCredential,
     fetchImpl: gatewayFetch,
+    timeoutMs: connectionId ? 30_000 : undefined,
     onFailure: recordProviderFailure,
-    onFinish: complete
+    onFinish: (outcome) =>
+      complete(
+        timedOut() ? { ...outcome, status: 504, error: 'Connection test timed out' } : outcome
+      )
   });
+  return timedOut()
+    ? routerError(504, 'Connection test timed out after 30 seconds.', 'test_timeout')
+    : response;
 }

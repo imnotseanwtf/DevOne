@@ -451,6 +451,30 @@ export const en = {
       connected: 'OAuth account connected.',
       managed: 'OAuth credentials are managed automatically. Reconnect to replace them.'
     },
+    test: {
+      button: 'Test connection',
+      account: 'Test connection {name}',
+      title: 'Test {name}',
+      description:
+        'Chat with this account on {provider}. Requests use the selected account and count toward provider usage.',
+      conversation: 'Test conversation',
+      you: 'You',
+      empty: 'Run a quick test or send a message to check this account.',
+      model: 'Model',
+      message: 'Message',
+      placeholder: 'Send a test message…',
+      chooseModel: 'Choose a model.',
+      enterMessage: 'Enter a message.',
+      quick: 'Quick test',
+      probe: 'Reply with only OK.',
+      send: 'Send',
+      clear: 'Clear chat',
+      connected: 'Connected · {model} · {time}s',
+      noText: 'The model responded successfully without a text reply.',
+      truncated: 'Reply shortened to 8000 characters for this test.',
+      noModels: 'Add provider models and allow at least one for this account before testing.',
+      unavailable: 'Enable the provider and account, or clear the account cooldown before testing.'
+    },
     connections: {
       title: 'Provider accounts',
       addConnection: 'Add connection',

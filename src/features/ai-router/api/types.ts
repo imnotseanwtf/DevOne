@@ -1,5 +1,22 @@
 import type { ProviderAuthType, ProviderFormat } from '@/lib/ai-router/types';
 
+export interface AiTestMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AiConnectionTestInput {
+  model: string;
+  messages: AiTestMessage[];
+}
+
+export interface AiConnectionTestResult {
+  message: string;
+  model: string;
+  elapsedMs: number;
+  truncated: boolean;
+}
+
 export interface AiConnectionSummary {
   id: string;
   providerId: string;

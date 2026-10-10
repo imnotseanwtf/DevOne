@@ -44,6 +44,19 @@ the model catalog is documented in [OpenCode Zen](https://opencode.ai/docs/zen/)
 
 Old `/admin?tab=ai` and `/account?tab=ai` bookmarks redirect to Router.
 
+Each provider account has **Test connection**. Choose one of its allowed models, run **Quick test**
+or send a message in the test chat. The dialog shows the reply, upstream errors and elapsed time.
+Tests use the exact selected account with its normal credential refresh and usage tracking;
+enable the provider/account and clear any cooldown first. Closing the dialog cancels the request.
+Chat stays in the browser for the open dialog. Tests have a 30-second deadline and a 512-token
+output limit where supported; Codex omits the unsupported token-limit field. Replies are capped
+at 8000 displayed characters so subsequent chat remains within the diagnostic message limit.
+
+`bun run test:ai:chat-ui` checks exact-account selection, allowed models, quick tests, drafts,
+follow-up history, long replies, errors, cancellation, mobile layout and member authorization.
+It uses temporary database records and a local upstream on `127.0.0.1:18081`; that host must be
+in `DEVONE_AI_ALLOWED_HOSTS`. Set `DEVONE_PLAYWRIGHT_PATH` when Playwright is outside the repository.
+
 Gateway keys authenticate clients to DevOne. Provider credentials authenticate DevOne to the
 upstream; these are separate. A signed-in browser on the same site can use its DevOne session.
 The gateway is disabled in the public demo.

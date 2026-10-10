@@ -48,6 +48,7 @@ import Link from 'next/link';
 import { AiProvidersSettings } from './ai-providers-settings';
 import { Button } from './gateway-button';
 import { authorizeProvider, useGatewayMutation } from './gateway-mutation';
+import { ConnectionTestDialog } from './connection-test-dialog';
 
 interface AiGatewayPanelProps {
   userId: string;
@@ -114,6 +115,11 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
     connection?: AiConnectionSummary;
   } | null>(null);
   const [removing, setRemoving] = useState<AiConnectionSummary | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const testingConnection = connections.find((connection) => connection.id === testingId);
+  const testingProvider = providers.find(
+    (provider) => provider.id === testingConnection?.providerId
+  );
   const mutation = useGatewayMutation();
   const oauth = useMutation({
     mutationFn: authorizeProvider,
@@ -257,6 +263,15 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
                             )}
                           </div>
                           <div className='flex gap-1'>
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              aria-label={t('aiRouter.test.account', { name: connection.name })}
+                              onClick={() => setTestingId(connection.id)}
+                            >
+                              <Icons.chat />
+                              {t('aiRouter.test.button')}
+                            </Button>
                             {(cooldown || connection.lastError) && (
                               <Button
                                 variant='ghost'
@@ -307,6 +322,13 @@ function ConnectionsCard({ providers, connections }: ConnectionsCardProps) {
           provider={editing.provider}
           connection={editing.connection}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {testingConnection && testingProvider && (
+        <ConnectionTestDialog
+          provider={testingProvider}
+          connection={testingConnection}
+          onClose={() => setTestingId(null)}
         />
       )}
       <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
