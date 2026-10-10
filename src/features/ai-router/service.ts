@@ -13,7 +13,7 @@ import { createAiApiKey, hashAiApiKey } from '@/lib/ai-router/keys';
 import type { AttemptFailure, ForwardOutcome } from '@/lib/ai-router/forward';
 import type { RouteTarget } from '@/lib/ai-router/routing';
 import { openCodeFreeModels } from '@/lib/ai-router/opencode-free';
-import { getProviderDefinition } from '@/lib/ai-router/registry';
+import { CODEX_CLIENT_VERSION, getProviderDefinition } from '@/lib/ai-router/registry';
 import { createCredentialManager } from '@/lib/ai-router/credentials';
 import { assertGatewayUrl } from '@/lib/ai-router/security';
 import { safeGatewayFetch } from '@/lib/ai-router/outbound';
@@ -503,6 +503,7 @@ export async function fetchProviderModels(
   let providerType = input.providerType ?? 'custom';
   let format = input.format ?? 'openai';
   let authType = input.authType ?? 'api_key';
+  let codexAccountId: unknown;
   if (!apiKey && input.providerId) {
     const saved = await getPrisma().aiProvider.findUnique({
       where: { id: input.providerId },
@@ -534,6 +535,10 @@ export async function fetchProviderModels(
       const credential = await manager.ensureFresh(account.id);
       if (!credential) throw new AiRouterError('Reconnect the provider account');
       authType = credential.authType;
+      codexAccountId =
+        credential.providerSpecificData?.workspaceId ??
+        credential.providerSpecificData?.chatgptAccountId ??
+        credential.providerSpecificData?.accountId;
       apiKey =
         authType === 'api_key' ? (credential.apiKey ?? null) : (credential.accessToken ?? null);
     } else {
@@ -546,6 +551,10 @@ export async function fetchProviderModels(
   const tokenAuth = authType === 'oauth' || authType === 'access_token';
   const headers = new Headers({ ...definition?.transport.headers, accept: 'application/json' });
   if (format === 'claude') headers.set('anthropic-version', '2023-06-01');
+  if (providerType === 'codex' && typeof codexAccountId === 'string' && codexAccountId) {
+    if (/[\r\n]/.test(codexAccountId)) throw new AiRouterError('Invalid Codex account metadata');
+    headers.set('ChatGPT-Account-ID', codexAccountId);
+  }
   if (format === 'claude' && tokenAuth && ['claude', 'anthropic'].includes(providerType)) {
     headers.append('anthropic-beta', 'oauth-2025-04-20');
   }
@@ -566,6 +575,7 @@ export async function fetchProviderModels(
   try {
     const url = new URL(providerUrl(baseUrl, 'models'));
     if (format === 'claude') url.searchParams.set('limit', '1000');
+    if (providerType === 'codex') url.searchParams.set('client_version', CODEX_CLIENT_VERSION);
     response = await fetchImpl(url.toString(), {
       headers,
       signal: AbortSignal.timeout(15_000),
@@ -578,8 +588,25 @@ export async function fetchProviderModels(
     throw new AiRouterError('The provider refused the credentials');
   }
   if (!response.ok) throw new AiRouterError(`The provider answered HTTP ${response.status}`);
-  const listed = parseModelList(await response.json().catch(() => null));
-  const models = providerType === 'opencode' ? openCodeFreeModels(listed) : listed;
+  const catalog = await response.json().catch(() => null);
+  const nativeModels = (
+    catalog as { models?: { slug?: unknown; id?: unknown; kind?: unknown }[] } | null
+  )?.models;
+  const listed = parseModelList(
+    providerType === 'codex' && Array.isArray(nativeModels)
+      ? {
+          data: nativeModels
+            .filter((model) => model?.kind !== 'image')
+            .map((model) => ({ id: model?.slug ?? model?.id }))
+        }
+      : catalog
+  );
+  const models =
+    providerType === 'opencode'
+      ? openCodeFreeModels(listed)
+      : providerType === 'codex'
+        ? listed.filter((model) => !model.startsWith('gpt-image-') && !model.endsWith('-image'))
+        : listed;
   if (models.length === 0) throw new AiRouterError('The provider listed no models');
   return models;
 }

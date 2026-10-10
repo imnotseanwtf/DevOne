@@ -40,7 +40,7 @@ export interface ProviderDefinition {
     headers?: Record<string, string>;
     auth: { header: string; scheme: 'raw' | 'bearer' };
   };
-  models: { id: string; name: string; upstreamModelId?: string }[];
+  models: { id: string; name: string; upstreamModelId?: string; responsesLite?: boolean }[];
   oauth?: ProviderOAuthConfig;
 }
 

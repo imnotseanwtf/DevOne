@@ -2,6 +2,7 @@ import { providerUrl, type RouteTarget } from './routing';
 import { translateRequest, ProtocolError, object, type JsonObject } from './translation';
 import type { ProviderCredential, ProviderFormat } from './types';
 import { prepareOpenCodeRequest } from './opencode-free';
+import { getProviderDefinition } from './registry';
 
 // Matches 9Router's CLAUDE_SYSTEM_PROMPT for its Claude Code OAuth transport.
 const CLAUDE_OAUTH_SYSTEM_PROMPT = "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -48,6 +49,10 @@ export async function executeTarget(
       : [{ type: 'text', text: CLAUDE_OAUTH_SYSTEM_PROMPT }, ...system];
   }
   let openCode: ReturnType<typeof prepareOpenCodeRequest> | undefined;
+  const codexDefinition = provider.providerType === 'codex' ? getProviderDefinition('codex') : null;
+  const codexLite =
+    codexDefinition?.models.some((model) => model.id === target.model && model.responsesLite) ??
+    false;
   if (provider.providerType === 'opencode') {
     if (format !== 'openai') throw new ProtocolError('OpenCode Free requires the Chat format', 503);
     openCode = prepareOpenCodeRequest(body, target.connectionId ?? provider.id);
@@ -65,7 +70,7 @@ export async function executeTarget(
       if (object(rawTool).type !== 'function')
         throw new ProtocolError('Unsupported Codex hosted tool');
     }
-    if (body.tools !== undefined && !Array.isArray(body.tools))
+    if (body.tools !== undefined && body.tools !== null && !Array.isArray(body.tools))
       throw new ProtocolError('Expected tools');
     body.store = false;
     body.stream = true;
@@ -80,6 +85,64 @@ export async function executeTarget(
       const item = object(raw);
       return item.role === 'system' ? { ...item, role: 'developer' } : item;
     });
+    if (codexLite) {
+      const items = body.input as JsonObject[];
+      const prefixIndex = items.findIndex((item) => item.type === 'additional_tools');
+      if (prefixIndex >= 0 && Array.isArray(body.tools) && body.tools.length) {
+        const prefix = items[prefixIndex];
+        if (prefix.tools !== undefined && !Array.isArray(prefix.tools))
+          throw new ProtocolError('Expected additional Codex tools');
+        items[prefixIndex] = {
+          ...prefix,
+          tools: [...((prefix.tools as unknown[] | undefined) ?? []), ...body.tools]
+        };
+      }
+      if (prefixIndex < 0) {
+        body.input = [
+          { type: 'additional_tools', role: 'developer', tools: body.tools ?? [] },
+          ...(body.instructions
+            ? [
+                {
+                  type: 'message',
+                  role: 'developer',
+                  content: [{ type: 'input_text', text: body.instructions }]
+                }
+              ]
+            : []),
+          ...items
+        ];
+      } else if (body.instructions) {
+        body.input = [
+          {
+            type: 'message',
+            role: 'developer',
+            content: [{ type: 'input_text', text: body.instructions }]
+          },
+          ...items
+        ];
+      }
+      body.instructions = '';
+      body.tools = null;
+      body.tool_choice ??= 'auto';
+      body.parallel_tool_calls = false;
+      const reasoning = body.reasoning === undefined ? {} : object(body.reasoning, 'reasoning');
+      const effort =
+        reasoning.effort === 'none' || reasoning.effort === 'minimal'
+          ? 'low'
+          : (reasoning.effort ?? 'medium');
+      body.reasoning = { ...reasoning, effort, context: 'all_turns' };
+      if (
+        body.include !== undefined &&
+        (!Array.isArray(body.include) || body.include.some((value) => typeof value !== 'string'))
+      )
+        throw new ProtocolError('Expected Codex include fields');
+      body.include = [
+        ...new Set([
+          ...((body.include as string[] | undefined) ?? []),
+          'reasoning.encrypted_content'
+        ])
+      ];
+    }
   }
   if (provider.forceStream) body.stream = true;
   if (body.stream === true && format === 'openai' && body.stream_options === undefined)
@@ -140,7 +203,13 @@ export async function executeTarget(
     headers.set(header, scheme === 'bearer' ? `Bearer ${secret}` : secret);
   }
   if (provider.providerType === 'codex') {
+    for (const [name, value] of Object.entries(codexDefinition?.transport.headers ?? {})) {
+      if (!headers.has(name)) headers.set(name, value);
+    }
+    headers.set('session_id', credential?.id ?? target.connectionId ?? provider.id);
+    if (codexLite) headers.set('x-openai-internal-codex-responses-lite', 'true');
     const account =
+      credential?.providerSpecificData?.workspaceId ??
       credential?.providerSpecificData?.chatgptAccountId ??
       credential?.providerSpecificData?.accountId;
     if (typeof account === 'string' && account) {

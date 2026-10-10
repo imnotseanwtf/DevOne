@@ -30,6 +30,14 @@ for (const providerType of ['claude', 'anthropic']) {
 assert.equal(registry.getProviderDefinition('an', {})?.transport.auth.header, 'x-api-key');
 assert.equal(registry.getProviderDefinition('cx', {})?.transport.format, 'openai-responses');
 assert.equal(registry.getProviderDefinition('cx', {})?.transport.forceStream, true);
+const codexDefinition = registry.getProviderDefinition('codex', { DEVONE_AI_CODEX_CLIENT_ID: 'test-client' })!;
+assert.ok(codexDefinition.models.some((model) => model.id === 'gpt-6.1-sol'), 'Codex starts with the current 9Router text catalog');
+assert.equal(codexDefinition.transport.headers?.originator, 'codex_cli_rs');
+const codexAuthorize = new URL(oauth.buildProviderAuthorizeUrl(codexDefinition.oauth!, 'http://localhost:1455/auth/callback', 'state', 'challenge'));
+assert.equal(codexAuthorize.searchParams.get('id_token_add_organizations'), 'true');
+assert.equal(codexAuthorize.searchParams.get('codex_cli_simplified_flow'), 'true');
+assert.equal(codexAuthorize.searchParams.get('originator'), 'codex_cli_rs');
+assert.equal(codexAuthorize.searchParams.get('redirect_uri'), 'http://localhost:1455/auth/callback');
 assert.equal(
   registry.getProviderDefinition('ol', {})?.transport.baseUrl,
   'http://localhost:11434/v1'

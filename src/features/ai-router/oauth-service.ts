@@ -15,6 +15,7 @@ import {
 } from '@/lib/ai-router/security';
 import { recordAudit } from '@/lib/audit/record';
 import { AiRouterError, requireAiAdmin, gatewayFetch, saveProvider } from './service';
+import { CODEX_LOOPBACK_URI, ensureCodexLoopbackListener } from './codex-loopback';
 
 function stateHash(state: string): string {
   return createHash('sha256').update(state).digest('hex');
@@ -76,15 +77,28 @@ export async function startProviderOAuth(userId: string, providerId: string): Pr
   const providerCallback = `/api/ai/oauth/${encodeURIComponent(providerId)}/callback`;
   const redirectUri = config.redirectUri ?? `${appUrl}${providerCallback}`;
   const redirect = new URL(redirectUri);
+  const codexLoopback = provider.providerType === 'codex' && redirectUri === CODEX_LOOPBACK_URI;
+  if (codexLoopback && !['localhost', '127.0.0.1'].includes(publicUrl.hostname))
+    throw new AiRouterError('Codex loopback sign-in requires DevOne running locally');
   if (
-    redirect.origin !== publicUrl.origin ||
-    redirect.username ||
-    redirect.password ||
-    redirect.search ||
-    redirect.hash ||
-    ![providerCallback, '/callback'].includes(redirect.pathname)
+    !codexLoopback &&
+    (redirect.origin !== publicUrl.origin ||
+      redirect.username ||
+      redirect.password ||
+      redirect.search ||
+      redirect.hash ||
+      ![providerCallback, '/callback'].includes(redirect.pathname))
   )
     throw new AiRouterError('OAuth callback must use this installation’s callback address');
+  if (codexLoopback) {
+    try {
+      await ensureCodexLoopbackListener(appUrl);
+    } catch {
+      throw new AiRouterError(
+        'Could not open Codex callback port 1455. Finish any other Codex sign-in and retry.'
+      );
+    }
+  }
   const pkce = generatePkce();
   const now = new Date();
   await prisma.aiOAuthSession.deleteMany({

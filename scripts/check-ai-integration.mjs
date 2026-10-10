@@ -106,6 +106,18 @@ await assert.rejects(refreshProviderModels('admin', oauthId, async (url, init) =
 }), /configuration changed/);
 assert.deepEqual(providers.find((provider) => provider.id === oauthId).models, currentModels, 'models from a previous upstream must not be saved after a configuration change');
 providers.find((provider) => provider.id === oauthId).baseUrl = 'https://1.1.1.1';
+process.env.DEVONE_AI_CODEX_CLIENT_ID = 'codex-test-client';
+const codexId = await saveProvider('admin', { ...input, name: 'Codex profile', providerType: 'codex', authType: 'oauth', format: 'openai-responses', alias: 'cx-test', models: ['gpt-6-astra'] });
+connections.push({ id: 'codex-account', providerId: codexId, authType: 'oauth', isActive: true, encryptedApiKey: null, encryptedAccessToken: encryptSecret('codex-secret', key), encryptedRefreshToken: null, encryptedIdToken: null, expiresAt: null, lastRefreshAt: null, providerSpecificData: { oauthConfigHash: oauthConfigFingerprint('codex', getProviderDefinition('codex').oauth), upstreamBaseUrl: input.baseUrl, chatgptAccountId: 'workspace-1' } });
+const codexModels = await fetchProviderModels('admin', { providerId: codexId, baseUrl: input.baseUrl }, async (url, init) => {
+  const h = new Headers(init.headers);
+  assert.equal(h.get('authorization'), 'Bearer codex-secret');
+  assert.equal(h.get('chatgpt-account-id'), 'workspace-1');
+  assert.equal(h.get('originator'), 'codex_cli_rs');
+  assert.equal(new URL(url).searchParams.get('client_version'), '0.159.0');
+  return Response.json({ models: [{ slug: 'gpt-6.1-sol' }, { slug: 'gpt-6-astra' }, { slug: 'gpt-image-2.5', kind: 'image' }, { slug: 'gpt-5.6-sol-image' }, { slug: 'gpt-6.1-sol' }] });
+});
+assert.deepEqual(codexModels, ['gpt-6-astra', 'gpt-6.1-sol'], 'native Codex catalog uses slug IDs and excludes image-only entries');
 await assert.rejects(fetchProviderModels('admin', { providerId, baseUrl: 'https://1.1.1.1' }, async () => { throw new Error('must not fetch'); }), /saved provider URL/);
 const state = await loadRouterState();
 assert.equal(state.providers.find((entry) => entry.id === oauthId).authHeader, 'x-api-key');

@@ -254,8 +254,47 @@ assert.throws(() => translateResponse({ id: 'r', model: 'm', content: [{ type: '
   assert.equal(sentBody?.instructions, 'You are a helpful assistant.');
   assert.equal((sentBody?.input as Record<string, unknown>[])[0].role, 'developer');
   assert.equal(sentHeaders?.get('chatgpt-account-id'), 'account-7'); assert.equal(sentHeaders?.get('authorization'), 'Bearer codex-token');
-  assert.equal(sentHeaders?.get('originator'), null); assert.equal(sentHeaders?.get('user-agent'), null);
+  assert.equal(sentHeaders?.get('originator'), 'codex_cli_rs'); assert.equal(sentHeaders?.get('user-agent'), 'codex_cli_rs/0.159.0');
+  assert.equal(sentHeaders?.get('session_id'), 'cx');
+  assert.equal(sentHeaders?.get('x-openai-internal-codex-responses-lite'), null);
   assert.equal((await response.json()).choices[0].message.content, 'OK');
+}
+// Current Sol/Luna models use Codex Responses Lite: instructions and tools move into input.
+{
+  const body = { model: 'gpt-6.1-sol', input: 'Hello', instructions: 'Be concise', tools: [{ type: 'function', name: 'weather', parameters: { type: 'object', properties: { city: { type: 'string' } } } }], include: ['reasoning.encrypted_content'] };
+  const original = structuredClone(body);
+  let sent: Record<string, unknown> | undefined, headers: Headers | undefined;
+  const route = { ...target('codex-lite', { providerType: 'codex', format: 'openai-responses' }), model: 'gpt-6.1-sol' };
+  const response = await forwardChatCompletion({ body, sourceFormat: 'openai-responses', targets: [route], apiKeyFor: () => null,
+    credentialFor: async () => ({ id: 'lite-account', providerId: 'codex-lite', authType: 'oauth', accessToken: 'lite-token' }),
+    fetchImpl: (async (_url, init) => { sent = JSON.parse(String(init?.body)); headers = new Headers(init?.headers); return sse('event: response.completed\ndata: {"type":"response.completed","response":{"id":"reply","model":"gpt-6.1-sol","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"OK","annotations":[]}]}],"usage":{"input_tokens":1,"output_tokens":1}}}\n\n'); }) as typeof fetch });
+  assert.equal(response.status, 200);
+  assert.equal(headers?.get('x-openai-internal-codex-responses-lite'), 'true');
+  assert.equal(headers?.get('session_id'), 'lite-account');
+  assert.equal(sent?.instructions, ''); assert.equal(sent?.tools, null);
+  assert.deepEqual((sent?.input as unknown[]).slice(0,2), [{ type: 'additional_tools', role: 'developer', tools: body.tools }, { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'Be concise' }] }]);
+  assert.deepEqual((sent?.input as unknown[]).at(-1), { role: 'user', content: [{ type: 'input_text', text: 'Hello' }] });
+  assert.deepEqual(sent?.include, body.include);
+  assert.equal((sent?.reasoning as Record<string, unknown>)?.context, 'all_turns');
+  assert.equal(sent?.store, false); assert.equal(sent?.stream, true);
+  assert.deepEqual(body, original, 'Lite preparation must not mutate caller instructions/tools/input');
+}
+// A native Lite prefix and additional top-level tools must both survive preparation.
+{
+  const existing = { type: 'function', name: 'existing_tool', parameters: { type: 'object' } };
+  const added = { type: 'function', name: 'new_tool', parameters: { type: 'object' } };
+  const body = { model: 'gpt-6.1-sol', instructions: '', input: [{ type: 'additional_tools', role: 'developer', tools: [existing] }, { role: 'user', content: 'Hello' }], tools: [added] };
+  const original = structuredClone(body);
+  let sent: Record<string, unknown> | undefined;
+  const route = { ...target('codex-lite', { providerType: 'codex', format: 'openai-responses' }), model: 'gpt-6.1-sol' };
+  const response = await forwardChatCompletion({ body, sourceFormat: 'openai-responses', targets: [route], apiKeyFor: () => null,
+    fetchImpl: (async (_url, init) => { sent = JSON.parse(String(init?.body)); return sse('event: response.completed\ndata: {"type":"response.completed","response":{"id":"reply","model":"gpt-6.1-sol","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}\n\n'); }) as typeof fetch });
+  assert.equal(response.status, 200);
+  const prefixes = (sent?.input as Record<string, unknown>[]).filter((item) => item.type === 'additional_tools');
+  assert.equal(prefixes.length, 1);
+  assert.deepEqual(prefixes[0].tools, [existing, added]);
+  assert.equal(sent?.tools, null);
+  assert.deepEqual(body, original);
 }
 for (const option of ['temperature', 'top_p', 'max_output_tokens', 'store', 'tools']) {
   let fetched = false;

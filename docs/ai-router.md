@@ -47,6 +47,24 @@ the model catalog is documented in [OpenCode Zen](https://opencode.ai/docs/zen/)
 
 Old `/admin?tab=ai` and `/account?tab=ai` bookmarks redirect to Router.
 
+### Local Codex sign-in
+
+Set `DEVONE_AI_CODEX_CLIENT_ID=app_EMoamEEZ73f0CkXaXp7hrann` and
+`DEVONE_AI_CODEX_REDIRECT_URI=http://localhost:1455/auth/callback`, then restart DevOne.
+These are the public client identity and loopback callback used by
+[9Router's Codex provider](https://github.com/decolua/9router/blob/master/open-sse/providers/registry/codex.js).
+Choose **Providers → Codex** to sign in with your ChatGPT account. DevOne opens its local
+callback listener before authorization, validates the saved OAuth state, and relays the code
+to the authenticated callback for encrypted account storage. Port 1455 must be free, and
+DevOne and the browser must run on the same computer. The listener expires after ten minutes.
+A separately registered client can continue using the installation's own callback URI.
+
+The Codex catalog starts with current text models from 9Router; **Refresh models** requests
+the account's native catalog with its workspace header. Image-only models are excluded from
+the chat catalog. Responses Lite models use the corresponding input prefix and header while
+preserving caller instructions/tools. Sign-in and a successful connection test confirm actual
+account access; a preset/model-list entry alone does not.
+
 Each provider account has **Test connection**. Choose one of its allowed models, run **Quick test**
 or send a message in the test chat. The dialog shows the reply, upstream errors and elapsed time.
 Its layout adapts the starter's [AI Chat design](https://github.com/Kiranism/next-shadcn-dashboard-starter/blob/main/src/features/ai-chat/components/ai-chat-demo.tsx):

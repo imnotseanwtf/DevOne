@@ -1,5 +1,7 @@
 import type { ProviderDefinition, ProviderFormat, ProviderOAuthConfig } from './types';
 
+export const CODEX_CLIENT_VERSION = '0.159.0';
+
 // Bootstrap catalog; model discovery refreshes the saved list from the account's API.
 const claudeModels: ProviderDefinition['models'] = [
   { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' },
@@ -84,9 +86,25 @@ const definitions: ProviderDefinition[] = [
       path: '/responses',
       format: 'openai-responses',
       forceStream: true,
+      headers: {
+        originator: 'codex_cli_rs',
+        'User-Agent': `codex_cli_rs/${CODEX_CLIENT_VERSION}`,
+        version: CODEX_CLIENT_VERSION
+      },
       auth: { header: 'Authorization', scheme: 'bearer' }
     },
-    models: [{ id: 'gpt-5-codex', name: 'GPT-5 Codex' }]
+    models: [
+      { id: 'gpt-6.1-sol', name: 'GPT 6.1 Sol', responsesLite: true },
+      { id: 'gpt-6-astra', name: 'GPT 6 Astra' },
+      { id: 'gpt-6-sol', name: 'GPT 6 Sol', responsesLite: true },
+      { id: 'gpt-6-luna', name: 'GPT 6 Luna', responsesLite: true },
+      { id: 'gpt-5.6-sol', name: 'GPT 5.6 Sol' },
+      { id: 'gpt-5.6-terra', name: 'GPT 5.6 Terra' },
+      { id: 'gpt-5.6-luna', name: 'GPT 5.6 Luna' },
+      { id: 'gpt-5.5', name: 'GPT 5.5' },
+      { id: 'gpt-daybreak-blue-latest', name: 'GPT Daybreak Blue' },
+      { id: 'gpt-reserve', name: 'GPT Reserve' }
+    ]
   },
   {
     id: 'ollama',
@@ -131,6 +149,11 @@ const oauthDefaults: Record<string, Omit<ProviderOAuthConfig, 'clientId'>> = {
     tokenUrl: 'https://auth.openai.com/oauth/token',
     scope: 'openid profile email offline_access',
     encoding: 'form',
+    authorizeParams: {
+      id_token_add_organizations: 'true',
+      codex_cli_simplified_flow: 'true',
+      originator: 'codex_cli_rs'
+    },
     refreshLeadMs: 600_000
   }
 };
