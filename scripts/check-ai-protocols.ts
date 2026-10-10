@@ -16,14 +16,37 @@ function sse(text: string, split = 7): Response {
 }
 const chatBody = { model: 'm', messages: [{ role: 'user', content: 'Hello' }] };
 
+// 9Router's Claude Code system block is required by consumer OAuth inference.
+const claudeCodePrompt = "You are Claude Code, Anthropic's official CLI for Claude.";
+for (const system of [undefined, 'Be concise', [{ type: 'text', text: 'Be concise', cache_control: { type: 'ephemeral' } }], [{ type: 'text', text: claudeCodePrompt }, { type: 'text', text: 'Be concise' }]]) {
+  const body = { model: 'm', max_tokens: 8, messages: [{ role: 'user', content: 'Hello' }], tools: [{ name: 'weather', input_schema: { type: 'object' } }], ...(system === undefined ? {} : { system }) };
+  const original = structuredClone(body);
+  let sent: Record<string, unknown> | undefined;
+  const response = await forwardChatCompletion({ body, sourceFormat: 'claude', targets: [target('claude-oauth', { providerType: 'claude', format: 'claude' })], apiKeyFor: () => null,
+    credentialFor: async () => ({ id: 'oauth-account', providerId: 'claude-oauth', authType: 'oauth', accessToken: 'test-token' }),
+    fetchImpl: (async (_url, init) => {
+      sent = JSON.parse(String(init?.body));
+      const blocks = sent?.system as { type: string; text: string }[] | undefined;
+      if (!Array.isArray(blocks) || !blocks.some((block) => block.type === 'text' && block.text === claudeCodePrompt)) return Response.json({ error: { type: 'rate_limit_error', message: 'Error' } }, { status: 429 });
+      return Response.json({ id: 'msg', model: 'm', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } });
+    }) as typeof fetch });
+  assert.equal(response.status, 200, 'OAuth inference must include the 9Router Claude Code system block');
+  const expected = system === undefined ? [] : typeof system === 'string' ? [{ type: 'text', text: system }] : system;
+  assert.deepEqual(sent?.system, expected.some((block) => block.text === claudeCodePrompt) ? expected : [{ type: 'text', text: claudeCodePrompt }, ...expected]);
+  assert.deepEqual(sent?.messages, body.messages);
+  assert.deepEqual(sent?.tools, body.tools);
+  assert.deepEqual(body, original, 'request preparation must not mutate the caller payload');
+}
+
 // Native Claude OAuth needs its beta header; API-key and custom transports keep their auth.
 for (const [providerType, authType] of [['claude', 'oauth'], ['claude', 'access_token'], ['claude', 'api_key'], ['anthropic', 'api_key'], ['custom', 'oauth']] as const) {
-  let sentHeaders: Headers | undefined;
+  let sentHeaders: Headers | undefined, sentBody: Record<string, unknown> | undefined;
   const response = await forwardChatCompletion({ body: chatBody, targets: [target('claude-auth', { providerType, format: 'claude', headers: { 'anthropic-beta': 'other-beta' } })], apiKeyFor: () => null,
     credentialFor: async () => ({ id: 'account', providerId: 'claude-auth', authType, accessToken: 'test-token', apiKey: 'test-key' }),
-    fetchImpl: (async (_url, init) => { sentHeaders = new Headers(init?.headers); return Response.json({ id: 'msg', model: 'm', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }); }) as typeof fetch });
+    fetchImpl: (async (_url, init) => { sentHeaders = new Headers(init?.headers); sentBody = JSON.parse(String(init?.body)); return Response.json({ id: 'msg', model: 'm', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }); }) as typeof fetch });
   assert.equal(response.status, 200);
   const oauth = providerType === 'claude' && authType !== 'api_key';
+  assert.deepEqual(sentBody?.system, oauth ? [{ type: 'text', text: claudeCodePrompt }] : undefined, 'the identity block applies only to native Claude token authentication');
   assert.equal(sentHeaders?.get('anthropic-beta'), oauth ? 'other-beta, oauth-2025-04-20' : 'other-beta');
   assert.equal(sentHeaders?.get(authType === 'api_key' ? 'x-api-key' : 'authorization'), authType === 'api_key' ? 'test-key' : 'Bearer test-token');
 }

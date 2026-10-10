@@ -57,6 +57,11 @@ Chat stays in the browser for the open dialog. Tests have a 30-second deadline a
 output limit where supported; Codex omits the unsupported token-limit field. Replies are capped
 at 8000 displayed characters so subsequent chat remains within the diagnostic message limit.
 
+Claude OAuth requests include the Claude Code system block used by
+[9Router's translator](https://github.com/decolua/9router/blob/master/open-sse/translator/request/openai-to-claude.js).
+The caller's existing instructions, messages and tools are preserved. This preparation is shared
+by gateway requests and connection tests; API-key and custom transports keep their own payloads.
+
 `bun run test:ai:chat-ui` checks exact-account selection, allowed models, quick tests, drafts,
 follow-up history, long replies, errors, cancellation, mobile layout and member authorization.
 It uses temporary database records and a local upstream on `127.0.0.1:18081`; that host must be

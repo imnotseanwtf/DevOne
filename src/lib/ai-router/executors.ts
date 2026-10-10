@@ -3,6 +3,9 @@ import { translateRequest, ProtocolError, object, type JsonObject } from './tran
 import type { ProviderCredential, ProviderFormat } from './types';
 import { prepareOpenCodeRequest } from './opencode-free';
 
+// Matches 9Router's CLAUDE_SYSTEM_PROMPT for its Claude Code OAuth transport.
+const CLAUDE_OAUTH_SYSTEM_PROMPT = "You are Claude Code, Anthropic's official CLI for Claude.";
+
 export interface ExecuteOptions {
   body: Record<string, unknown>;
   sourceFormat?: ProviderFormat;
@@ -28,7 +31,22 @@ export async function executeTarget(
 ): Promise<UpstreamExecution> {
   const provider = target.provider,
     format = provider.format ?? 'openai';
+  const tokenAuth = credential?.authType === 'oauth' || credential?.authType === 'access_token';
   let body = translateRequest(options.body, options.sourceFormat ?? 'openai', format, target.model);
+  if (provider.providerType === 'claude' && format === 'claude' && tokenAuth) {
+    if (body.system !== undefined && typeof body.system !== 'string' && !Array.isArray(body.system))
+      throw new ProtocolError('Expected Claude system instructions');
+    const system =
+      typeof body.system === 'string'
+        ? [{ type: 'text', text: body.system }]
+        : ((body.system as unknown[] | undefined)?.map((block) => object(block, 'system block')) ??
+          []);
+    body.system = system.some(
+      (block) => block.type === 'text' && block.text === CLAUDE_OAUTH_SYSTEM_PROMPT
+    )
+      ? system
+      : [{ type: 'text', text: CLAUDE_OAUTH_SYSTEM_PROMPT }, ...system];
+  }
   let openCode: ReturnType<typeof prepareOpenCodeRequest> | undefined;
   if (provider.providerType === 'opencode') {
     if (format !== 'openai') throw new ProtocolError('OpenCode Free requires the Chat format', 503);
@@ -83,7 +101,6 @@ export async function executeTarget(
   for (const [name, value] of Object.entries(openCode?.headers ?? {})) headers.set(name, value);
   if (format === 'claude' && !headers.has('anthropic-version'))
     headers.set('anthropic-version', '2023-06-01');
-  const tokenAuth = credential?.authType === 'oauth' || credential?.authType === 'access_token';
   if (
     format === 'claude' &&
     tokenAuth &&
