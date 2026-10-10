@@ -436,7 +436,8 @@ export function ProviderDialog({
                     { value: 'anthropic', label: 'Anthropic' },
                     { value: 'claude', label: 'Claude' },
                     { value: 'codex', label: 'Codex' },
-                    { value: 'ollama', label: 'Ollama' }
+                    { value: 'ollama', label: 'Ollama' },
+                    { value: 'opencode', label: 'OpenCode Free' }
                   ]}
                 />
               )}

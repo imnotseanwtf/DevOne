@@ -1,6 +1,7 @@
 import { providerUrl, type RouteTarget } from './routing';
-import { translateRequest, ProtocolError, object } from './translation';
+import { translateRequest, ProtocolError, object, type JsonObject } from './translation';
 import type { ProviderCredential, ProviderFormat } from './types';
+import { prepareOpenCodeRequest } from './opencode-free';
 
 export interface ExecuteOptions {
   body: Record<string, unknown>;
@@ -16,6 +17,8 @@ export interface UpstreamExecution {
   read: () => Promise<ReadableStreamReadResult<Uint8Array>>;
   close: () => void;
   cancel: () => void;
+  restore?: (body: JsonObject) => JsonObject;
+  finishRestore?: () => JsonObject | null;
 }
 /** One account, one request. A deadline covers fetch and JSON; streams get an idle deadline after their first byte. */
 export async function executeTarget(
@@ -25,12 +28,13 @@ export async function executeTarget(
 ): Promise<UpstreamExecution> {
   const provider = target.provider,
     format = provider.format ?? 'openai';
-  const body = translateRequest(
-    options.body,
-    options.sourceFormat ?? 'openai',
-    format,
-    target.model
-  );
+  let body = translateRequest(options.body, options.sourceFormat ?? 'openai', format, target.model);
+  let openCode: ReturnType<typeof prepareOpenCodeRequest> | undefined;
+  if (provider.providerType === 'opencode') {
+    if (format !== 'openai') throw new ProtocolError('OpenCode Free requires the Chat format', 503);
+    openCode = prepareOpenCodeRequest(body, target.connectionId ?? provider.id);
+    body = openCode.body;
+  }
   if (provider.providerType === 'codex') {
     if (format !== 'openai-responses')
       throw new ProtocolError('Codex requires the Responses format', 503);
@@ -76,6 +80,7 @@ export async function executeTarget(
     'content-type': 'application/json',
     accept: body.stream ? 'text/event-stream' : 'application/json'
   });
+  for (const [name, value] of Object.entries(openCode?.headers ?? {})) headers.set(name, value);
   if (format === 'claude' && !headers.has('anthropic-version'))
     headers.set('anthropic-version', '2023-06-01');
   const tokenAuth = credential?.authType === 'oauth' || credential?.authType === 'access_token';
@@ -166,6 +171,8 @@ export async function executeTarget(
     return {
       response,
       format,
+      restore: openCode?.restore,
+      finishRestore: openCode?.finishRestore,
       async read() {
         if (!reader) {
           close();

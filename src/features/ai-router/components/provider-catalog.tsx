@@ -16,6 +16,9 @@ import { providerAccountStats, providerPresetId } from '../provider-catalog';
 import { ProviderDialog } from './ai-providers-settings';
 import { authorizeProviderType } from './gateway-mutation';
 import { Button } from './gateway-button';
+import { connectFreeProviderAction } from '../actions';
+import { aiGatewayKeys } from '../api/queries';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ProviderCatalogProps {
   providers: AiProviderSummary[];
@@ -25,18 +28,21 @@ interface ProviderCatalogProps {
 const groupFor = (item: { presetId: string; provider?: AiProviderSummary }) => {
   if (item.presetId === 'custom') return 'custom';
   const preset = AI_PROVIDER_PRESETS.find((entry) => entry.id === item.presetId);
+  if (preset?.category === 'free') return 'free';
   const authType = item.provider?.authType ?? preset?.authType;
   return authType === 'oauth' ? 'oauth' : item.presetId === 'ollama' ? 'local' : 'api';
 };
 function ProviderMark({ type }: { type: string }) {
   const Icon =
-    type === 'openai' || type === 'codex'
-      ? Icons.openai
-      : type === 'claude' || type === 'anthropic'
-        ? Icons.sparkles
-        : type === 'gemini'
-          ? Icons.google
-          : Icons.server;
+    type === 'opencode' || type === 'opencode-zen'
+      ? Icons.terminal
+      : type === 'openai' || type === 'codex'
+        ? Icons.openai
+        : type === 'claude' || type === 'anthropic'
+          ? Icons.sparkles
+          : type === 'gemini'
+            ? Icons.google
+            : Icons.server;
   return (
     <span
       className={cn(
@@ -56,6 +62,19 @@ function ProviderMark({ type }: { type: string }) {
 export function ProviderCatalog({ providers, connections }: ProviderCatalogProps) {
   const t = useT();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const free = useMutation({
+    mutationFn: async () => {
+      const result = await connectFreeProviderAction();
+      if (!result.ok) throw new Error(result.error);
+      return result.providerId;
+    },
+    onSuccess: async (id) => {
+      await queryClient.invalidateQueries({ queryKey: aiGatewayKeys.all });
+      if (id) router.push(`/router?tab=providers&provider=${encodeURIComponent(id)}`);
+    },
+    onError: (error) => toast.error(error.message)
+  });
   const [search, setSearch] = useQueryState(
     'q',
     parseAsString.withDefault('').withOptions({ shallow: true })
@@ -99,6 +118,7 @@ export function ProviderCatalog({ providers, connections }: ProviderCatalogProps
   const groups = [
     { id: 'custom', title: t('aiRouter.workspace.customProviders') },
     { id: 'oauth', title: t('aiRouter.workspace.oauthProviders') },
+    { id: 'free', title: t('aiRouter.workspace.freeProviders') },
     { id: 'api', title: t('aiRouter.workspace.apiProviders') },
     { id: 'local', title: t('aiRouter.workspace.localProviders') }
   ];
@@ -183,7 +203,9 @@ export function ProviderCatalog({ providers, connections }: ProviderCatalogProps
                                 total: stats.total,
                                 available: stats.available
                               })
-                            : t('aiRouter.workspace.noConnections')}
+                            : item.presetId === 'opencode'
+                              ? t('aiRouter.workspace.noKeyNeeded')
+                              : t('aiRouter.workspace.noConnections')}
                           {item.provider && !item.provider.enabled && (
                             <span>{t('aiRouter.providers.off')}</span>
                           )}
@@ -207,11 +229,14 @@ export function ProviderCatalog({ providers, connections }: ProviderCatalogProps
                       key={item.id}
                       type='button'
                       className={className}
-                      disabled={oauth.isPending}
+                      disabled={oauth.isPending || free.isPending}
+                      aria-busy={(item.presetId === 'opencode' && free.isPending) || undefined}
                       onClick={() =>
-                        item.presetId === 'claude' || item.presetId === 'codex'
-                          ? oauth.mutate(item.presetId)
-                          : setAdding({ presetId: item.presetId })
+                        item.presetId === 'opencode'
+                          ? free.mutate()
+                          : item.presetId === 'claude' || item.presetId === 'codex'
+                            ? oauth.mutate(item.presetId)
+                            : setAdding({ presetId: item.presetId })
                       }
                     >
                       {content}

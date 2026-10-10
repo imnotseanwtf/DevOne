@@ -9,6 +9,7 @@ export interface AiProviderPreset {
   /** Some models to start with; "Fetch models" lists the rest. */
   models: string[];
   needsKey: boolean;
+  category?: 'free';
   /** Where to get a key, or what to know before using it. */
   hintKey: TKey;
   providerType?: string;
@@ -17,6 +18,17 @@ export interface AiProviderPreset {
 }
 
 export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
+  {
+    id: 'opencode',
+    providerType: 'opencode',
+    name: 'OpenCode Free',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    models: ['big-pickle'],
+    authType: 'none',
+    needsKey: false,
+    category: 'free',
+    hintKey: 'aiRouter.presets.opencodeFree'
+  },
   {
     id: 'opencode-zen',
     name: 'OpenCode Zen',

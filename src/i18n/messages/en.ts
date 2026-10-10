@@ -365,6 +365,8 @@ export const en = {
       },
       providerHint: 'Choose a provider to manage its accounts, credentials and models.',
       customProviders: 'Custom Providers (OpenAI / Anthropic Compatible)',
+      freeProviders: 'Free Tier Providers',
+      noKeyNeeded: 'No API key needed',
       oauthProviders: 'OAuth Providers',
       apiProviders: 'API Key Providers',
       localProviders: 'Local Providers',
@@ -492,6 +494,8 @@ export const en = {
       saved: 'Router settings saved'
     },
     presets: {
+      opencodeFree:
+        'Free OpenCode Chat models. No provider key needed; availability and free usage limits are controlled by OpenCode.',
       opencodeZen:
         'Use a key from your OpenCode Zen account. Fetch available models or enter them manually.',
       openrouter:

@@ -13,7 +13,7 @@ const id = 'router-ui-' + crypto.randomBytes(6).toString('hex');
 const token = createSessionToken();
 const longProviderName=id+'x'.repeat(60-id.length);
 const longModel='test-model-'+ 'm'.repeat(120);
-let browser, page;
+let browser, page, createdFreeProvider;
 (async()=>{
  await db.query('INSERT INTO "User" (id,provider,"providerUserId",username,role,"updatedAt") VALUES ($1,\'GITHUB\',$1,$1,\'ADMIN\',now())',[id]);
  await db.query('INSERT INTO "Session" (id,"tokenHash","userId","expiresAt") VALUES ($1,$2,$1,now()+interval \'1 hour\')',[id,hashSessionToken(token)]);
@@ -32,6 +32,23 @@ let browser, page;
  await page.waitForURL('**/router**');
  await assert.doesNotReject(()=>page.getByRole('navigation',{name:'Router'}).waitFor());
  assert.equal(await page.locator('[data-slot="sidebar"]').count(),0);
+ // A free provider has a separate catalog group and does not ask for an account key.
+ await page.getByRole('heading',{name:'Free Tier Providers',exact:true}).waitFor();
+ const freeCard=page.getByRole('button',{name:/OpenCode Free/});
+ if(await freeCard.count()) {
+   await freeCard.click();
+   await page.waitForURL(url=>url.searchParams.has('provider'));
+   createdFreeProvider=new URL(page.url()).searchParams.get('provider');
+   const saved=(await db.query('SELECT "providerType","authType",models FROM "AiProvider" WHERE id=$1',[createdFreeProvider])).rows[0];
+   assert.equal(saved.providerType,'opencode');
+   assert.equal(saved.authType,'none');
+   assert.ok(saved.models.includes('big-pickle'));
+   assert.ok(saved.models.every(model=>(model==='big-pickle'||model.endsWith('-free'))&&!model.startsWith('jev-')&&!model.includes('-contributor-free')));
+   assert.equal((await db.query('SELECT count(*)::int AS n FROM "AiConnection" WHERE "providerId"=$1 AND "authType"=\'none\'',[createdFreeProvider])).rows[0].n,1);
+   await page.getByRole('link',{name:'All providers',exact:true}).click();
+ }
+ await page.getByRole('link',{name:/OpenCode Free/}).waitFor();
+ console.log('PASS OpenCode Free group, model discovery and no-key setup');
  await page.getByRole('link',{name:new RegExp(id)}).click();
  await page.getByText(/^UI account 1/).waitFor();
  await page.getByText(/^UI account 2/).waitFor();
@@ -163,4 +180,4 @@ let browser, page;
  }
  assert.deepEqual(errors,[]);
  console.log('ALL ROUTER BROWSER CHECKS PASSED');
-})().catch(async e=>{console.error(e.message);if(page)await page.screenshot({path:'/tmp/devone-router-ui-failure.png',fullPage:true});process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();await db.query('DELETE FROM "AiCombo" WHERE name=$1',[id+'-combo']);await db.query('DELETE FROM "AiProvider" WHERE id=ANY($1::text[])',[[id,id+'-oauth']]);await db.query('DELETE FROM "AuditEvent" WHERE "actorId"=ANY($1::text[])',[[id,id+'-member']]);await db.query('DELETE FROM "User" WHERE id=ANY($1::text[])',[[id,id+'-member']]);await db.end();});
+})().catch(async e=>{console.error(e.message);if(page)await page.screenshot({path:'/tmp/devone-router-ui-failure.png',fullPage:true});process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();await db.query('DELETE FROM "AiCombo" WHERE name=$1',[id+'-combo']);await db.query('DELETE FROM "AiProvider" WHERE id=ANY($1::text[])',[[id,id+'-oauth',...(createdFreeProvider?[createdFreeProvider]:[])]]);await db.query('DELETE FROM "AuditEvent" WHERE "actorId"=ANY($1::text[])',[[id,id+'-member']]);await db.query('DELETE FROM "User" WHERE id=ANY($1::text[])',[[id,id+'-member']]);await db.end();});

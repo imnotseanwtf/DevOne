@@ -210,6 +210,7 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
         } catch {
           throw new ProtocolError('Malformed upstream JSON response', 502);
         }
+        body = execution.restore?.(body) ?? body;
         const error = upstreamError(body);
         if (error) throw error;
         const chat =

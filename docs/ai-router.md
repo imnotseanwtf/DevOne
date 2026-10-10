@@ -11,6 +11,14 @@ Open **Router** from the username menu. It has its own screen with tabs and no s
 **Providers**, **Endpoint & Keys**, **Combos**, **Usage** and **Settings**. Administrators manage
 shared providers and accounts; everyone can create their own keys under **Endpoint & Keys**.
 
+**Free Tier Providers → OpenCode Free** sets up the public OpenCode transport without a provider
+API key and discovers the current free Chat models, including Big Pickle. OpenCode controls
+availability and quotas. Models requiring the separate SystemOne or Responses upstream are
+excluded from this adapter. **OpenCode Zen** remains the separate account-key provider. External
+clients still authenticate to DevOne with their own gateway key from **Endpoint & Keys**.
+The transport follows [9Router's OpenCode adapter](https://github.com/decolua/9router/blob/master/open-sse/providers/registry/opencode.js);
+the model catalog is documented in [OpenCode Zen](https://opencode.ai/docs/zen/).
+
 1. For Claude OAuth, choose **Providers → Claude**, then **Add account** if the provider already
    exists. An unconfigured Claude card starts sign-in immediately and creates its provider.
    Approve access on the provider's page; the callback saves an encrypted account and returns

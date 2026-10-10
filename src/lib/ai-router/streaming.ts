@@ -20,6 +20,7 @@ export class SseReader {
   private data: string[] = [];
   private event = '';
   private bytes = 0;
+  private restoredEnd = false;
   constructor(private execution: UpstreamExecution) {}
   async *events(): AsyncGenerator<SseEvent> {
     while (true) {
@@ -34,20 +35,31 @@ export class SseReader {
         const line = this.text.slice(0, match.index);
         this.text = this.text.slice(match.index + match[0].length);
         const frame = this.line(line);
-        if (frame) yield frame;
+        if (frame) yield* this.complete(frame);
       }
       if (this.text.length + this.bytes > 1024 * 1024)
         throw new ProtocolError('Upstream SSE frame too large', 502);
       if (result.done) {
         if (this.text) {
           const frame = this.line(this.text);
-          if (frame) yield frame;
+          if (frame) yield* this.complete(frame);
         }
         const frame = this.line('');
-        if (frame) yield frame;
+        if (frame) yield* this.complete(frame);
+        yield* this.finalize();
         return;
       }
     }
+  }
+  private *finalize(): Generator<SseEvent> {
+    if (this.restoredEnd) return;
+    this.restoredEnd = true;
+    const payload = this.execution.finishRestore?.();
+    if (payload) yield { event: '', data: JSON.stringify(payload) };
+  }
+  private *complete(frame: SseEvent): Generator<SseEvent> {
+    if (frame.data === '[DONE]') yield* this.finalize();
+    yield frame;
   }
   private line(line: string): SseEvent | null {
     if (!line) {
@@ -55,6 +67,16 @@ export class SseReader {
       this.data = [];
       this.event = '';
       this.bytes = 0;
+      if (frame && this.execution.restore && frame.data !== '[DONE]') {
+        let parsed: JsonObject;
+        try {
+          parsed = object(JSON.parse(frame.data));
+        } catch {
+          // The normalizer reports malformed upstream data with the usual fallback policy.
+          return frame;
+        }
+        frame.data = JSON.stringify(this.execution.restore(parsed));
+      }
       return frame;
     }
     if (line.startsWith(':')) return null;

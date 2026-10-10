@@ -382,6 +382,8 @@ export const fil: MessageShape<typeof en> = {
       },
       providerHint: 'Pumili ng provider para pamahalaan ang mga account, credential at model nito.',
       customProviders: 'Mga custom provider (OpenAI / Anthropic compatible)',
+      freeProviders: 'Mga free tier provider',
+      noKeyNeeded: 'Hindi kailangan ng API key',
       oauthProviders: 'Mga OAuth provider',
       apiProviders: 'Mga API key provider',
       localProviders: 'Mga lokal na provider',
@@ -520,6 +522,8 @@ export const fil: MessageShape<typeof en> = {
       saved: 'Na-save ang mga setting ng router'
     },
     presets: {
+      opencodeFree:
+        'Mga libreng OpenCode Chat model. Hindi kailangan ng provider key; OpenCode ang nagtatakda ng availability at mga limitasyon.',
       opencodeZen:
         'Gumamit ng key mula sa OpenCode Zen account mo. Kunin ang mga model o ilagay nang mano-mano.',
       openrouter:

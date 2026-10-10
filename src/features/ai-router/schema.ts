@@ -6,7 +6,7 @@ export const providerSchema = z.object({
   id: z.string().min(1).optional(),
   name: name.regex(/^[^/\s][^/]*$/, 'A provider name cannot contain "/"'),
   providerType: z
-    .enum(['custom', 'openai', 'anthropic', 'claude', 'codex', 'ollama'])
+    .enum(['custom', 'openai', 'anthropic', 'claude', 'codex', 'ollama', 'opencode'])
     .default('custom'),
   alias: z
     .string()

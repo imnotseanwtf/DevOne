@@ -12,6 +12,7 @@ import {
 import { createAiApiKey, hashAiApiKey } from '@/lib/ai-router/keys';
 import type { AttemptFailure, ForwardOutcome } from '@/lib/ai-router/forward';
 import type { RouteTarget } from '@/lib/ai-router/routing';
+import { openCodeFreeModels } from '@/lib/ai-router/opencode-free';
 import { getProviderDefinition } from '@/lib/ai-router/registry';
 import { createCredentialManager } from '@/lib/ai-router/credentials';
 import { assertGatewayUrl } from '@/lib/ai-router/security';
@@ -302,6 +303,12 @@ export async function saveProvider(adminId: string, input: ProviderInput): Promi
     throw new AiRouterError(`"${AUTO_MODEL}" is reserved`);
 
   const models = [...new Set(input.models)];
+  if (
+    input.providerType === 'opencode' &&
+    (input.format !== 'openai' || openCodeFreeModels(models).length !== models.length)
+  ) {
+    throw new AiRouterError('OpenCode Free supports its free Chat models only');
+  }
   const apiKey = input.apiKey
     ? encryptSecret(input.apiKey, getEncryptionKey())
     : input.clearApiKey
@@ -564,9 +571,39 @@ export async function fetchProviderModels(
     throw new AiRouterError('The provider refused the API key');
   }
   if (!response.ok) throw new AiRouterError(`The provider answered HTTP ${response.status}`);
-  const models = parseModelList(await response.json().catch(() => null));
+  const listed = parseModelList(await response.json().catch(() => null));
+  const models = providerType === 'opencode' ? openCodeFreeModels(listed) : listed;
   if (models.length === 0) throw new AiRouterError('The provider listed no models');
   return models;
+}
+
+/** Create the anonymous free provider only when explicitly selected in the catalog. */
+export async function connectFreeProvider(adminId: string): Promise<string> {
+  await requireAdmin(adminId);
+  const existing = await getPrisma().aiProvider.findFirst({
+    where: { providerType: 'opencode' },
+    orderBy: { priority: 'asc' },
+    select: { id: true }
+  });
+  if (existing) return existing.id;
+  const definition = getProviderDefinition('opencode')!;
+  const models = await fetchProviderModels(adminId, {
+    providerType: 'opencode',
+    baseUrl: definition.transport.baseUrl,
+    authType: 'none',
+    format: 'openai'
+  });
+  return saveProvider(adminId, {
+    name: definition.name,
+    providerType: 'opencode',
+    alias: definition.alias,
+    baseUrl: definition.transport.baseUrl,
+    authType: 'none',
+    format: 'openai',
+    models,
+    priority: 40,
+    enabled: true
+  });
 }
 
 export async function listCombos(adminId: string) {

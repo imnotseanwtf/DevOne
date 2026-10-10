@@ -2,6 +2,20 @@ import type { ProviderDefinition, ProviderFormat, ProviderOAuthConfig } from './
 
 const definitions: ProviderDefinition[] = [
   {
+    id: 'opencode',
+    alias: 'oc',
+    name: 'OpenCode Free',
+    authTypes: ['none'],
+    transport: {
+      baseUrl: 'https://opencode.ai/zen/v1',
+      path: '/chat/completions',
+      format: 'openai',
+      forceStream: true,
+      auth: { header: 'Authorization', scheme: 'bearer' }
+    },
+    models: [{ id: 'big-pickle', name: 'Big Pickle' }]
+  },
+  {
     id: 'openai',
     alias: 'oa',
     name: 'OpenAI',

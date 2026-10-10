@@ -2,6 +2,7 @@
 
 import {
   AiRouterError,
+  connectFreeProvider,
   clearProviderCooldown,
   createApiKey,
   deleteApiKey,
@@ -49,6 +50,16 @@ export async function connectOAuthProviderAction(
     return { ok: true, url };
   } catch (error) {
     return fail(error, 'Could not start provider sign-in');
+  }
+}
+
+export async function connectFreeProviderAction(): Promise<AiRouterResult> {
+  const user = await requireUser();
+  if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
+  try {
+    return { ok: true, providerId: await connectFreeProvider(user.id) };
+  } catch (error) {
+    return fail(error, 'Could not set up OpenCode Free');
   }
 }
 
