@@ -18,6 +18,7 @@ export interface ExecuteOptions {
 export interface UpstreamExecution {
   response: Response;
   format: ProviderFormat;
+  streamed: boolean;
   read: () => Promise<ReadableStreamReadResult<Uint8Array>>;
   close: () => void;
   cancel: () => void;
@@ -267,11 +268,16 @@ export async function executeTarget(
       aborted
     ]);
     reader = response.body?.getReader();
-    const streamed = (response.headers.get('content-type') ?? '').includes('text/event-stream');
+    const contentType = response.headers.get('content-type') ?? '';
+    // Like 9Router, native Codex's required SSE transport can omit Content-Type.
+    const streamed =
+      contentType.includes('text/event-stream') ||
+      (provider.providerType === 'codex' && contentType === '');
     let firstByte = false;
     return {
       response,
       format,
+      streamed,
       restore: openCode?.restore,
       finishRestore: openCode?.finishRestore,
       async read() {

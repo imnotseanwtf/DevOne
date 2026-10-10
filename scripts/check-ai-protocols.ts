@@ -244,7 +244,55 @@ assert.throws(() => translateResponse({ id: 'r', model: 'm', content: [{ type: '
   assert.equal(response.headers.get('x-devone-provider'), 'b'); assert.deepEqual(failures, [502]);
 }
 
-// Codex uses its Responses contract and account header without adopting a first-party identity.
+// Codex omits Content-Type on valid SSE; both JSON chat and native streaming must work.
+for (const stream of [false, true]) {
+  const frames = 'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"OK","output_index":0}\n\nevent: response.completed\ndata: {"type":"response.completed","response":{"id":"codex-reply","model":"m","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"OK","annotations":[]}]}],"usage":{"input_tokens":3,"output_tokens":1}}}\n\n';
+  let outcome: ForwardOutcome | undefined;
+  const response = await forwardChatCompletion({
+    body: stream ? { model: 'm', input: 'Hello', stream: true } : chatBody,
+    sourceFormat: stream ? 'openai-responses' : 'openai',
+    targets: [target('codex-no-content-type', { providerType: 'codex', format: 'openai-responses' })],
+    apiKeyFor: () => null,
+    fetchImpl: (async () => { const upstream = sse(frames, 1); upstream.headers.delete('content-type'); return upstream; }) as typeof fetch,
+    onFinish: (value) => { outcome = value; }
+  });
+  assert.equal(response.status, 200, 'Headerless Codex event streams must not be parsed as JSON');
+  if (stream) assert.equal(await response.text(), frames, 'Native Responses events must survive without Content-Type');
+  else assert.equal((await response.json()).choices[0].message.content, 'OK');
+  assert.equal(outcome?.status, 200);
+  assert.deepEqual(outcome?.usage, { promptTokens: 3, completionTokens: 1 });
+}
+// The Codex exception must preserve explicit JSON and other providers' headerless JSON.
+for (const nativeCodex of [false, true]) {
+  const response = await forwardChatCompletion({ body: chatBody,
+    targets: [target('json-guard', nativeCodex ? { providerType: 'codex', format: 'openai-responses' } : {})], apiKeyFor: () => null,
+    fetchImpl: (async () => {
+      const upstream = nativeCodex
+        ? Response.json({ id: 'json-reply', model: 'm', output: [{ type: 'message', content: [{ type: 'output_text', text: 'JSON OK', annotations: [] }] }] })
+        : Response.json({ choices: [{ message: { role: 'assistant', content: 'JSON OK' } }] });
+      if (!nativeCodex) upstream.headers.delete('content-type');
+      return upstream;
+    }) as typeof fetch });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).choices[0].message.content, 'JSON OK');
+}
+// Headerless native error frames retain their upstream status/message.
+{
+  const response = await forwardChatCompletion({ body: chatBody, targets: [target('codex-error', { providerType: 'codex', format: 'openai-responses' })], apiKeyFor: () => null,
+    fetchImpl: (async () => { const upstream = sse('event: error\ndata: {"error":{"type":"rate_limit_error","message":"Account limit reached"}}\n\n'); upstream.headers.delete('content-type'); return upstream; }) as typeof fetch });
+  assert.equal(response.status, 429);
+  assert.match((await response.json()).error.message, /Account limit reached/);
+}
+// The same classification gives headerless Codex SSE an idle deadline, not a total deadline.
+{
+  const chunks = ['event: response.created\ndata: {"type":"response.created","response":{"id":"idle","model":"m"}}\n\n', 'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"OK","output_index":0}\n\n', 'event: response.completed\ndata: {"type":"response.completed","response":{"id":"idle","model":"m","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}\n\n'];
+  let index = 0;
+  const response = await forwardChatCompletion({ body: chatBody, targets: [target('codex-idle', { providerType: 'codex', format: 'openai-responses' })], apiKeyFor: () => null, timeoutMs: 100,
+    fetchImpl: (async () => new Response(new ReadableStream<Uint8Array>({ async pull(controller) { await new Promise((resolve) => setTimeout(resolve, 45)); if (index < chunks.length) controller.enqueue(encoder.encode(chunks[index++])); else controller.close(); } }))) as typeof fetch });
+  assert.equal(response.status, 200, 'A live headerless Codex stream must not time out after its total duration');
+  assert.equal((await response.json()).choices[0].message.content, 'OK');
+}
+// Codex uses its Responses contract and native account headers.
 {
   let sentBody: Record<string, unknown> | undefined, sentHeaders: Headers | undefined;
   const response = await forwardChatCompletion({ body: { model: 'm', messages: [{ role: 'system', content: 'Be precise' }, { role: 'user', content: 'Hello' }] }, targets: [target('cx', { providerType: 'codex', format: 'openai-responses' })], apiKeyFor: () => null,

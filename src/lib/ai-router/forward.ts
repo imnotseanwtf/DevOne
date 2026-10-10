@@ -199,10 +199,7 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
       if (!execution) throw new ProtocolError('Could not execute request', 502);
       if (!execution.response.ok)
         throw httpError(await readText(execution), execution.response.status);
-      const streamed = (execution.response.headers.get('content-type') ?? '').includes(
-        'text/event-stream'
-      );
-      if (!streamed) {
+      if (!execution.streamed) {
         const text = await readText(execution);
         let body: JsonObject;
         try {
