@@ -120,6 +120,7 @@ model User {
   auditEvents       AuditEvent[]
   aiApiKeys         AiApiKey[]
   aiUsage           AiUsage[]
+  aiOAuthSessions   AiOAuthSession[]
 
   @@unique([provider, providerUserId])
   @@index([username])
@@ -844,6 +845,10 @@ model AuditEvent {
 model AiProvider {
   id              String    @id @default(cuid())
   name            String    @unique
+  providerType    String    @default("custom")
+  alias           String?
+  format          String    @default("openai")
+  authType        String    @default("api_key")
   /// Up to and including the version, e.g. "https://openrouter.ai/api/v1".
   baseUrl         String
   /// Null for providers that need no key, such as a local Ollama.
@@ -859,6 +864,53 @@ model AiProvider {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   usage           AiUsage[]
+  connections     AiConnection[]
+  oauthSessions   AiOAuthSession[]
+}
+
+/// A provider account. All live credentials are encrypted independently of the provider definition.
+model AiConnection {
+  id                    String     @id @default(cuid())
+  providerId            String
+  name                  String
+  authType              String
+  priority              Int        @default(100)
+  isActive              Boolean    @default(true)
+  encryptedApiKey       String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  encryptedIdToken      String?
+  expiresAt             DateTime?
+  lastRefreshAt         DateTime?
+  providerSpecificData  Json       @default("{}")
+  allowedModels         String[]   @default([])
+  modelLocks            Json       @default("{}")
+  rateLimitedUntil      DateTime?
+  lastError             String?
+  lastErrorAt           DateTime?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  provider              AiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  usage                 AiUsage[]
+
+  @@index([providerId, isActive, priority])
+}
+
+/// A short-lived, single-use OAuth authorization bound to the administrator's session user.
+model AiOAuthSession {
+  id                    String     @id @default(cuid())
+  providerId            String
+  userId                String
+  stateHash             String     @unique
+  configHash            String
+  encryptedCodeVerifier String
+  redirectUri           String
+  expiresAt             DateTime
+  createdAt             DateTime   @default(now())
+  provider              AiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  user                  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
 }
 
 /// A model name clients can ask for that stands for an ordered list of
@@ -894,6 +946,7 @@ model AiUsage {
   userId           String?
   apiKeyId         String?
   providerId       String?
+  connectionId     String?
   /// Kept as text so the row still reads after the provider is removed.
   providerName     String?
   requestedModel   String
@@ -911,6 +964,7 @@ model AiUsage {
   user             User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   apiKey           AiApiKey?   @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
   provider         AiProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  connection       AiConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([providerId, createdAt])

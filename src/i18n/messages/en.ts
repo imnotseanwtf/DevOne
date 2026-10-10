@@ -343,6 +343,11 @@ export const en = {
     admin_ai_combo_add: 'added an AI combo',
     admin_ai_combo_update: 'changed an AI combo',
     admin_ai_combo_delete: 'removed an AI combo',
+    admin_ai_account_save: 'saved an AI account',
+    admin_ai_account_update: 'changed an AI account',
+    admin_ai_account_delete: 'removed an AI account',
+    admin_ai_account_connect: 'connected an AI OAuth account',
+    admin_ai_settings_update: 'changed AI router settings',
     account_ai_key_create: 'created an AI key',
     account_ai_key_delete: 'deleted an AI key'
   },
@@ -353,7 +358,7 @@ export const en = {
     providers: {
       title: 'Providers',
       description:
-        'OpenAI-compatible APIs the router can use. Keys are encrypted and never shown again.',
+        'APIs the router can use with Chat, Messages or Responses formats. Credentials are encrypted and never shown again.',
       empty: 'No providers yet. Add one to start routing requests.',
       add: 'Add provider',
       addTitle: 'Add a provider',
@@ -382,6 +387,87 @@ export const en = {
       removeDescription: 'It is also taken out of every combo that uses it.',
       saved: 'Provider saved',
       removed: 'Provider removed'
+    },
+    gateway: {
+      providerType: 'Provider type',
+      custom: 'Custom',
+      alias: 'Alias',
+      aliasHint: 'Optional short name for requests such as alias/model.',
+      format: 'Upstream format',
+      chat: 'OpenAI Chat Completions',
+      messages: 'Anthropic Messages',
+      responses: 'OpenAI Responses',
+      authType: 'Authentication',
+      accessToken: 'Access token',
+      noAuth: 'No authentication',
+      invalid: 'Check the required fields.'
+    },
+    oauth: {
+      connect: 'Connect OAuth account',
+      saveConnect: 'Save and connect',
+      saveFirst: 'Save this provider, then connect an account through OAuth.',
+      notConfigured: 'OAuth is unavailable for this provider. Ask your administrator to enable it.',
+      failed: 'Could not connect the account. Check the provider setup and try again.',
+      connected: 'OAuth account connected.',
+      managed: 'OAuth credentials are managed automatically. Reconnect to replace them.'
+    },
+    connections: {
+      title: 'Provider accounts',
+      description:
+        'Add several accounts per provider. Each account has its own priority, model access and cooldown. Credentials are encrypted and never shown.',
+      noProviders: 'Add a provider before connecting accounts.',
+      empty: 'No accounts connected yet.',
+      add: 'Add account',
+      edit: 'Edit {name}',
+      remove: 'Remove {name}?',
+      removeHint: 'This account stops serving requests. Other accounts remain available.',
+      forProvider: 'Account for {name}. Leave a saved credential empty to keep it.',
+      active: 'Active',
+      activeName: 'Enable account {name}',
+      expired: 'Expired',
+      noCredential: 'Missing credential',
+      allowedModels: 'Allowed models',
+      modelsHint: 'One model ID per line. Leave empty to allow every model this provider serves.',
+      allModels: 'All provider models allowed',
+      allowedList: 'Allowed: {models}',
+      cooldown: 'Cooling down until {time}',
+      expires: 'Expires {time}',
+      priorityHint: 'Lower numbers are tried first among this provider’s accounts.',
+      secretHint: 'Enter this account’s API key or access token.',
+      saved: 'Account saved'
+    },
+    settings: {
+      title: 'Router settings',
+      description:
+        'Choose the default model and control large tool results before they reach a provider.',
+      defaultModel: 'Default model',
+      defaultHint:
+        'Fallback when no provider serves the requested model name. Enter auto, a combo or provider/model; leave empty to reject unknown names.',
+      compress: 'Compress tool output',
+      compressHint: 'Shorten large tool result text while keeping tool IDs and request structure.',
+      limit: 'Maximum tool output characters',
+      limitHint: 'Text over this limit is shortened when compression is enabled.',
+      saved: 'Router settings saved'
+    },
+    presets: {
+      opencodeZen:
+        'Use a key from your OpenCode Zen account. Fetch available models or enter them manually.',
+      openrouter:
+        'Use a key from your OpenRouter account. Fetch available models or enter them manually.',
+      groq: 'Use a key from your Groq account. Fetch available models or enter them manually.',
+      gemini: 'Use a key from Google AI Studio with the OpenAI-compatible endpoint.',
+      cerebras:
+        'Use a key from your Cerebras account. Fetch available models or enter them manually.',
+      mistral:
+        'Use a key from your Mistral account. Fetch available models or enter them manually.',
+      deepseek:
+        'Use a key from your DeepSeek account. Fetch available models or enter them manually.',
+      ollama: 'Use the local model server address as seen by the DevOne server.',
+      custom: 'Configure an API that supports one of the available upstream formats.',
+      openai: 'Use an OpenAI API key. Fetch available models or enter them manually.',
+      anthropic: 'Use an Anthropic API key with the Messages format.',
+      oauth:
+        'Connect through an OAuth application enabled by your administrator. Enter models manually if discovery is unavailable.'
     },
     combos: {
       title: 'Combos',
@@ -420,6 +506,7 @@ export const en = {
       model: 'Model',
       tries: 'Tries',
       status: 'Status',
+      savedChars: 'Saved characters',
       noProvider: 'None answered'
     },
     keys: {

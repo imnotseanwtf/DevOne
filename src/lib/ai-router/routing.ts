@@ -1,3 +1,5 @@
+import type { ProviderAuthType, ProviderFormat } from './types';
+
 /**
  * How the AI router picks where a request goes, and when it moves on. Pure
  * functions, so they are checked without a database or network.
@@ -11,6 +13,15 @@ export interface RouterProvider {
   priority: number;
   enabled: boolean;
   cooldownUntil: Date | null;
+  providerType?: string;
+  alias?: string;
+  format?: ProviderFormat;
+  authType?: ProviderAuthType;
+  upstreamPath?: string;
+  authHeader?: string;
+  authScheme?: 'raw' | 'bearer';
+  headers?: Record<string, string>;
+  forceStream?: boolean;
 }
 
 // A type, not an interface, so a list of steps can be stored as Prisma JSON.
@@ -27,6 +38,7 @@ export interface RouterCombo {
 export interface RouteTarget {
   provider: RouterProvider;
   model: string;
+  connectionId?: string;
 }
 
 /** Asking for this model tries every enabled provider's first model, by priority. */
@@ -40,7 +52,10 @@ function splitProviderModel(requested: string, providers: RouterProvider[]) {
   const slash = requested.indexOf('/');
   if (slash <= 0) return null;
   const prefix = requested.slice(0, slash).toLowerCase();
-  const provider = providers.find((candidate) => candidate.name.toLowerCase() === prefix);
+  const provider = providers.find(
+    (candidate) =>
+      candidate.name.toLowerCase() === prefix || candidate.alias?.toLowerCase() === prefix
+  );
   return provider ? { provider, model: requested.slice(slash + 1) } : null;
 }
 
@@ -94,6 +109,7 @@ export function listModelIds(providers: RouterProvider[], combos: RouterCombo[])
     for (const model of provider.models) {
       ids.add(model);
       ids.add(`${provider.name}/${model}`);
+      if (provider.alias) ids.add(`${provider.alias}/${model}`);
     }
   }
   return [...ids];
@@ -201,5 +217,5 @@ export function parseModelList(value: unknown): string[] {
   const ids = data
     .map((entry) => (entry as { id?: unknown } | null)?.id)
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
-  return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+  return [...new Set(ids)].toSorted((a, b) => a.localeCompare(b));
 }

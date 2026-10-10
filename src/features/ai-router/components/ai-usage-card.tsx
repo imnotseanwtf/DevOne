@@ -65,6 +65,7 @@ export async function AiUsageCard({ usage }: { usage: AiUsageOverview }) {
                   <TableHead>{t('aiRouter.usage.provider')}</TableHead>
                   <TableHead className='text-right'>{t('aiRouter.usage.tries')}</TableHead>
                   <TableHead>{t('aiRouter.usage.status')}</TableHead>
+                  <TableHead className='text-right'>{t('aiRouter.usage.savedChars')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -89,6 +90,9 @@ export async function AiUsageCard({ usage }: { usage: AiUsageOverview }) {
                       >
                         {row.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      {number.format(row.savedChars ?? 0)}
                     </TableCell>
                   </TableRow>
                 ))}

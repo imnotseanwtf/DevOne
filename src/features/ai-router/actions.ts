@@ -10,15 +10,26 @@ import {
   fetchProviderModels,
   saveCombo,
   saveProvider,
-  setProviderEnabled
+  setProviderEnabled,
+  saveConnection,
+  deleteConnection,
+  setConnectionEnabled,
+  clearConnectionCooldown,
+  saveRouterSettings
 } from '@/features/ai-router/service';
-import { comboSchema, fetchModelsSchema, providerSchema } from '@/features/ai-router/schema';
+import {
+  comboSchema,
+  fetchModelsSchema,
+  providerSchema,
+  connectionSchema,
+  routerSettingsSchema
+} from '@/features/ai-router/schema';
 import { requireUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-export type AiRouterResult = { ok: true } | { ok: false; error: string };
+export type AiRouterResult = { ok: true; providerId?: string } | { ok: false; error: string };
 
 function fail(error: unknown, fallback: string): { ok: false; error: string } {
   return { ok: false, error: error instanceof AiRouterError ? error.message : fallback };
@@ -45,7 +56,15 @@ async function run(
 export async function saveProviderAction(input: unknown): Promise<AiRouterResult> {
   const parsed = providerSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
-  return run((userId) => saveProvider(userId, parsed.data), 'Could not save the provider');
+  const user = await requireUser();
+  if (isDemoMode()) return { ok: false, error: DEMO_DISABLED_MESSAGE };
+  try {
+    const providerId = await saveProvider(user.id, parsed.data);
+    revalidatePath('/admin');
+    return { ok: true, providerId };
+  } catch (error) {
+    return fail(error, 'Could not save the provider');
+  }
 }
 
 export async function setProviderEnabledAction(input: unknown): Promise<AiRouterResult> {
@@ -126,4 +145,45 @@ export async function deleteApiKeyAction(input: unknown): Promise<AiRouterResult
     'Could not delete the key',
     '/account'
   );
+}
+
+export async function saveConnectionAction(input: unknown): Promise<AiRouterResult> {
+  const parsed = connectionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  return run((userId) => saveConnection(userId, parsed.data), 'Could not save the account');
+}
+
+export async function deleteConnectionAction(input: unknown): Promise<AiRouterResult> {
+  const parsed = z.object({ connectionId: z.string().min(1) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Invalid account' };
+  return run(
+    (userId) => deleteConnection(userId, parsed.data.connectionId),
+    'Could not remove the account'
+  );
+}
+
+export async function setConnectionEnabledAction(input: unknown): Promise<AiRouterResult> {
+  const parsed = z
+    .object({ connectionId: z.string().min(1), isActive: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Invalid account' };
+  return run(
+    (userId) => setConnectionEnabled(userId, parsed.data.connectionId, parsed.data.isActive),
+    'Could not update the account'
+  );
+}
+
+export async function clearConnectionCooldownAction(input: unknown): Promise<AiRouterResult> {
+  const parsed = z.object({ connectionId: z.string().min(1) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Invalid account' };
+  return run(
+    (userId) => clearConnectionCooldown(userId, parsed.data.connectionId),
+    'Could not update the account'
+  );
+}
+
+export async function saveRouterSettingsAction(input: unknown): Promise<AiRouterResult> {
+  const parsed = routerSettingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  return run((userId) => saveRouterSettings(userId, parsed.data), 'Could not save router settings');
 }

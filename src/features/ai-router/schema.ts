@@ -5,6 +5,18 @@ const name = z.string().trim().min(1, 'Enter a name').max(60, 'Use at most 60 ch
 export const providerSchema = z.object({
   id: z.string().min(1).optional(),
   name: name.regex(/^[^/\s][^/]*$/, 'A provider name cannot contain "/"'),
+  providerType: z
+    .enum(['custom', 'openai', 'anthropic', 'claude', 'codex', 'ollama'])
+    .default('custom'),
+  alias: z
+    .string()
+    .trim()
+    .regex(/^[a-zA-Z][\w-]*$/)
+    .max(30)
+    .nullable()
+    .optional(),
+  format: z.enum(['openai', 'claude', 'openai-responses']).default('openai'),
+  authType: z.enum(['api_key', 'oauth', 'access_token', 'none']).default('api_key'),
   baseUrl: z.string().trim().min(1, 'Enter the base URL').max(500),
   /** Empty keeps the saved key when editing; `clearApiKey` removes it. */
   apiKey: z.string().trim().max(1000).optional(),
@@ -32,5 +44,25 @@ export type ComboInput = z.infer<typeof comboSchema>;
 export const fetchModelsSchema = z.object({
   providerId: z.string().min(1).optional(),
   baseUrl: z.string().trim().min(1).max(500),
-  apiKey: z.string().trim().max(1000).optional()
+  apiKey: z.string().trim().max(10000).optional(),
+  providerType: providerSchema.shape.providerType.optional(),
+  format: providerSchema.shape.format.optional(),
+  authType: providerSchema.shape.authType.optional()
+});
+
+export const connectionSchema = z.object({
+  id: z.string().min(1).optional(),
+  providerId: z.string().min(1),
+  name,
+  authType: z.enum(['api_key', 'oauth', 'access_token', 'none']),
+  apiKey: z.string().trim().max(10000).optional(),
+  priority: z.number().int().min(0).max(10000),
+  isActive: z.boolean(),
+  allowedModels: z.array(z.string().trim().min(1).max(200)).max(500).default([])
+});
+
+export const routerSettingsSchema = z.object({
+  defaultModel: z.string().trim().max(200).nullable(),
+  compressToolOutput: z.boolean(),
+  maxToolOutputChars: z.number().int().min(100).max(1000000)
 });

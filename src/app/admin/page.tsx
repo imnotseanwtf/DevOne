@@ -5,7 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UsersTable } from '@/features/admin/components/users-table';
 import { AiCombosSettings } from '@/features/ai-router/components/ai-combos-settings';
-import { AiProvidersSettings } from '@/features/ai-router/components/ai-providers-settings';
+import { AiGatewayPanel } from '@/features/ai-router/components/ai-gateway-panel';
+import { gatewayAdminQueryOptions } from '@/features/ai-router/api/queries';
+import { getQueryClient } from '@/lib/query-client';
+import { HydrationBoundary, dehydrate } from '@tanstack/react-query';
+import { Suspense } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AiUsageCard } from '@/features/ai-router/components/ai-usage-card';
 import { routerEndpoint } from '@/features/ai-router/endpoint';
 import { listCombos, listProviders, usageOverview } from '@/features/ai-router/service';
@@ -22,7 +27,7 @@ const TABS = ['users', 'ai', 'policy', 'audit'] as const;
 type AdminTab = (typeof TABS)[number];
 
 interface AdminPageProps {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; aiOAuth?: string }>;
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
@@ -30,7 +35,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   // Not "forbidden": to anyone else the page simply doesn't exist.
   if (user.role !== 'ADMIN') notFound();
   const t = await getT();
-  const { tab } = await searchParams;
+  const { tab, aiOAuth } = await searchParams;
   const active: AdminTab = TABS.includes(tab as AdminTab) ? (tab as AdminTab) : 'users';
 
   return (
@@ -43,7 +48,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           tabs={TABS.map((id) => ({ id, label: t(`admin.tabs.${id}`) }))}
         />
         {active === 'users' && <UsersTab adminId={user.id} />}
-        {active === 'ai' && <AiRouterTab adminId={user.id} />}
+        {active === 'ai' && <AiRouterTab adminId={user.id} oauthResult={aiOAuth} />}
         {active === 'policy' && <PolicyTab />}
         {active === 'audit' && <AuditTab adminId={user.id} />}
       </div>
@@ -64,11 +69,13 @@ async function UsersTab({ adminId }: { adminId: string }) {
   );
 }
 
-async function AiRouterTab({ adminId }: { adminId: string }) {
+async function AiRouterTab({ adminId, oauthResult }: { adminId: string; oauthResult?: string }) {
   const t = await getT();
   if (isDemoMode()) {
     return <p className='text-muted-foreground text-sm'>{t('aiRouter.keys.disabledInDemo')}</p>;
   }
+  const queryClient = getQueryClient();
+  void queryClient.prefetchQuery(gatewayAdminQueryOptions(adminId));
   const [providers, combos, usage, endpoint] = await Promise.all([
     listProviders(adminId),
     listCombos(adminId),
@@ -84,7 +91,11 @@ async function AiRouterTab({ adminId }: { adminId: string }) {
           <code className='bg-muted rounded px-1.5 py-0.5'>{endpoint}</code>
         </p>
       </div>
-      <AiProvidersSettings providers={providers} />
+      <HydrationBoundary state={dehydrate(queryClient)}>
+        <Suspense fallback={<Skeleton className='h-72 w-full' />}>
+          <AiGatewayPanel userId={adminId} oauthResult={oauthResult} />
+        </Suspense>
+      </HydrationBoundary>
       <AiCombosSettings combos={combos} providers={providers} />
       <AiUsageCard usage={usage} />
     </div>

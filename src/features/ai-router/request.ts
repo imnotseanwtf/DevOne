@@ -3,15 +3,23 @@ import {
   loadRouterState,
   recordProviderFailure,
   recordUsage,
+  gatewayFetch,
   type RouterCaller
 } from '@/features/ai-router/service';
-import { forwardChatCompletion, routerError } from '@/lib/ai-router/forward';
+import { forwardChatCompletion, routerError, type ForwardOutcome } from '@/lib/ai-router/forward';
 import { readAiApiKey } from '@/lib/ai-router/keys';
 import { aiRateLimit, createRateLimiter } from '@/lib/ai-router/rate-limit';
 import { listModelIds, resolveTargets } from '@/lib/ai-router/routing';
 import { getCurrentUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { isSameOrigin } from '@/lib/http/same-origin';
+import {
+  compressToolMessages,
+  GatewayRequestError,
+  readGatewayBody
+} from '@/lib/ai-router/security';
+import type { ProviderFormat } from '@/lib/ai-router/types';
+import { after } from 'next/server';
 
 const limiter = createRateLimiter(aiRateLimit());
 
@@ -25,6 +33,9 @@ async function authenticate(request: Request): Promise<RouterCaller | Response> 
   if (key) {
     const caller = await findCallerByKey(key);
     return caller ?? routerError(401, 'Invalid API key', 'invalid_api_key');
+  }
+  if (request.headers.has('authorization') || request.headers.has('x-api-key')) {
+    return routerError(401, 'Invalid gateway API key', 'invalid_api_key');
   }
   if (request.method !== 'GET' && !isSameOrigin(request)) {
     return routerError(
@@ -56,7 +67,10 @@ export async function handleModels(request: Request): Promise<Response> {
   });
 }
 
-export async function handleChatCompletion(request: Request): Promise<Response> {
+export async function handleChatCompletion(
+  request: Request,
+  sourceFormat: ProviderFormat = 'openai'
+): Promise<Response> {
   if (isDemoMode()) return routerError(403, DEMO_DISABLED_MESSAGE, 'demo_mode');
   const caller = await authenticate(request);
   if (caller instanceof Response) return caller;
@@ -64,15 +78,31 @@ export async function handleChatCompletion(request: Request): Promise<Response> 
     return routerError(429, 'Too many requests. Wait a minute and try again.', 'rate_limited');
   }
 
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return routerError(400, 'The body must be a JSON object', 'invalid_request');
+  let body: Record<string, unknown>;
+  try {
+    body = await readGatewayBody(request);
+  } catch (error) {
+    return routerError(
+      error instanceof GatewayRequestError ? error.status : 400,
+      error instanceof Error ? error.message : 'Invalid request',
+      'invalid_request'
+    );
   }
   if (typeof body.model !== 'string' || !body.model.trim()) {
     return routerError(400, 'Say which "model" to use', 'invalid_request');
   }
-  if (!Array.isArray(body.messages)) {
-    return routerError(400, '"messages" must be an array', 'invalid_request');
+  // Validate the envelope here; the executor validates translation for each target format.
+  // Native options (for example encrypted reasoning) must survive native routing.
+  const conversation = sourceFormat === 'openai-responses' ? body.input : body.messages;
+  if (
+    !(Array.isArray(conversation) && conversation.length) &&
+    !(
+      sourceFormat === 'openai-responses' &&
+      typeof conversation === 'string' &&
+      conversation.trim()
+    )
+  ) {
+    return routerError(400, 'A nonempty conversation is required', 'invalid_request');
   }
 
   const requested = body.model.trim();
@@ -84,13 +114,49 @@ export async function handleChatCompletion(request: Request): Promise<Response> 
       'no_providers'
     );
   }
+  let selectedModel = requested;
+  let targets = resolveTargets(selectedModel, state.providers, state.combos);
+  const configured =
+    state.combos.some((combo) => combo.name === requested) ||
+    resolveTargets(
+      requested,
+      state.providers.map((provider) => ({ ...provider, enabled: true })),
+      state.combos
+    ).length > 0;
+  // Model defaults apply only to unknown models, never override a known exhausted account.
+  if (
+    !targets.length &&
+    !configured &&
+    state.settings.defaultModel &&
+    selectedModel !== state.settings.defaultModel
+  ) {
+    selectedModel = state.settings.defaultModel;
+    targets = resolveTargets(selectedModel, state.providers, state.combos);
+  }
+  const compressed =
+    state.settings.compressToolOutput && request.headers.get('x-devone-token-saver') !== 'off'
+      ? compressToolMessages(body, state.settings.maxToolOutputChars)
+      : { body, savedChars: 0 };
+  body = { ...compressed.body, model: selectedModel };
   const startedAt = Date.now();
+  let complete!: (outcome: ForwardOutcome) => void;
+  const finished = new Promise<ForwardOutcome>((resolve) => {
+    complete = resolve;
+  });
+  // Register while the route's request scope is active; the outcome resolves at stream completion.
+  after(async () =>
+    recordUsage(caller, requested, startedAt, await finished, compressed.savedChars)
+  );
   return forwardChatCompletion({
     body,
-    targets: resolveTargets(requested, state.providers, state.combos),
+    targets: state.targetsFor(targets),
     apiKeyFor: state.apiKeyFor,
     signal: request.signal,
+    sourceFormat,
+    credentialFor: state.credentialFor,
+    refreshCredential: state.refreshCredential,
+    fetchImpl: gatewayFetch,
     onFailure: recordProviderFailure,
-    onFinish: (outcome) => recordUsage(caller, requested, startedAt, outcome)
+    onFinish: complete
   });
 }
