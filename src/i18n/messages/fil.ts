@@ -371,6 +371,7 @@ export const fil: MessageShape<typeof en> = {
   aiRouter: {
     workspace: {
       title: 'Router',
+      backToProjects: 'Bumalik sa mga proyekto',
       description:
         'Ikonekta ang iyong mga AI account at gamitin ang iisang endpoint para sa bawat tool.',
       tabs: {

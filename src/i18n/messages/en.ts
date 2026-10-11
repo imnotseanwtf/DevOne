@@ -355,6 +355,7 @@ export const en = {
   aiRouter: {
     workspace: {
       title: 'Router',
+      backToProjects: 'Back to projects',
       description: 'Connect your AI accounts and route every tool through one endpoint.',
       tabs: {
         providers: 'Providers',
