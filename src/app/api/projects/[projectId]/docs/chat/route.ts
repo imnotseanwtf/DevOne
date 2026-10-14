@@ -24,6 +24,8 @@ const bodySchema = z.object({
   currentSlug: z.string().max(200).optional(),
   /** The open page as it is in the editor right now, which may be ahead of what is saved. */
   currentBody: z.string().max(200_000).optional(),
+  /** The passage the person is pointing at in the page, if any. */
+  focus: z.string().max(2_000).optional(),
   /** A router model name; "auto" unless the person picked one. */
   model: z.string().trim().min(1).max(200).default('auto')
 });
@@ -51,7 +53,7 @@ export async function POST(
       'invalid_request'
     );
   }
-  const { messages, currentSlug, currentBody, model } = parsed.data;
+  const { messages, currentSlug, currentBody, focus, model } = parsed.data;
   const last = messages.at(-1);
   if (last?.role !== 'user') return routerError(400, 'End with a question', 'invalid_request');
 
@@ -92,7 +94,8 @@ export async function POST(
           project.projectName,
           excerpts,
           messages,
-          editable ? current?.title : undefined
+          editable ? current?.title : undefined,
+          focus
         )
       }),
       signal: request.signal

@@ -1,6 +1,7 @@
 'use client';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DocInlineAi } from '@/features/docs-chat/components/doc-inline-ai';
 import { useOptionalDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
 import { RichMarkdownEditor } from '@/components/rich-markdown-editor';
 import { Button } from '@/components/ui/button';
@@ -359,6 +360,7 @@ export function DocEditor({
             />
           )}
         </form.Field>
+        <DocInlineAi projectId={projectId} docId={docId} title={title} />
       </form.AppForm>
     </div>
   );

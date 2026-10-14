@@ -90,7 +90,7 @@ export function DocsChat({
   currentSlug?: string;
   currentTitle?: string;
 }) {
-  const { open, setOpen, getBridge } = useDocsAssistant();
+  const { open, setOpen, getBridge, hovered, setHovered } = useDocsAssistant();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -130,7 +130,8 @@ export function DocsChat({
         body: JSON.stringify({
           messages: history.map(({ role, content }) => ({ role, content })),
           currentSlug,
-          currentBody: bridge?.getMarkdown()
+          currentBody: bridge?.getMarkdown(),
+          focus: hovered && hovered.docId === bridge?.docId ? hovered.text : undefined
         }),
         signal: controller.signal
       });
@@ -199,7 +200,7 @@ export function DocsChat({
   };
 
   return (
-    <Card className='sticky top-4 flex h-[calc(100svh-8rem)] min-h-96 w-full flex-col gap-0 self-start overflow-hidden py-0 lg:w-96'>
+    <Card className='sticky top-4 flex h-[calc(100svh-15rem)] min-h-96 w-full flex-col gap-0 self-start overflow-hidden py-0 lg:w-96'>
       <div className='flex items-start justify-between gap-2 border-b p-3'>
         <div className='min-w-0'>
           <p className='flex items-center gap-1.5 text-sm font-medium'>
@@ -359,6 +360,24 @@ export function DocsChat({
         )}
       </div>
 
+      {hovered && hovered.docId === getBridge()?.docId && (
+        <div className='bg-muted/50 mx-3 mb-0 flex items-start gap-2 rounded-lg border px-2.5 py-1.5 text-xs'>
+          <Icons.sparkles className='text-muted-foreground mt-0.5 size-3 shrink-0' />
+          <p className='min-w-0 flex-1'>
+            <span className='text-muted-foreground'>Pointing at: </span>
+            <span className='line-clamp-2'>“{hovered.text}”</span>
+          </p>
+          <button
+            type='button'
+            onClick={() => setHovered(null)}
+            className='text-muted-foreground hover:text-foreground shrink-0'
+            aria-label='Stop pointing at this passage'
+          >
+            <Icons.close className='size-3' />
+          </button>
+        </div>
+      )}
+
       <form
         className='flex items-end gap-2 border-t p-3'
         onSubmit={(event) => {
@@ -375,7 +394,7 @@ export function DocsChat({
               void ask(input);
             }
           }}
-          placeholder='Ask, or say what to change…'
+          placeholder={hovered ? 'Ask about the passage above…' : 'Ask, or say what to change…'}
           rows={2}
           maxLength={8000}
           className='min-h-0 flex-1 resize-none'

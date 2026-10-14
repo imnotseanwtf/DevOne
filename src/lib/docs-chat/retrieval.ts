@@ -164,7 +164,9 @@ export function buildChatMessages(
   excerpts: Excerpt[],
   history: ChatMessage[],
   /** Title of the open page when the assistant may propose a rewrite of it. */
-  editablePage?: string
+  editablePage?: string,
+  /** A passage the person is pointing at, so "this" and "here" mean something. */
+  focus?: string
 ): { role: 'system' | 'user' | 'assistant'; content: string }[] {
   const context = excerpts.length
     ? excerpts.map((excerpt) => `### Page: ${excerpt.title}\n${excerpt.text}`).join('\n\n')
@@ -184,6 +186,13 @@ export function buildChatMessages(
           '...the whole page...',
           '````',
           'Keep everything they did not ask you to change exactly as it is. Never say the page was changed. For questions that do not ask for an edit, just answer.'
+        ]
+      : []),
+    ...(focus
+      ? [
+          '',
+          'The person is pointing at this passage of the open page. Words like "this", "here" or "that paragraph" refer to it:',
+          `<focus>\n${focus}\n</focus>`
         ]
       : []),
     '',

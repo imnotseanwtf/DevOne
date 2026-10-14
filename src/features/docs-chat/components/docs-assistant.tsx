@@ -11,7 +11,15 @@ export interface DocBridge {
   replaceMarkdown(markdown: string): void;
 }
 
+/** The passage of the open page the mouse last rested on. */
+export interface Hovered {
+  docId: string;
+  text: string;
+}
+
 interface AssistantContext {
+  hovered: Hovered | null;
+  setHovered(hovered: Hovered | null): void;
   open: boolean;
   setOpen(open: boolean): void;
   register(bridge: DocBridge | null): void;
@@ -23,14 +31,15 @@ const Context = createContext<AssistantContext | null>(null);
 /** Connects the docs editor and the chat panel, which sit side by side. */
 export function DocsAssistantProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState<Hovered | null>(null);
   const bridge = useRef<DocBridge | null>(null);
   const register = useCallback((next: DocBridge | null) => {
     bridge.current = next;
   }, []);
   const getBridge = useCallback(() => bridge.current, []);
   const value = useMemo(
-    () => ({ open, setOpen, register, getBridge }),
-    [open, register, getBridge]
+    () => ({ open, setOpen, hovered, setHovered, register, getBridge }),
+    [open, hovered, register, getBridge]
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

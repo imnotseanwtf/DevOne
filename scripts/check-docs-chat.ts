@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { cleanBlockAnswer, replaceBlock, splitBlocks } from '../src/lib/docs-chat/blocks';
 import { splitAnswer, summarizeChange } from '../src/lib/docs-chat/proposal';
 import {
   buildChatMessages,
@@ -104,5 +105,40 @@ assert.deepEqual(streaming, { prose: 'Working on it.', proposal: null, writing: 
 assert.equal(splitAnswer('x\n```devone-doc\nbody\n```\nThat is all.').prose, 'x\n\nThat is all.');
 assert.deepEqual(summarizeChange('a\nb\nc', 'a\nc\nd\ne'), { added: 2, removed: 1 });
 assert.deepEqual(summarizeChange('same', 'same'), { added: 0, removed: 0 });
+
+// The passage the person points at is given to the model as context, not as a command.
+const pointed = buildChatMessages('Demo', whole, [], undefined, 'Lunch is at noon.')[0].content;
+assert.match(pointed, /<focus>\nLunch is at noon\.\n<\/focus>/);
+assert.match(pointed, /refer to it/);
+assert.doesNotMatch(buildChatMessages('Demo', whole, [])[0].content, /<focus>/);
+
+// Blocks: top-level Markdown pieces, in editor order, replaced without touching the rest.
+const page = '# Title\n\nPara one\nline two\n\n- a\n- b\n\n```sh\nx\n\ny\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n> quote\n\nlast\n';
+const blocks = splitBlocks(page);
+assert.deepEqual(
+  blocks.map((block) => block.raw),
+  ['# Title', 'Para one\nline two', '- a\n- b', '```sh\nx\n\ny\n```', '| a | b |\n|---|---|\n| 1 | 2 |', '> quote', 'last']
+);
+assert.ok(blocks.every((block) => page.startsWith(block.raw, block.start)));
+assert.equal(
+  replaceBlock(page, 1, '  Para one, reworded.  '),
+  page.replace('Para one\nline two', 'Para one, reworded.')
+);
+assert.equal(replaceBlock(page, 6, 'first\n\nsecond').endsWith('first\n\nsecond\n'), true);
+assert.equal(
+  replaceBlock(page, 3, '```sh\nz\n```').includes('```sh\nz\n```\n\n| a | b |'),
+  true,
+  'a code block with a blank line inside is one block'
+);
+assert.throws(() => replaceBlock(page, 9, 'x'), /no longer exists/);
+assert.deepEqual(splitBlocks(''), []);
+
+// A fenced answer is unwrapped; plain Markdown (even with its own fence) is left alone.
+assert.equal(cleanBlockAnswer('```markdown\nHello **world**\n```'), 'Hello **world**');
+assert.equal(cleanBlockAnswer('  Hello  '), 'Hello');
+assert.equal(
+  cleanBlockAnswer('Run:\n\n```sh\nbun test\n```'),
+  'Run:\n\n```sh\nbun test\n```'
+);
 
 console.log('Docs chat checks passed');

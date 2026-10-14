@@ -23,3 +23,12 @@ export async function loadProjectDocs(
   if (!project) throw new DocsChatAccessError();
   return { projectName: project.name, docs: project.docs };
 }
+
+/** Throws unless the person belongs to the project; the inline editor needs no page contents. */
+export async function requireDocsMember(userId: string, projectId: string): Promise<void> {
+  const member = await getPrisma().projectMember.findFirst({
+    where: { projectId, userId },
+    select: { id: true }
+  });
+  if (!member) throw new DocsChatAccessError();
+}

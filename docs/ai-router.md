@@ -159,6 +159,14 @@ the pages it used shown as links under each answer.
   when the model saw the whole page (a page too long for the budget can be questioned, not
   rewritten), and it cannot be applied after you switch to a different page. It can change the
   page's text, not its title, and it cannot touch other pages.
+- **Hover to edit a block.** Move the mouse over a paragraph, heading, list, code block or table
+  in the editor: it is outlined and a small AI button appears. Click it, say what to change
+  ("make this shorter", "translate to Filipino"), and press Enter. Only that block is rewritten,
+  straight in the editor, and the page saves as usual. **Undo** puts the old block back. If the
+  page changes while the model is working, the edit is dropped instead of landing in the wrong
+  place.
+- **Hover to ask.** The text you last pointed at appears above the chat box as "Pointing at", so
+  "this" and "here" in your question mean that passage. Click the × to stop pointing.
 - **Who may ask.** The server picks the excerpts, so only members of a project can ask about it.
   Requests count against the same per-person rate limit as the router and show up in
   Admin → AI router → Usage.
