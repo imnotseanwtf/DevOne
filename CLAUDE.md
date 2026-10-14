@@ -10,6 +10,7 @@ This is a Next.js 16 + shadcn/ui admin dashboard starter kit.
 - **[docs/tech-stack.md](./docs/tech-stack.md)** — Every framework, library and service in use, and what each is for
 - **[docs/deployment.md](./docs/deployment.md)** — Deployment: Vercel, production environment variables, Docker
 - **[docs/desktop.md](./docs/desktop.md)** — Desktop app: Electron shell, bundled server, installers
+- **[docs/ai-router.md](./docs/ai-router.md)** — AI router: OpenAI-compatible endpoint with provider fallback, combos, personal keys
 
 ## Critical Conventions
 
