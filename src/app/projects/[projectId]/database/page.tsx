@@ -13,6 +13,8 @@ import { AddConnectionDialog } from '@/features/database/components/add-connecti
 import { CollapsibleSidebar } from '@/features/database/components/collapsible-sidebar';
 import { DatabaseBrowser } from '@/features/database/components/database-browser';
 import { DeleteConnectionButton } from '@/features/database/components/delete-connection-button';
+import { EngineIcon } from '@/features/database/components/engine-icon';
+import { DocumentExplorer } from '@/features/database/components/document-explorer';
 import { EditConnectionDialog } from '@/features/database/components/edit-connection-dialog';
 import { ErdViewer } from '@/features/database/components/erd-viewer';
 import { ConnectionStatus } from '@/features/database/components/connection-status';
@@ -31,7 +33,12 @@ import { listProjectsForUser } from '@/features/projects/service';
 import { listResources } from '@/features/resources/service';
 import type { ConnectionResourceOption } from '@/features/database/components/connection-form';
 import { requireUser } from '@/lib/auth/session';
-import type { Table } from '@/lib/database/types';
+import {
+  isSqlProvider,
+  PROVIDER_CAPABILITIES,
+  PROVIDER_LABEL,
+  type Table
+} from '@/lib/database/types';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -136,7 +143,8 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
             </EmptyMedia>
             <EmptyTitle>No databases connected</EmptyTitle>
             <EmptyDescription>
-              Connect to a Postgres or MySQL server to browse tables, run SQL, and generate an ERD.
+              Connect to PostgreSQL, MySQL, SQL Server, SQLite, MongoDB, Redis or DynamoDB to browse
+              and edit your data.
             </EmptyDescription>
           </EmptyHeader>
           <AddConnectionDialog
@@ -159,7 +167,7 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
                 <CardHeader className='flex-row items-start justify-between gap-3'>
                   <div className='min-w-0 space-y-1'>
                     <CardTitle className='flex items-center gap-2'>
-                      <Icons.database className='text-muted-foreground size-4 shrink-0' />
+                      <EngineIcon provider={entry.provider} className='size-7' />
                       <Link
                         href={`${base}?connection=${entry.id}`}
                         className='truncate after:absolute after:inset-0 after:rounded-xl'
@@ -169,9 +177,7 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
                     </CardTitle>
                     <CardDescription className='flex items-center gap-1.5 font-mono text-xs'>
                       <Icons.server className='size-3 shrink-0' />
-                      <span className='truncate'>
-                        {entry.username}@{entry.host}:{entry.port}
-                      </span>
+                      <span className='truncate'>{connectionAddress(entry)}</span>
                     </CardDescription>
                   </div>
                   <div className='relative z-10 flex shrink-0 items-center'>
@@ -181,9 +187,7 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
                 </CardHeader>
                 <CardContent className='flex flex-wrap items-center gap-2'>
                   <ConnectionStatus connectionId={entry.id} className='mb-1 w-full' />
-                  <Badge variant='outline'>
-                    {entry.provider === 'POSTGRES' ? 'PostgreSQL' : 'MySQL'}
-                  </Badge>
+                  <Badge variant='outline'>{PROVIDER_LABEL[entry.provider]}</Badge>
                   <Badge variant={entry.readOnly ? 'secondary' : 'destructive'}>
                     {entry.readOnly ? 'Read-only' : 'Writes allowed'}
                   </Badge>
@@ -228,24 +232,24 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
           <CardHeader className='flex-row flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
               <CardTitle className='flex items-center gap-2'>
-                <Icons.database className='text-muted-foreground size-4' />
+                <EngineIcon provider={active.provider} className='size-7' />
                 {active.name}
               </CardTitle>
               <p className='text-muted-foreground mt-1 flex items-center gap-1.5 font-mono text-xs'>
                 <Icons.server className='size-3' />
-                {active.username}@{active.host}:{active.port}
+                {connectionAddress(active)}
               </p>
             </div>
             <div className='flex flex-wrap items-center gap-2'>
-              {database && database !== active.databaseName && (
+              {database && database !== active.databaseName && isSqlProvider(active.provider) && (
                 <SetDefaultDatabaseButton connectionId={active.id} database={database} />
               )}
               <ConnectionStatus connectionId={active.id} />
               <EditConnectionDialog connection={active} resources={resourceOptions} />
-              {isDefaultDatabase && <ScanSchemaButton connectionId={active.id} />}
-              <Badge variant='outline'>
-                {active.provider === 'POSTGRES' ? 'PostgreSQL' : 'MySQL'}
-              </Badge>
+              {isDefaultDatabase && isSqlProvider(active.provider) && (
+                <ScanSchemaButton connectionId={active.id} />
+              )}
+              <Badge variant='outline'>{PROVIDER_LABEL[active.provider]}</Badge>
               <Badge variant={active.readOnly ? 'secondary' : 'destructive'}>
                 {active.readOnly ? 'Read-only' : 'Writes allowed'}
               </Badge>
@@ -268,36 +272,38 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
               </Empty>
             ) : (
               <>
-                <div className='flex flex-wrap items-center justify-between gap-3 border-b'>
-                  <nav aria-label='Database views' className='flex items-center gap-1'>
-                    {VIEWS.map((entry) => {
-                      const disabled = entry.id === 'history' && !isDefaultDatabase;
-                      return disabled ? (
-                        <span
-                          key={entry.id}
-                          title='Only tracked for the default database'
-                          className='text-muted-foreground/50 flex cursor-not-allowed items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm'
-                        >
-                          <entry.icon className='size-3.5' />
-                          {entry.label}
-                        </span>
-                      ) : (
-                        <Link
-                          key={entry.id}
-                          // Keeps the selected table, so the ERD opens focused on it and back.
-                          href={`${base}?connection=${active.id}&database=${encodeURIComponent(database)}&view=${entry.id}${table ? `&table=${encodeURIComponent(table)}` : ''}`}
-                          aria-current={entry.id === view ? 'page' : undefined}
-                          className='text-muted-foreground hover:text-foreground -mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm aria-[current=page]:border-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground'
-                        >
-                          <entry.icon className='size-3.5' />
-                          {entry.label}
-                        </Link>
-                      );
-                    })}
-                  </nav>
-                </div>
+                {isSqlProvider(active.provider) && (
+                  <div className='flex flex-wrap items-center justify-between gap-3 border-b'>
+                    <nav aria-label='Database views' className='flex items-center gap-1'>
+                      {VIEWS.map((entry) => {
+                        const disabled = entry.id === 'history' && !isDefaultDatabase;
+                        return disabled ? (
+                          <span
+                            key={entry.id}
+                            title='Only tracked for the default database'
+                            className='text-muted-foreground/50 flex cursor-not-allowed items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm'
+                          >
+                            <entry.icon className='size-3.5' />
+                            {entry.label}
+                          </span>
+                        ) : (
+                          <Link
+                            key={entry.id}
+                            // Keeps the selected table, so the ERD opens focused on it and back.
+                            href={`${base}?connection=${active.id}&database=${encodeURIComponent(database)}&view=${entry.id}${table ? `&table=${encodeURIComponent(table)}` : ''}`}
+                            aria-current={entry.id === view ? 'page' : undefined}
+                            className='text-muted-foreground hover:text-foreground -mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm aria-[current=page]:border-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground'
+                          >
+                            <entry.icon className='size-3.5' />
+                            {entry.label}
+                          </Link>
+                        );
+                      })}
+                    </nav>
+                  </div>
+                )}
 
-                {isDefaultDatabase ? (
+                {!isSqlProvider(active.provider) ? null : isDefaultDatabase ? (
                   <p className='text-muted-foreground flex items-center gap-1.5 text-xs'>
                     <Icons.refresh className='size-3' />
                     Schema last scanned:{' '}
@@ -311,7 +317,14 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
                   </p>
                 )}
 
-                {view === 'sql' ? (
+                {!isSqlProvider(active.provider) ? (
+                  <DocumentExplorer
+                    connectionId={active.id}
+                    database={database}
+                    provider={active.provider}
+                    readOnly={active.readOnly}
+                  />
+                ) : view === 'sql' ? (
                   <SqlEditor
                     connectionId={active.id}
                     database={isDefaultDatabase ? undefined : database}
@@ -333,7 +346,7 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
                     schema={{
                       tables: await loadTables(user.id, active.id, database, isDefaultDatabase)
                     }}
-                    provider={active.provider === 'POSTGRES' ? 'PostgreSQL' : 'MySQL'}
+                    provider={PROVIDER_LABEL[active.provider]}
                     connectionName={`${active.name}-${database}`}
                   />
                 ) : (
@@ -365,6 +378,18 @@ function ResourceBadge({ projectId, name }: { projectId: string; name: string | 
       </Badge>
     </Link>
   );
+}
+
+/** `user@host:port` for servers; a bare path or region where there is no port or login. */
+function connectionAddress(connection: {
+  provider: keyof typeof PROVIDER_LABEL;
+  username: string;
+  host: string;
+  port: number;
+}): string {
+  const capabilities = PROVIDER_CAPABILITIES[connection.provider];
+  const login = capabilities.hasUsername && connection.username ? `${connection.username}@` : '';
+  return `${login}${connection.host}${capabilities.hasPort ? `:${connection.port}` : ''}`;
 }
 
 function Shell({

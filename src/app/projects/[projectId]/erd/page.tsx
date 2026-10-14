@@ -11,6 +11,7 @@ import {
 import { ErdViewer } from '@/features/database/components/erd-viewer';
 import { getLatestSchema, listConnectionsForProject } from '@/features/database/service';
 import { listProjectsForUser } from '@/features/projects/service';
+import { isSqlProvider } from '@/lib/database/types';
 import { requireUser } from '@/lib/auth/session';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -37,7 +38,10 @@ export default async function ErdPage({ params, searchParams }: ErdPageProps) {
   const activeProject = projects.find((entry) => entry.id === projectId);
   if (!activeProject) notFound();
 
-  const connections = await listConnectionsForProject(user.id, activeProject.id);
+  // Only SQL engines have a schema to scan, diff or draw.
+  const connections = (await listConnectionsForProject(user.id, activeProject.id)).filter((entry) =>
+    isSqlProvider(entry.provider)
+  );
   const active = connections.find((entry) => entry.id === connection) ?? connections[0];
   if (!active) return <Shell>{empty('Connect a database to generate its diagram.')}</Shell>;
 

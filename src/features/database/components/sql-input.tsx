@@ -8,7 +8,8 @@ import {
   completionStatus
 } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { MySQL, PostgreSQL, sql, type SQLNamespace } from '@codemirror/lang-sql';
+import { MSSQL, MySQL, PostgreSQL, SQLite, sql, type SQLNamespace } from '@codemirror/lang-sql';
+import type { SqlProviderName } from '@/lib/database/types';
 import {
   bracketMatching,
   foldGutter,
@@ -69,10 +70,17 @@ const baseTheme = EditorView.theme({
   }
 });
 
+const CODEMIRROR_DIALECT = {
+  POSTGRES: PostgreSQL,
+  MYSQL: MySQL,
+  SQLITE: SQLite,
+  MSSQL: MSSQL
+} as const;
+
 interface SqlInputProps {
   value: string;
   onChange: (value: string) => void;
-  dialect: 'POSTGRES' | 'MYSQL';
+  dialect: SqlProviderName;
   /** Table name -> column names, for schema-aware completion. */
   schema?: SQLNamespace;
   /** Lets bare column names complete without a `table.` prefix. */
@@ -153,7 +161,7 @@ export function SqlInput({
         ]),
         submitKeymap,
         sql({
-          dialect: dialect === 'POSTGRES' ? PostgreSQL : MySQL,
+          dialect: CODEMIRROR_DIALECT[dialect],
           schema,
           defaultTable,
           upperCaseKeywords: true

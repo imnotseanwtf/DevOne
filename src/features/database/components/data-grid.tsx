@@ -29,7 +29,7 @@ import { SqlInput } from '@/features/database/components/sql-input';
 import { STICKY_TABLE_SCROLLER } from '@/features/database/components/sticky-table';
 import { valueKindOf, type ColumnFilter } from '@/lib/database/column-filters';
 import { renderRowStatement, type RowChange } from '@/lib/database/row-changes';
-import type { DatabaseProviderName, RowValues, Table } from '@/lib/database/types';
+import type { SqlProviderName, RowValues, Table } from '@/lib/database/types';
 import { cn } from '@/lib/utils';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 
@@ -59,7 +59,7 @@ export function DataGrid({
   onRowsLoaded?: (count: number, hasMore: boolean) => void;
   connectionId: string;
   database?: string;
-  provider: DatabaseProviderName;
+  provider: SqlProviderName;
   readOnly: boolean;
   table: Table;
 }) {
@@ -234,11 +234,11 @@ export function DataGrid({
     setEditing(null);
   };
 
-  /** Dates go back the way each database reads them; MySQL's DATETIME rejects ISO's `Z`. */
+  /** Dates go back the way each database reads them; MySQL, SQL Server and SQLite reject ISO's `Z`. */
   const formatDate = (date: Date, kind: 'date' | 'datetime') =>
     kind === 'date'
       ? date.toISOString().slice(0, 10)
-      : provider === 'MYSQL'
+      : provider !== 'POSTGRES'
         ? date.toISOString().slice(0, 19).replace('T', ' ')
         : date.toISOString();
 

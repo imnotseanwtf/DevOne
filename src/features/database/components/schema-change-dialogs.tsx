@@ -18,7 +18,7 @@ import {
   FOREIGN_KEY_ACTIONS,
   qualifiedName,
   type Column,
-  type DatabaseProviderName,
+  type SqlProviderName,
   type ForeignKeyAction,
   type SchemaChange,
   type Table
@@ -80,7 +80,7 @@ export function ColumnDialog({
 }: {
   table: Table;
   column?: Column;
-  provider: DatabaseProviderName;
+  provider: SqlProviderName;
   onStage: Stage;
 }) {
   return (
@@ -122,7 +122,7 @@ function ColumnForm({
 }: {
   table: Table;
   column?: Column;
-  provider: DatabaseProviderName;
+  provider: SqlProviderName;
   onStage: Stage;
   onDone: () => void;
 }) {

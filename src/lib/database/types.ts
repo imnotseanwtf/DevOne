@@ -9,6 +9,8 @@ export interface ConnectionConfig {
   password: string;
   ssl: boolean;
   statementTimeoutMs: number;
+  /** DynamoDB only: custom endpoint URL (DynamoDB Local, LocalStack). */
+  endpoint?: string;
 }
 
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
@@ -17,15 +19,133 @@ export const DEFAULT_STATEMENT_TIMEOUT_MS = 15_000;
  * Mirrors the Prisma enums so client components never import the generated
  * client, which is server-only. `check-core` fails if these drift apart.
  */
-export const DATABASE_PROVIDERS = ['POSTGRES', 'MYSQL'] as const;
+export const DATABASE_PROVIDERS = [
+  'POSTGRES',
+  'MYSQL',
+  'SQLITE',
+  'MSSQL',
+  'MONGODB',
+  'REDIS',
+  'DYNAMODB'
+] as const;
 export const DATABASE_ENVIRONMENTS = ['LOCAL', 'DEVELOPMENT', 'STAGING', 'PRODUCTION'] as const;
 
 export type DatabaseProviderName = (typeof DATABASE_PROVIDERS)[number];
 export type DatabaseEnvironmentName = (typeof DATABASE_ENVIRONMENTS)[number];
 
+/** The providers that speak SQL and so share the grid, SQL editor and ERD. */
+export type SqlProviderName = Extract<
+  DatabaseProviderName,
+  'POSTGRES' | 'MYSQL' | 'SQLITE' | 'MSSQL'
+>;
+/** The providers browsed as documents/keys/items, with no SQL, ERD or DDL. */
+export type DocumentProviderName = Exclude<DatabaseProviderName, SqlProviderName>;
+
+export function isSqlProvider(provider: DatabaseProviderName): provider is SqlProviderName {
+  return (
+    provider === 'POSTGRES' || provider === 'MYSQL' || provider === 'SQLITE' || provider === 'MSSQL'
+  );
+}
+
 export const DEFAULT_PORTS: Record<DatabaseProviderName, number> = {
   POSTGRES: 5432,
-  MYSQL: 3306
+  MYSQL: 3306,
+  // A file path and an AWS region have no port.
+  SQLITE: 0,
+  MSSQL: 1433,
+  MONGODB: 27017,
+  REDIS: 6379,
+  DYNAMODB: 0
+};
+
+export const PROVIDER_LABEL: Record<DatabaseProviderName, string> = {
+  POSTGRES: 'PostgreSQL',
+  MYSQL: 'MySQL / MariaDB',
+  SQLITE: 'SQLite',
+  MSSQL: 'SQL Server',
+  MONGODB: 'MongoDB',
+  REDIS: 'Redis',
+  DYNAMODB: 'DynamoDB'
+};
+
+/** What a provider's connection form asks for. */
+export interface ProviderCapabilities {
+  /** Host + port connect to a server; otherwise `host` holds a file path or region. */
+  hostLabel: string;
+  hasPort: boolean;
+  hasUsername: boolean;
+  hasPassword: boolean;
+  hasSsl: boolean;
+  /** Whether staged schema edits (ALTER/CREATE INDEX) are offered. */
+  schemaEditing: boolean;
+  /** Postgres, SQLite and SQL Server DDL is transactional; MySQL's is not. */
+  transactionalDdl: boolean;
+}
+
+export const PROVIDER_CAPABILITIES: Record<DatabaseProviderName, ProviderCapabilities> = {
+  POSTGRES: {
+    hostLabel: 'Host',
+    hasPort: true,
+    hasUsername: true,
+    hasPassword: true,
+    hasSsl: true,
+    schemaEditing: true,
+    transactionalDdl: true
+  },
+  MYSQL: {
+    hostLabel: 'Host',
+    hasPort: true,
+    hasUsername: true,
+    hasPassword: true,
+    hasSsl: true,
+    schemaEditing: true,
+    transactionalDdl: false
+  },
+  SQLITE: {
+    hostLabel: 'File path',
+    hasPort: false,
+    hasUsername: false,
+    hasPassword: false,
+    hasSsl: false,
+    schemaEditing: false,
+    transactionalDdl: true
+  },
+  MSSQL: {
+    hostLabel: 'Host',
+    hasPort: true,
+    hasUsername: true,
+    hasPassword: true,
+    hasSsl: true,
+    schemaEditing: false,
+    transactionalDdl: true
+  },
+  MONGODB: {
+    hostLabel: 'Host',
+    hasPort: true,
+    hasUsername: true,
+    hasPassword: true,
+    hasSsl: true,
+    schemaEditing: false,
+    transactionalDdl: false
+  },
+  REDIS: {
+    hostLabel: 'Host',
+    hasPort: true,
+    hasUsername: true,
+    hasPassword: true,
+    hasSsl: true,
+    schemaEditing: false,
+    transactionalDdl: false
+  },
+  DYNAMODB: {
+    hostLabel: 'Region',
+    hasPort: false,
+    hasUsername: true,
+    hasPassword: true,
+    hasSsl: false,
+    schemaEditing: false,
+    transactionalDdl: false
+  }
 };
 
 export interface Column {

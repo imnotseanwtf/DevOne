@@ -1,4 +1,5 @@
-import { likePattern, type DatabaseProviderName } from '@/lib/database/types';
+import { dialectOf } from '@/lib/database/dialect';
+import { likePattern, type SqlProviderName } from '@/lib/database/types';
 
 export const FILTER_OPERATORS = [
   'eq',
@@ -51,12 +52,12 @@ const COMPARISON: Partial<Record<FilterOperator, string>> = {
  * placeholder, so every value reaches the database as a parameter.
  */
 export function columnFilterConditions(
-  provider: DatabaseProviderName,
+  provider: SqlProviderName,
   filters: ColumnFilter[],
   bind: (value: unknown) => string
 ): string[] {
-  const ident = (name: string) =>
-    provider === 'MYSQL' ? `\`${name.replaceAll('`', '``')}\`` : `"${name.replaceAll('"', '""')}"`;
+  const dialect = dialectOf(provider);
+  const ident = dialect.quote;
 
   return filters.map(({ column, operator, value = '', valueTo = '' }) => {
     const target = ident(column);
@@ -66,9 +67,7 @@ export function columnFilterConditions(
       case 'isNotNull':
         return `${target} IS NOT NULL`;
       case 'contains':
-        return provider === 'MYSQL'
-          ? `CAST(${target} AS CHAR) LIKE ${bind(likePattern(value))}`
-          : `${target}::text ILIKE ${bind(likePattern(value))}`;
+        return dialect.containsCondition(target, bind(likePattern(value)));
       case 'between':
         return `${target} BETWEEN ${bind(value)} AND ${bind(valueTo)}`;
       default:
