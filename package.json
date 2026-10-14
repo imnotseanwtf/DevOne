@@ -22,7 +22,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "test": "bun scripts/check-devone-sections.ts && bun scripts/check-core.ts && bun scripts/check-docs.ts",
+    "test": "bun scripts/check-devone-sections.ts && bun scripts/check-core.ts && bun scripts/check-engines.ts && bun scripts/check-docs.ts",
     "test:db": "bun scripts/check-database.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
@@ -36,6 +36,8 @@
     "desktop:build": "cd desktop && bun run dist"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1147.0",
+    "@aws-sdk/lib-dynamodb": "^3.1147.0",
     "@base-ui/react": "^1.6.0",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.11.0",
@@ -63,6 +65,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.11.6",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -72,9 +75,12 @@
     "dotenv": "^17.4.2",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
+    "ioredis": "^6.0.0",
     "kbar": "^0.1.0-beta.48",
     "mammoth": "^1.12.3",
     "marked": "^18.0.12",
+    "mongodb": "^7.7.0",
+    "mssql": "^12.7.4",
     "mysql2": "^3.24.4",
     "next": "16.2.12",
     "next-themes": "^0.4.6",
@@ -103,7 +109,9 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/dompurify": "^3.2.0",
+    "@types/mssql": "^12.3.0",
     "@types/node": "22.10.2",
     "@types/pg": "^8.23.1",
     "@types/react": "19.2.14",

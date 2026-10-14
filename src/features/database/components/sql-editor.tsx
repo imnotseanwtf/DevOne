@@ -17,7 +17,7 @@ import { connectSessionAction, runQueryAction, saveQueryAction } from '@/feature
 import { SqlInput } from '@/features/database/components/sql-input';
 import { STICKY_TABLE_SCROLLER } from '@/features/database/components/sticky-table';
 import { cn } from '@/lib/utils';
-import type { DatabaseProviderName, QueryResult } from '@/lib/database/types';
+import type { SqlProviderName, QueryResult } from '@/lib/database/types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 
@@ -25,7 +25,7 @@ interface SqlEditorProps {
   connectionId: string;
   /** Set when browsing a database other than the connection's saved default. */
   database?: string;
-  provider: DatabaseProviderName;
+  provider: SqlProviderName;
   readOnly: boolean;
   schema: Record<string, string[]>;
   savedQueries: { id: string; name: string; sql: string }[];

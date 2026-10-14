@@ -1,4 +1,5 @@
-import type { DatabaseProviderName, RowValues } from '@/lib/database/types';
+import { dialectOf } from '@/lib/database/dialect';
+import type { RowValues, SqlProviderName } from '@/lib/database/types';
 
 /** One staged edit to a table's rows; `where` is the row's primary key. */
 export type RowChange =
@@ -11,21 +12,16 @@ export interface RowStatement {
   params: unknown[];
 }
 
-function quoteIdent(name: string, provider: DatabaseProviderName): string {
-  return provider === 'MYSQL'
-    ? `\`${name.replaceAll('`', '``')}\``
-    : `"${name.replaceAll('"', '""')}"`;
-}
-
 /** Builds one change's SQL; `value` decides how each value appears in it. */
 function composeRowSql(
-  provider: DatabaseProviderName,
+  provider: SqlProviderName,
   schema: string,
   table: string,
   change: RowChange,
   value: (value: unknown) => string
 ): string {
-  const ident = (name: string) => quoteIdent(name, provider);
+  const dialect = dialectOf(provider);
+  const ident = dialect.quote;
   const target = `${ident(schema)}.${ident(table)}`;
   const pairs = (values: RowValues, separator: string) =>
     Object.entries(values)
@@ -36,9 +32,7 @@ function composeRowSql(
     case 'insert': {
       const columns = Object.keys(change.values);
       if (columns.length === 0) {
-        return provider === 'MYSQL'
-          ? `INSERT INTO ${target} () VALUES ()`
-          : `INSERT INTO ${target} DEFAULT VALUES`;
+        return dialect.emptyInsert(target);
       }
       const values = columns.map((column) => value(change.values[column]));
       return `INSERT INTO ${target} (${columns.map(ident).join(', ')}) VALUES (${values.join(', ')})`;
@@ -51,11 +45,11 @@ function composeRowSql(
 }
 
 /**
- * The parameterized statement for one change: `$1…` for Postgres, `?` for MySQL.
+ * The parameterized statement for one change: `$1…` for Postgres, `@p1…` for SQL Server, `?` otherwise.
  * The adapters run this; the preview renders the same statement with literals.
  */
 export function buildRowStatement(
-  provider: DatabaseProviderName,
+  provider: SqlProviderName,
   schema: string,
   table: string,
   change: RowChange
@@ -63,13 +57,13 @@ export function buildRowStatement(
   const params: unknown[] = [];
   const sql = composeRowSql(provider, schema, table, change, (value) => {
     params.push(value);
-    return provider === 'MYSQL' ? '?' : `$${params.length}`;
+    return dialectOf(provider).placeholder(params.length);
   });
   return { sql, params };
 }
 
 /** A value written as a SQL literal, for showing a statement to a person. */
-export function sqlLiteral(value: unknown, provider: DatabaseProviderName): string {
+export function sqlLiteral(value: unknown, provider: SqlProviderName): string {
   if (value === null || value === undefined) return 'NULL';
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (typeof value === 'number' || typeof value === 'bigint') return String(value);
@@ -79,16 +73,12 @@ export function sqlLiteral(value: unknown, provider: DatabaseProviderName): stri
       : typeof value === 'object'
         ? JSON.stringify(value)
         : String(value);
-  const escaped =
-    provider === 'MYSQL'
-      ? text.replaceAll('\\', '\\\\').replaceAll("'", "''")
-      : text.replaceAll("'", "''");
-  return `'${escaped}'`;
+  return `'${dialectOf(provider).escapeString(text)}'`;
 }
 
 /** The statement a change will run, with its values inlined, ending in `;`. */
 export function renderRowStatement(
-  provider: DatabaseProviderName,
+  provider: SqlProviderName,
   schema: string,
   table: string,
   change: RowChange

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { applySchemaChangesAction, previewSchemaChangesAction } from '@/features/database/actions';
 import { describeChange, type PendingChange } from '@/features/database/schema-changes';
-import type { DatabaseProviderName } from '@/lib/database/types';
+import type { SqlProviderName } from '@/lib/database/types';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -30,7 +30,7 @@ export function PendingChanges({
   pending: PendingChange[];
   connectionId: string;
   database?: string;
-  provider: DatabaseProviderName;
+  provider: SqlProviderName;
   onRemove: (id: string) => void;
   onDiscard: () => void;
   /** Called with how many leading changes landed; the rest stay staged. */

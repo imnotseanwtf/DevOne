@@ -52,7 +52,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   qualifiedName,
-  type DatabaseProviderName,
+  type SqlProviderName,
   type SchemaChange,
   type Table
 } from '@/lib/database/types';
@@ -96,7 +96,7 @@ export function TableExplorer({
   tables: Table[];
   connectionId: string;
   database?: string;
-  provider: DatabaseProviderName;
+  provider: SqlProviderName;
   readOnly: boolean;
 }) {
   // The active tab lives in React state, mirrored to `?table=` for reloads,
@@ -487,7 +487,7 @@ function TableDetail({
   onStage: (change: SchemaChange) => void;
   connectionId: string;
   database?: string;
-  provider: DatabaseProviderName;
+  provider: SqlProviderName;
   readOnly: boolean;
 }) {
   const view = useMemo(() => effectiveTable(table, pending), [table, pending]);

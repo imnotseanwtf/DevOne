@@ -72,6 +72,11 @@ enum SprintStatus {
 enum DatabaseProvider {
   POSTGRES
   MYSQL
+  SQLITE
+  MSSQL
+  MONGODB
+  REDIS
+  DYNAMODB
 }
 
 enum DatabaseEnvironment {
@@ -260,6 +265,8 @@ model DatabaseConnection {
   username          String
   encryptedPassword String
   sslEnabled        Boolean             @default(false)
+  /// DynamoDB only: a custom endpoint URL (DynamoDB Local, LocalStack). `host` holds the region.
+  endpoint          String?
   /// Copied from the linked resource when there is one.
   environment       DatabaseEnvironment @default(DEVELOPMENT)
   /// The environment (resource) this database belongs to, e.g. Staging.
