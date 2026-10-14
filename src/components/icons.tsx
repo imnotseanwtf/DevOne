@@ -148,12 +148,22 @@ import {
   IconProgressCheck,
   IconCircleCheckFilled,
   IconCircleMinus,
-  IconCircleDashedCheck
+  IconCircleDashedCheck,
+  IconBolt,
+  IconBrandAws,
+  IconBrandMongodb,
+  IconBrandMysql,
+  IconFileDatabase
 } from '@tabler/icons-react';
 
 export type Icon = React.ComponentType<IconProps>;
 
 export const Icons = {
+  brandAws: IconBrandAws,
+  brandMongodb: IconBrandMongodb,
+  brandMysql: IconBrandMysql,
+  bolt: IconBolt,
+  fileDatabase: IconFileDatabase,
   // General
   alertCircle: IconAlertCircle,
   warning: IconAlertTriangle,

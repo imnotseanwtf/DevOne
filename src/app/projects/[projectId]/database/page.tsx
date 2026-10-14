@@ -13,6 +13,7 @@ import { AddConnectionDialog } from '@/features/database/components/add-connecti
 import { CollapsibleSidebar } from '@/features/database/components/collapsible-sidebar';
 import { DatabaseBrowser } from '@/features/database/components/database-browser';
 import { DeleteConnectionButton } from '@/features/database/components/delete-connection-button';
+import { EngineIcon } from '@/features/database/components/engine-icon';
 import { DocumentExplorer } from '@/features/database/components/document-explorer';
 import { EditConnectionDialog } from '@/features/database/components/edit-connection-dialog';
 import { ErdViewer } from '@/features/database/components/erd-viewer';
@@ -166,7 +167,7 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
                 <CardHeader className='flex-row items-start justify-between gap-3'>
                   <div className='min-w-0 space-y-1'>
                     <CardTitle className='flex items-center gap-2'>
-                      <Icons.database className='text-muted-foreground size-4 shrink-0' />
+                      <EngineIcon provider={entry.provider} className='size-7' />
                       <Link
                         href={`${base}?connection=${entry.id}`}
                         className='truncate after:absolute after:inset-0 after:rounded-xl'
@@ -231,7 +232,7 @@ export default async function DatabasePage({ params, searchParams }: DatabasePag
           <CardHeader className='flex-row flex-wrap items-center justify-between gap-3'>
             <div className='min-w-0'>
               <CardTitle className='flex items-center gap-2'>
-                <Icons.database className='text-muted-foreground size-4' />
+                <EngineIcon provider={active.provider} className='size-7' />
                 {active.name}
               </CardTitle>
               <p className='text-muted-foreground mt-1 flex items-center gap-1.5 font-mono text-xs'>

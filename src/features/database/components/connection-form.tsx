@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Switch } from '@/components/ui/switch';
 import { Icons } from '@/components/icons';
+import { EngineIcon } from '@/features/database/components/engine-icon';
+import { cn } from '@/lib/utils';
 import {
   createConnectionAction,
   pingServerAction,
@@ -146,7 +148,7 @@ export function ConnectionForm({
           });
         }}
       >
-        <div className='grid gap-3 sm:grid-cols-2'>
+        <div className='grid gap-3'>
           <Field label='Name' htmlFor='name'>
             <Input
               id='name'
@@ -157,26 +159,37 @@ export function ConnectionForm({
               defaultValue={connection?.name}
             />
           </Field>
-
-          <Field label='Engine' htmlFor='provider'>
-            <NativeSelect
-              id='provider'
-              value={provider}
-              onChange={(event) => {
-                const next = event.target.value as DatabaseProviderName;
-                setProvider(next);
-                setPort(String(DEFAULT_PORTS[next]));
-                resetServerCheck();
-              }}
-            >
-              {(Object.keys(PROVIDER_LABEL) as DatabaseProviderName[]).map((value) => (
-                <option key={value} value={value}>
-                  {PROVIDER_LABEL[value]}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
         </div>
+
+        <fieldset className='space-y-2'>
+          <legend className='text-sm leading-none font-medium'>Engine</legend>
+          <div
+            role='radiogroup'
+            aria-label='Engine'
+            className='grid grid-cols-2 gap-2 sm:grid-cols-4'
+          >
+            {(Object.keys(PROVIDER_LABEL) as DatabaseProviderName[]).map((value) => (
+              <button
+                key={value}
+                type='button'
+                role='radio'
+                aria-checked={provider === value}
+                onClick={() => {
+                  setProvider(value);
+                  setPort(String(DEFAULT_PORTS[value]));
+                  resetServerCheck();
+                }}
+                className={cn(
+                  'hover:bg-muted/60 flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-center text-xs transition-colors',
+                  provider === value && 'border-foreground bg-muted ring-foreground/20 ring-2'
+                )}
+              >
+                <EngineIcon provider={value} className='size-9' />
+                <span className='leading-tight font-medium'>{PROVIDER_LABEL[value]}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         <div
           className={
