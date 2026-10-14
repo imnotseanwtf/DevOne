@@ -141,3 +141,24 @@ header `x-devone-token-saver: off` to skip it for one request.
 | `src/features/ai-router/` | Database service, server actions, admin and account screens |
 | `src/app/api/ai/v1/` | The `chat/completions`, `messages`, `messages/count_tokens` and `models` endpoints |
 | `scripts/check-core.ts` | Checks for routing, fallback, streaming, keys and the rate limit |
+
+## Chat with the docs
+
+Every project's **Docs** page has an **Ask AI** button. It opens a panel that answers questions
+from the project's own pages, streaming the answer as it is written, with the pages it used shown
+as links under each answer.
+
+- **What the model sees.** The open page, plus the passages of other pages that best match the
+  question (and the last few questions, so follow-ups like "and the key?" work). No embeddings and
+  no extra service: it is keyword matching over paragraph-sized chunks. About 24,000 characters of
+  excerpts go in each time.
+- **Who may ask.** The server picks the excerpts, so only members of a project can ask about it.
+  Requests count against the same per-person rate limit as the router and show up in
+  Admin → AI router → Usage.
+- **Which model.** `auto`: the AI router's usual provider order and fallback. An administrator has
+  to add at least one provider first.
+- **Off in the public demo** (`DEVONE_DEMO_MODE`), like the rest of the router.
+
+Answers are shown as plain text, not rendered Markdown, so a model can never inject HTML into the
+page.
+

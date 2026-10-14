@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { DocsChat } from '@/features/docs-chat/components/docs-chat';
 import { DocEditor } from '@/features/platform/components/doc-editor';
 import { DocsSidebar } from '@/features/platform/components/docs-sidebar';
 import { NewDocButton } from '@/features/platform/components/new-doc-button';
@@ -53,7 +54,15 @@ export default async function DocsPage({ params, searchParams }: DocsPageProps) 
   const linkedIssues = active ? await listLinkedIssues(user.id, activeProject.id, active.id) : [];
 
   return (
-    <Shell>
+    <Shell
+      action={
+        <DocsChat
+          projectId={activeProject.id}
+          currentSlug={active?.slug}
+          currentTitle={active?.title}
+        />
+      }
+    >
       <ProjectWorkTabs projectId={activeProject.id} active='docs' />
       <div className='grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]'>
         <Collapsible
@@ -114,11 +123,12 @@ export default async function DocsPage({ params, searchParams }: DocsPageProps) 
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <PageContainer
       pageTitle='Docs'
       pageDescription='Keep architecture, API, database, and deployment documentation together.'
+      pageHeaderAction={action}
     >
       <div className='space-y-6'>{children}</div>
     </PageContainer>
