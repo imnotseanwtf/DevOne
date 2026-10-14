@@ -28,7 +28,8 @@ export function decryptSecret(value: string, key: Buffer): string {
   if (key.length !== 32) throw new Error('Encryption key must be 32 bytes');
 
   const [version, encodedIv, encodedTag, encodedCiphertext, extra] = value.split('.');
-  if (version !== 'v1' || !encodedIv || !encodedTag || !encodedCiphertext || extra) {
+  // An empty secret (a blank password) legitimately has an empty ciphertext segment.
+  if (version !== 'v1' || !encodedIv || !encodedTag || encodedCiphertext === undefined || extra) {
     throw new Error('Invalid encrypted secret');
   }
 

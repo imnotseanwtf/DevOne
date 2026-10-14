@@ -81,7 +81,8 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
             (entry) => `${entry.AttributeName} (${entry.KeyType === 'HASH' ? 'partition' : 'sort'})`
           )
           .join(', ');
-        summaries.push({ name, count: Table?.ItemCount ?? null, description: keys });
+        // ItemCount is refreshed by AWS about every six hours, so a live count would mislead.
+        summaries.push({ name, count: null, description: keys });
       }
       return summaries;
     },

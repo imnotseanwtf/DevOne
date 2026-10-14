@@ -8,6 +8,7 @@ import { columnFilterConditions } from '../src/lib/database/column-filters';
 import { dialectOf } from '../src/lib/database/dialect';
 import { assertMssqlReadable } from '../src/lib/database/mssql';
 import { buildRowStatement, renderRowStatement } from '../src/lib/database/row-changes';
+import { decryptSecret, encryptSecret } from '../src/lib/encryption/secrets';
 import { createSqliteAdapter, resolveSqlitePath } from '../src/lib/database/sqlite';
 import {
   DATABASE_PROVIDERS,
@@ -16,6 +17,12 @@ import {
   PROVIDER_LABEL,
   isSqlProvider
 } from '../src/lib/database/types';
+
+// A blank password (SQLite, open Redis/Mongo, trust-auth Postgres) must survive a round trip.
+const secretKey = Buffer.alloc(32, 7);
+assert.equal(decryptSecret(encryptSecret('', secretKey), secretKey), '');
+assert.equal(decryptSecret(encryptSecret('pw', secretKey), secretKey), 'pw');
+assert.throws(() => decryptSecret('v1.a.b', secretKey), /Invalid encrypted secret/);
 
 // Every provider is fully described, so a new one can't be added half-wired.
 for (const provider of DATABASE_PROVIDERS) {

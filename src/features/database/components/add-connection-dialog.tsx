@@ -40,7 +40,7 @@ export function AddConnectionDialog({
         <DialogHeader>
           <DialogTitle>Add a connection</DialogTitle>
           <DialogDescription>
-            Connect to a Postgres or MySQL server. You&apos;ll browse and pick a database on it
+            Connect to a database server or file. You&apos;ll browse and pick a database on it
             afterward.
           </DialogDescription>
         </DialogHeader>
