@@ -2,7 +2,8 @@ import type { RowChange } from '@/lib/database/row-changes';
 import { DatabaseEnvironment, type DatabaseConnection } from '@/generated/prisma/client';
 import { getPrisma } from '@/lib/db/prisma';
 import { decryptSecret, encryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
-import { createAdapter, withAdapter } from '@/lib/database/adapter';
+import { createAdapter, withAdapter, withDocumentAdapter } from '@/lib/database/adapter';
+import { resolveSqlitePath } from '@/lib/database/sqlite';
 import { buildSchemaStatements } from '@/lib/database/ddl';
 import { hashSchema } from '@/lib/database/hash';
 import {
@@ -13,6 +14,8 @@ import {
 } from '@/lib/database/session-store';
 import {
   DEFAULT_STATEMENT_TIMEOUT_MS,
+  PROVIDER_CAPABILITIES,
+  isSqlProvider,
   type ConnectionConfig,
   type DatabaseSchema,
   type QueryResult,
@@ -62,7 +65,7 @@ async function requireProjectMembership(userId: string, projectId: string) {
 }
 
 /** Resolves a connection the caller may use, or throws. Never returns the password. */
-async function requireConnection(userId: string, connectionId: string) {
+export async function requireConnection(userId: string, connectionId: string) {
   const connection = await getPrisma().databaseConnection.findFirst({
     where: { id: connectionId, project: { members: { some: { userId } } } }
   });
@@ -73,7 +76,7 @@ async function requireConnection(userId: string, connectionId: string) {
 /** `database` lets a saved connection be browsed against a database other
  * than its saved default (or, before one is ever set, against none at all -
  * each adapter falls back to a database-less/maintenance connection). */
-function configFor(connection: DatabaseConnection, database?: string): ConnectionConfig {
+export function configFor(connection: DatabaseConnection, database?: string): ConnectionConfig {
   return {
     host: connection.host,
     port: connection.port,
@@ -81,6 +84,7 @@ function configFor(connection: DatabaseConnection, database?: string): Connectio
     username: connection.username,
     password: decryptSecret(connection.encryptedPassword, getEncryptionKey()),
     ssl: connection.sslEnabled,
+    endpoint: connection.endpoint ?? undefined,
     statementTimeoutMs: DEFAULT_STATEMENT_TIMEOUT_MS
   };
 }
@@ -92,8 +96,37 @@ function configFromServerInput(input: ParsedServerConnectionInput): ConnectionCo
     username: input.username,
     password: input.password,
     ssl: input.sslEnabled,
+    endpoint: input.endpoint ?? undefined,
     statementTimeoutMs: DEFAULT_STATEMENT_TIMEOUT_MS
   };
+}
+
+/** The two calls every engine answers, SQL or not, so callers needn't know which kind. */
+async function withServerAdapter<T>(
+  provider: DatabaseConnection['provider'],
+  config: ConnectionConfig,
+  run: (adapter: {
+    testConnection(): Promise<void>;
+    listDatabases(): Promise<string[]>;
+  }) => Promise<T>
+): Promise<T> {
+  return isSqlProvider(provider)
+    ? withAdapter(provider, config, run)
+    : withDocumentAdapter(provider, config, run);
+}
+
+/** Schema scans, SQL and staged DDL only make sense for SQL engines. */
+function requireSql(connection: DatabaseConnection) {
+  if (!isSqlProvider(connection.provider)) {
+    throw new DatabaseAccessError('This connection is not a SQL database');
+  }
+}
+
+function requireSchemaEditing(connection: DatabaseConnection) {
+  requireSql(connection);
+  if (!PROVIDER_CAPABILITIES[connection.provider].schemaEditing) {
+    throw new DatabaseAccessError('Schema editing is not available for this database engine');
+  }
 }
 
 /** Pings a server with raw credentials, before the connection is saved. When
@@ -107,8 +140,10 @@ export async function pingServer(
     const connection = await requireConnection(userId, input.connectionId);
     password = decryptSecret(connection.encryptedPassword, getEncryptionKey());
   }
-  await withAdapter(input.provider, configFromServerInput({ ...input, password }), (adapter) =>
-    adapter.testConnection()
+  await withServerAdapter(
+    input.provider,
+    configFromServerInput({ ...input, password }),
+    (adapter) => adapter.testConnection()
   );
 }
 
@@ -124,6 +159,7 @@ export function toPublicConnection(connection: DatabaseConnection) {
     databaseName: connection.databaseName,
     username: connection.username,
     sslEnabled: connection.sslEnabled,
+    endpoint: connection.endpoint,
     environment: connection.environment,
     resourceId: connection.resourceId,
     readOnly: connection.readOnly,
@@ -172,6 +208,7 @@ export async function createConnection(
 ) {
   await requireProjectMembership(userId, projectId);
   const { resourceId, environment } = await resolveEnvironment(userId, projectId, input);
+  if (input.provider === 'SQLITE') resolveSqlitePath(input.host);
 
   const connection = await getPrisma().databaseConnection.create({
     data: {
@@ -183,6 +220,7 @@ export async function createConnection(
       username: input.username,
       encryptedPassword: encryptSecret(input.password, getEncryptionKey()),
       sslEnabled: input.sslEnabled,
+      endpoint: input.endpoint ?? null,
       environment,
       resourceId,
       // Production is read-only unless someone deliberately says otherwise.
@@ -196,12 +234,14 @@ export async function createConnection(
 export async function updateConnection(userId: string, input: ParsedUpdateConnectionInput) {
   const existing = await requireConnection(userId, input.connectionId);
   const { resourceId, environment } = await resolveEnvironment(userId, existing.projectId, input);
+  if (input.provider === 'SQLITE') resolveSqlitePath(input.host);
   // A different server (or engine) almost certainly doesn't have the old
   // default database, so drop it rather than point at something missing.
   const serverChanged =
     input.provider !== existing.provider ||
     input.host !== existing.host ||
-    input.port !== existing.port;
+    input.port !== existing.port ||
+    (input.endpoint ?? null) !== existing.endpoint;
 
   const connection = await getPrisma().databaseConnection.update({
     where: { id: existing.id },
@@ -215,6 +255,7 @@ export async function updateConnection(userId: string, input: ParsedUpdateConnec
         encryptedPassword: encryptSecret(input.password, getEncryptionKey())
       }),
       sslEnabled: input.sslEnabled,
+      endpoint: input.endpoint ?? null,
       environment,
       resourceId,
       readOnly: environment === DatabaseEnvironment.PRODUCTION ? true : input.readOnly,
@@ -235,7 +276,7 @@ export async function deleteConnection(userId: string, connectionId: string) {
 
 export async function testConnection(userId: string, connectionId: string) {
   const connection = await requireConnection(userId, connectionId);
-  await withAdapter(connection.provider, configFor(connection), (adapter) =>
+  await withServerAdapter(connection.provider, configFor(connection), (adapter) =>
     adapter.testConnection()
   );
 }
@@ -246,7 +287,7 @@ export async function listDatabasesForConnection(
   connectionId: string
 ): Promise<string[]> {
   const connection = await requireConnection(userId, connectionId);
-  return withAdapter(connection.provider, configFor(connection), (adapter) =>
+  return withServerAdapter(connection.provider, configFor(connection), (adapter) =>
     adapter.listDatabases()
   );
 }
@@ -263,6 +304,7 @@ export async function getLiveSchema(
   database: string
 ): Promise<DatabaseSchema> {
   const connection = await requireConnection(userId, connectionId);
+  requireSql(connection);
   return withAdapter(connection.provider, configFor(connection, database), (adapter) =>
     adapter.getSchema()
   );
@@ -295,6 +337,7 @@ export async function openSession(
   database?: string
 ): Promise<string> {
   const connection = await requireConnection(userId, connectionId);
+  requireSql(connection);
   const resolvedDatabase = database ?? connection.databaseName;
   if (!resolvedDatabase) throw new DatabaseAccessError('Pick a database before connecting');
 
@@ -327,6 +370,7 @@ export async function closeSession(userId: string, sessionId: string): Promise<v
  */
 export async function scanSchema(userId: string, connectionId: string) {
   const connection = await requireConnection(userId, connectionId);
+  requireSql(connection);
   if (!connection.databaseName) {
     throw new DatabaseAccessError('Set a default database before scanning its schema');
   }
@@ -547,6 +591,7 @@ export async function previewSchemaChanges(
   database?: string
 ): Promise<string[]> {
   const connection = await requireConnection(userId, connectionId);
+  requireSchemaEditing(connection);
   return withAdapter(connection.provider, configFor(connection, database), async (adapter) =>
     buildSchemaStatements(connection.provider, changes, await adapter.getSchema()).flat()
   );
@@ -564,6 +609,7 @@ export async function applySchemaChanges(
   database?: string
 ) {
   const connection = await requireWritableConnection(userId, connectionId);
+  requireSchemaEditing(connection);
   const tracked = !database && !!connection.databaseName;
 
   try {

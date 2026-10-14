@@ -8,6 +8,7 @@ import {
   listSchemaHistory
 } from '@/features/database/service';
 import { listProjectsForUser } from '@/features/projects/service';
+import { isSqlProvider } from '@/lib/database/types';
 import { requireUser } from '@/lib/auth/session';
 import { diffSchemas, isEmptyDiff, summarizeDiff } from '@/lib/database/diff';
 import { generateMigrationSql } from '@/lib/database/migration';
@@ -41,7 +42,10 @@ export default async function SchemaDiffPage({ params, searchParams }: DiffPageP
   const activeProject = projects.find((entry) => entry.id === projectId);
   if (!activeProject) notFound();
 
-  const connections = await listConnectionsForProject(user.id, activeProject.id);
+  // Only SQL engines have a schema to scan, diff or draw.
+  const connections = (await listConnectionsForProject(user.id, activeProject.id)).filter((entry) =>
+    isSqlProvider(entry.provider)
+  );
   const active = connections.find((entry) => entry.id === connection) ?? connections[0];
   if (!active) {
     return (

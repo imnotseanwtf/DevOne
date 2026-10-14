@@ -17,6 +17,9 @@ import type { PublicConnection } from '@/features/database/service';
 import {
   DATABASE_ENVIRONMENTS,
   DEFAULT_PORTS,
+  PROVIDER_CAPABILITIES,
+  PROVIDER_LABEL,
+  isSqlProvider,
   type DatabaseEnvironmentName,
   type DatabaseProviderName
 } from '@/lib/database/types';
@@ -61,6 +64,10 @@ export function ConnectionForm({
   const [username, setUsername] = useState(connection?.username ?? '');
   const [password, setPassword] = useState('');
   const [sslEnabled, setSslEnabled] = useState(connection?.sslEnabled ?? false);
+  const [endpoint, setEndpoint] = useState(connection?.endpoint ?? '');
+  const capabilities = PROVIDER_CAPABILITIES[provider];
+  // A login is required except where the engine can run open (Mongo, Redis) or has none (SQLite).
+  const usernameRequired = ['POSTGRES', 'MYSQL', 'MSSQL', 'DYNAMODB'].includes(provider);
 
   const [serverStatus, setServerStatus] = useState<ServerStatus>('idle');
   const [serverError, setServerError] = useState<string>();
@@ -87,6 +94,7 @@ export function ConnectionForm({
         username,
         password,
         sslEnabled,
+        endpoint,
         connectionId: connection?.id
       });
       if (!result.ok) {
@@ -121,6 +129,7 @@ export function ConnectionForm({
               username,
               password,
               sslEnabled,
+              endpoint,
               environment: effectiveEnvironment,
               resourceId: resource ? resource.id : null,
               readOnly: productionLocked ? true : readOnly
@@ -160,18 +169,31 @@ export function ConnectionForm({
                 resetServerCheck();
               }}
             >
-              <option value='POSTGRES'>PostgreSQL</option>
-              <option value='MYSQL'>MySQL / MariaDB</option>
+              {(Object.keys(PROVIDER_LABEL) as DatabaseProviderName[]).map((value) => (
+                <option key={value} value={value}>
+                  {PROVIDER_LABEL[value]}
+                </option>
+              ))}
             </NativeSelect>
           </Field>
         </div>
 
-        <div className='grid grid-cols-[minmax(0,1fr)_7rem] gap-3'>
-          <Field label='Host' htmlFor='host'>
+        <div
+          className={
+            capabilities.hasPort ? 'grid grid-cols-[minmax(0,1fr)_7rem] gap-3' : 'grid gap-3'
+          }
+        >
+          <Field label={capabilities.hostLabel} htmlFor='host'>
             <Input
               id='host'
               required
-              placeholder='db.internal'
+              placeholder={
+                provider === 'SQLITE'
+                  ? '/data/app.sqlite'
+                  : provider === 'DYNAMODB'
+                    ? 'us-east-1'
+                    : 'db.internal'
+              }
               value={host}
               onChange={(event) => {
                 setHost(event.target.value);
@@ -179,66 +201,96 @@ export function ConnectionForm({
               }}
             />
           </Field>
-          <Field label='Port' htmlFor='port'>
-            <Input
-              id='port'
-              type='number'
-              required
-              min={1}
-              max={65535}
-              value={port}
-              onChange={(event) => {
-                setPort(event.target.value);
-                resetServerCheck();
-              }}
-            />
-          </Field>
+          {capabilities.hasPort && (
+            <Field label='Port' htmlFor='port'>
+              <Input
+                id='port'
+                type='number'
+                required
+                min={1}
+                max={65535}
+                value={port}
+                onChange={(event) => {
+                  setPort(event.target.value);
+                  resetServerCheck();
+                }}
+              />
+            </Field>
+          )}
         </div>
 
-        <div className='grid gap-3 sm:grid-cols-2'>
-          <Field label='Username' htmlFor='username'>
+        {provider === 'DYNAMODB' && (
+          <Field label='Endpoint (optional)' htmlFor='endpoint'>
             <Input
-              id='username'
-              required
-              autoComplete='off'
-              value={username}
+              id='endpoint'
+              placeholder='http://localhost:8000 for DynamoDB Local'
+              value={endpoint}
               onChange={(event) => {
-                setUsername(event.target.value);
+                setEndpoint(event.target.value);
                 resetServerCheck();
               }}
             />
           </Field>
-          <Field label='Password' htmlFor='password'>
-            <Input
-              id='password'
-              type='password'
-              autoComplete='new-password'
-              placeholder={editing ? 'Leave blank to keep current' : undefined}
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                resetServerCheck();
-              }}
-            />
-          </Field>
-        </div>
+        )}
 
-        <div className='flex items-center justify-between gap-4'>
-          <Label htmlFor='sslEnabled-check' className='font-normal'>
-            Use SSL
-          </Label>
-          <input
-            id='sslEnabled-check'
-            type='checkbox'
-            className='size-4'
-            aria-label='Use SSL'
-            checked={sslEnabled}
-            onChange={(event) => {
-              setSslEnabled(event.target.checked);
-              resetServerCheck();
-            }}
-          />
-        </div>
+        {(capabilities.hasUsername || capabilities.hasPassword) && (
+          <div className='grid gap-3 sm:grid-cols-2'>
+            {capabilities.hasUsername && (
+              <Field
+                label={provider === 'DYNAMODB' ? 'Access key ID' : 'Username'}
+                htmlFor='username'
+              >
+                <Input
+                  id='username'
+                  required={usernameRequired}
+                  autoComplete='off'
+                  value={username}
+                  onChange={(event) => {
+                    setUsername(event.target.value);
+                    resetServerCheck();
+                  }}
+                />
+              </Field>
+            )}
+            {capabilities.hasPassword && (
+              <Field
+                label={provider === 'DYNAMODB' ? 'Secret access key' : 'Password'}
+                htmlFor='password'
+              >
+                <Input
+                  id='password'
+                  type='password'
+                  autoComplete='new-password'
+                  placeholder={editing ? 'Leave blank to keep current' : undefined}
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    resetServerCheck();
+                  }}
+                />
+              </Field>
+            )}
+          </div>
+        )}
+
+        {capabilities.hasSsl && (
+          <div className='flex items-center justify-between gap-4'>
+            <Label htmlFor='sslEnabled-check' className='font-normal'>
+              Use SSL
+            </Label>
+            <input
+              id='sslEnabled-check'
+              type='checkbox'
+              className='size-4'
+              aria-label='Use SSL'
+              checked={sslEnabled}
+              onChange={(event) => {
+                setSslEnabled(event.target.checked);
+                resetServerCheck();
+              }}
+            />
+          </div>
+        )}
 
         <div className='bg-muted/40 space-y-2 rounded-lg border p-3'>
           <div className='flex flex-wrap items-center gap-2'>
@@ -246,7 +298,7 @@ export function ConnectionForm({
               type='button'
               variant='outline'
               size='sm'
-              disabled={checking || !host || !username}
+              disabled={checking || !host || (usernameRequired && !username)}
               onClick={ping}
             >
               <Icons.connected className='size-3.5' />
@@ -303,7 +355,11 @@ export function ConnectionForm({
             <Label htmlFor='readOnly' className='font-normal'>
               Read-only
               <span className='text-muted-foreground block text-xs'>
-                {productionLocked ? 'Always on for production.' : 'Enforced by the server.'}
+                {productionLocked
+                  ? 'Always on for production.'
+                  : isSqlProvider(provider)
+                    ? 'Enforced by the server.'
+                    : 'Enforced by DevOne.'}
               </span>
             </Label>
             <Switch

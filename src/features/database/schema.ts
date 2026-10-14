@@ -1,17 +1,29 @@
 import { FILTER_OPERATORS } from '@/lib/database/column-filters';
 import { DatabaseEnvironment, DatabaseProvider } from '@/generated/prisma/client';
-import { FOREIGN_KEY_ACTIONS, type SchemaChange } from '@/lib/database/types';
+import {
+  FOREIGN_KEY_ACTIONS,
+  PROVIDER_CAPABILITIES,
+  type DatabaseProviderName,
+  type SchemaChange
+} from '@/lib/database/types';
 import { z } from 'zod';
 
-export const connectionSchema = z.object({
+const connectionBase = z.object({
   projectId: z.string().min(1),
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(60),
   provider: z.enum(DatabaseProvider),
-  host: z.string().trim().min(1, 'Host is required').max(255),
-  port: z.coerce.number().int().min(1).max(65_535),
-  username: z.string().trim().min(1, 'Username is required').max(128),
+  host: z.string().trim().min(1, 'Host is required').max(1024),
+  port: z.coerce.number().int().min(0).max(65_535),
+  username: z.string().trim().max(128),
   password: z.string().max(512),
   sslEnabled: z.boolean().default(false),
+  /** DynamoDB only: custom endpoint URL; `host` is then the region. */
+  endpoint: z
+    .string()
+    .trim()
+    .max(512)
+    .transform((value) => value || null)
+    .nullish(),
   environment: z.enum(DatabaseEnvironment),
   /** The resource (environment) this database belongs to; its environment wins. */
   resourceId: z
@@ -22,28 +34,60 @@ export const connectionSchema = z.object({
   readOnly: z.boolean().default(true)
 });
 
+/** Providers whose login can't be blank: the rest connect to a file or an open server. */
+const USERNAME_REQUIRED: DatabaseProviderName[] = ['POSTGRES', 'MYSQL', 'MSSQL', 'DYNAMODB'];
+
+/** What a form can't know from field types alone: what each engine actually requires. */
+function validateProvider(
+  value: { provider: DatabaseProviderName; host: string; port: number; username: string },
+  ctx: z.RefinementCtx
+) {
+  const capabilities = PROVIDER_CAPABILITIES[value.provider];
+  if (USERNAME_REQUIRED.includes(value.provider) && !value.username) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['username'],
+      message: value.provider === 'DYNAMODB' ? 'Access key ID is required' : 'Username is required'
+    });
+  }
+  if (capabilities.hasPort && value.port < 1) {
+    ctx.addIssue({ code: 'custom', path: ['port'], message: 'Port is required' });
+  }
+  if (value.provider === 'SQLITE' && !/^([/\\]|[A-Za-z]:[/\\])/.test(value.host)) {
+    ctx.addIssue({ code: 'custom', path: ['host'], message: 'Use an absolute path to the file' });
+  }
+}
+
+export const connectionSchema = connectionBase.superRefine(validateProvider);
+
 export type ConnectionInput = z.input<typeof connectionSchema>;
 export type ParsedConnectionInput = z.output<typeof connectionSchema>;
 
 /** Editing keeps the stored password when `password` is left blank. */
-export const updateConnectionSchema = connectionSchema
+export const updateConnectionSchema = connectionBase
   .omit({ projectId: true })
-  .extend({ connectionId: z.string().min(1) });
+  .extend({ connectionId: z.string().min(1) })
+  .superRefine(validateProvider);
 
 export type UpdateConnectionInput = z.input<typeof updateConnectionSchema>;
 export type ParsedUpdateConnectionInput = z.output<typeof updateConnectionSchema>;
 
 /** Server-level credentials, before a specific database has been picked. */
-export const serverConnectionSchema = z.object({
-  provider: z.enum(DatabaseProvider),
-  host: z.string().trim().min(1, 'Host is required').max(255),
-  port: z.coerce.number().int().min(1).max(65_535),
-  username: z.string().trim().min(1, 'Username is required').max(128),
-  password: z.string().max(512),
-  sslEnabled: z.boolean().default(false),
-  /** When editing a saved connection, a blank password falls back to the stored one. */
-  connectionId: z.string().min(1).optional()
-});
+export const serverConnectionSchema = connectionBase
+  .pick({
+    provider: true,
+    host: true,
+    port: true,
+    username: true,
+    password: true,
+    sslEnabled: true,
+    endpoint: true
+  })
+  .extend({
+    /** When editing a saved connection, a blank password falls back to the stored one. */
+    connectionId: z.string().min(1).optional()
+  })
+  .superRefine(validateProvider);
 
 export type ServerConnectionInput = z.input<typeof serverConnectionSchema>;
 export type ParsedServerConnectionInput = z.output<typeof serverConnectionSchema>;
