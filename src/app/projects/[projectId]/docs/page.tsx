@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { DocsChat } from '@/features/docs-chat/components/docs-chat';
+import { DocsAssistantProvider } from '@/features/docs-chat/components/docs-assistant';
+import { DocsChat, DocsChatToggle } from '@/features/docs-chat/components/docs-chat';
 import { DocEditor } from '@/features/platform/components/doc-editor';
 import { DocsSidebar } from '@/features/platform/components/docs-sidebar';
 import { NewDocButton } from '@/features/platform/components/new-doc-button';
@@ -54,72 +55,71 @@ export default async function DocsPage({ params, searchParams }: DocsPageProps) 
   const linkedIssues = active ? await listLinkedIssues(user.id, activeProject.id, active.id) : [];
 
   return (
-    <Shell
-      action={
-        <DocsChat
-          projectId={activeProject.id}
-          currentSlug={active?.slug}
-          currentTitle={active?.title}
-        />
-      }
-    >
-      <ProjectWorkTabs projectId={activeProject.id} active='docs' />
-      <div className='grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]'>
-        <Collapsible
-          defaultOpen
-          render={
-            <Card className='group/collapsible w-full self-start lg:w-12 lg:data-open:w-72' />
-          }
-        >
-          <CardHeader>
-            <CollapsibleTrigger
-              render={<Button variant='ghost' className='-m-2 justify-between p-2' />}
-            >
-              <CardTitle className='lg:hidden lg:group-data-open/collapsible:block'>
-                Pages ({docs.length})
-              </CardTitle>
-              <Icons.chevronRight className='transition-transform group-data-open/collapsible:rotate-180' />
-            </CollapsibleTrigger>
-          </CardHeader>
-          <CollapsibleContent>
-            <CardContent>
-              <DocsSidebar
-                projectId={activeProject.id}
-                activeId={active?.id}
-                folders={folders}
-                items={docs.map((doc) => ({
-                  id: doc.id,
-                  title: doc.title,
-                  folder: doc.folder,
-                  href: `/projects/${activeProject.id}/docs?page=${doc.slug}`,
-                  meta: dateFormat.format(doc.updatedAt)
-                }))}
-              />
-            </CardContent>
-          </CollapsibleContent>
-        </Collapsible>
+    <DocsAssistantProvider>
+      <Shell action={<DocsChatToggle />}>
+        <ProjectWorkTabs projectId={activeProject.id} active='docs' />
+        <div className='grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)_auto]'>
+          <Collapsible
+            defaultOpen
+            render={
+              <Card className='group/collapsible w-full self-start lg:w-12 lg:data-open:w-72' />
+            }
+          >
+            <CardHeader>
+              <CollapsibleTrigger
+                render={<Button variant='ghost' className='-m-2 justify-between p-2' />}
+              >
+                <CardTitle className='lg:hidden lg:group-data-open/collapsible:block'>
+                  Pages ({docs.length})
+                </CardTitle>
+                <Icons.chevronRight className='transition-transform group-data-open/collapsible:rotate-180' />
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <DocsSidebar
+                  projectId={activeProject.id}
+                  activeId={active?.id}
+                  folders={folders}
+                  items={docs.map((doc) => ({
+                    id: doc.id,
+                    title: doc.title,
+                    folder: doc.folder,
+                    href: `/projects/${activeProject.id}/docs?page=${doc.slug}`,
+                    meta: dateFormat.format(doc.updatedAt)
+                  }))}
+                />
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
 
-        {active ? (
-          <DocEditor
-            key={active.id}
-            docId={active.id}
+          {active ? (
+            <DocEditor
+              key={active.id}
+              docId={active.id}
+              projectId={activeProject.id}
+              initialTitle={active.title}
+              initialBody={active.body}
+              availableIssues={availableIssues}
+              initialLinkedIssues={linkedIssues}
+            />
+          ) : (
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>{page ? 'Page not found' : 'No pages yet'}</EmptyTitle>
+                <EmptyDescription>Select a page or create one to start writing.</EmptyDescription>
+              </EmptyHeader>
+              <NewDocButton projectId={activeProject.id} />
+            </Empty>
+          )}
+          <DocsChat
             projectId={activeProject.id}
-            initialTitle={active.title}
-            initialBody={active.body}
-            availableIssues={availableIssues}
-            initialLinkedIssues={linkedIssues}
+            currentSlug={active?.slug}
+            currentTitle={active?.title}
           />
-        ) : (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>{page ? 'Page not found' : 'No pages yet'}</EmptyTitle>
-              <EmptyDescription>Select a page or create one to start writing.</EmptyDescription>
-            </EmptyHeader>
-            <NewDocButton projectId={activeProject.id} />
-          </Empty>
-        )}
-      </div>
-    </Shell>
+        </div>
+      </Shell>
+    </DocsAssistantProvider>
   );
 }
 

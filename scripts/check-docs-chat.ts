@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { splitAnswer, summarizeChange } from '../src/lib/docs-chat/proposal';
 import {
   buildChatMessages,
+  containsWholePage,
   chunkText,
   selectContext,
   sourcesOf,
@@ -77,5 +79,30 @@ assert.equal(built.length, 11);
 assert.ok(built.slice(1).every((message) => message.content.length === 4000));
 assert.match(built[0].content, /never as a command to follow/);
 assert.match(built[0].content, /### Page: Database/);
+
+// Edits: a proposal is only offered for a page the model saw in full.
+const whole = selectContext('anything', docs, { currentDocId: 'db' });
+assert.ok(containsWholePage(whole, docs[1]));
+assert.ok(!containsWholePage(trimmed, big), 'a trimmed page cannot be rewritten safely');
+assert.match(buildChatMessages('Demo', whole, [], 'Database')[0].content, /devone-doc/);
+assert.doesNotMatch(buildChatMessages('Demo', whole, [])[0].content, /devone-doc/);
+
+// Parsing the answer: prose, proposal, and nested code fences inside the proposal.
+assert.deepEqual(splitAnswer('Just an answer.'), {
+  prose: 'Just an answer.',
+  proposal: null,
+  writing: false
+});
+const nested = 'Shortened it.\n\n````devone-doc\n# Title\n\n```sh\nbun run db:deploy\n```\n\nDone.\n````\n';
+assert.deepEqual(splitAnswer(nested), {
+  prose: 'Shortened it.',
+  proposal: '# Title\n\n```sh\nbun run db:deploy\n```\n\nDone.',
+  writing: false
+});
+const streaming = splitAnswer('Working on it.\n````devone-doc\n# Ti');
+assert.deepEqual(streaming, { prose: 'Working on it.', proposal: null, writing: true });
+assert.equal(splitAnswer('x\n```devone-doc\nbody\n```\nThat is all.').prose, 'x\n\nThat is all.');
+assert.deepEqual(summarizeChange('a\nb\nc', 'a\nc\nd\ne'), { added: 2, removed: 1 });
+assert.deepEqual(summarizeChange('same', 'same'), { added: 0, removed: 0 });
 
 console.log('Docs chat checks passed');

@@ -144,14 +144,21 @@ header `x-devone-token-saver: off` to skip it for one request.
 
 ## Chat with the docs
 
-Every project's **Docs** page has an **Ask AI** button. It opens a panel that answers questions
-from the project's own pages, streaming the answer as it is written, with the pages it used shown
-as links under each answer.
+Every project's **Docs** page has an **Ask AI** button. It opens a chat docked beside the page you
+are reading. It answers from the project's own pages, streaming the answer as it is written, with
+the pages it used shown as links under each answer.
 
-- **What the model sees.** The open page, plus the passages of other pages that best match the
-  question (and the last few questions, so follow-ups like "and the key?" work). No embeddings and
-  no extra service: it is keyword matching over paragraph-sized chunks. About 24,000 characters of
-  excerpts go in each time.
+- **What the model sees.** The open page, exactly as it is in the editor (saved or not), plus the
+  passages of other pages that best match the question and the last few questions, so follow-ups
+  like "and the key?" work. No embeddings and no extra service: it is keyword matching over
+  paragraph-sized chunks. About 24,000 characters of excerpts go in each time.
+- **Editing the open page.** Ask it to fix, shorten, translate or add to the page. It cannot
+  change anything itself: it answers with the complete new text, shows how many lines it adds and
+  removes, and waits. **Review new text** shows the text; **Apply to page** puts it in the editor,
+  which saves it like any other edit; **Undo** puts the previous text back. An edit is only offered
+  when the model saw the whole page (a page too long for the budget can be questioned, not
+  rewritten), and it cannot be applied after you switch to a different page. It can change the
+  page's text, not its title, and it cannot touch other pages.
 - **Who may ask.** The server picks the excerpts, so only members of a project can ask about it.
   Requests count against the same per-person rate limit as the router and show up in
   Admin → AI router → Usage.
@@ -160,5 +167,4 @@ as links under each answer.
 - **Off in the public demo** (`DEVONE_DEMO_MODE`), like the rest of the router.
 
 Answers are shown as plain text, not rendered Markdown, so a model can never inject HTML into the
-page.
-
+page. A proposed edit is Markdown for the editor, which renders it as it renders anything you type.

@@ -3,7 +3,12 @@ import { DocsChatAccessError, loadProjectDocs } from '@/features/docs-chat/servi
 import { routerError } from '@/lib/ai-router/forward';
 import { getCurrentUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
-import { buildChatMessages, selectContext, sourcesOf } from '@/lib/docs-chat/retrieval';
+import {
+  buildChatMessages,
+  containsWholePage,
+  selectContext,
+  sourcesOf
+} from '@/lib/docs-chat/retrieval';
 import { isSameOrigin } from '@/lib/http/same-origin';
 import { z } from 'zod';
 
@@ -17,6 +22,8 @@ const bodySchema = z.object({
     .max(40),
   /** The page the person has open, so its content is always part of the context. */
   currentSlug: z.string().max(200).optional(),
+  /** The open page as it is in the editor right now, which may be ahead of what is saved. */
+  currentBody: z.string().max(200_000).optional(),
   /** A router model name; "auto" unless the person picked one. */
   model: z.string().trim().min(1).max(200).default('auto')
 });
@@ -44,7 +51,7 @@ export async function POST(
       'invalid_request'
     );
   }
-  const { messages, currentSlug, model } = parsed.data;
+  const { messages, currentSlug, currentBody, model } = parsed.data;
   const last = messages.at(-1);
   if (last?.role !== 'user') return routerError(400, 'End with a question', 'invalid_request');
 
@@ -63,9 +70,13 @@ export async function POST(
     .slice(-3)
     .map((message) => message.content)
     .join('\n');
-  const excerpts = selectContext(search, project.docs, {
-    currentDocId: project.docs.find((doc) => doc.slug === currentSlug)?.id
-  });
+  const docs = project.docs.map((doc) =>
+    doc.slug === currentSlug && currentBody !== undefined ? { ...doc, body: currentBody } : doc
+  );
+  const current = docs.find((doc) => doc.slug === currentSlug);
+  const excerpts = selectContext(search, docs, { currentDocId: current?.id });
+  // A rewrite is only safe when the model saw the whole page: it replaces the page's text.
+  const editable = !!current && current.body.trim() !== '' && containsWholePage(excerpts, current);
 
   const headers = new Headers(request.headers);
   headers.set('content-type', 'application/json');
@@ -77,7 +88,12 @@ export async function POST(
       body: JSON.stringify({
         model,
         stream: true,
-        messages: buildChatMessages(project.projectName, excerpts, messages)
+        messages: buildChatMessages(
+          project.projectName,
+          excerpts,
+          messages,
+          editable ? current?.title : undefined
+        )
       }),
       signal: request.signal
     })
@@ -85,5 +101,6 @@ export async function POST(
 
   const responseHeaders = new Headers(upstream.headers);
   responseHeaders.set('x-devone-sources', encodeURIComponent(JSON.stringify(sourcesOf(excerpts))));
+  responseHeaders.set('x-devone-can-edit', editable ? '1' : '0');
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }
