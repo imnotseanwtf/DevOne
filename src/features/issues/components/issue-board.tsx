@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RichMarkdownEditor } from '@/components/rich-markdown-editor';
+import { AiDescriptionEditor } from '@/features/docs-chat/components/ai-description-editor';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { addDays, format, parseISO } from 'date-fns';
@@ -1759,7 +1759,7 @@ function IssueModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className='max-h-[90svh] overflow-y-auto sm:max-w-5xl'>
+      <DialogContent className='flex max-h-[90svh] flex-col overflow-hidden sm:max-w-5xl'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <span
@@ -1777,8 +1777,8 @@ function IssueModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]'>
-          <div className='min-w-0 space-y-3'>
+        <div className='grid min-h-0 flex-1 gap-6 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_18rem] lg:overflow-hidden'>
+          <div className='min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:pr-2'>
             <div className='space-y-2'>
               <Label htmlFor='modal-title'>Title</Label>
               <Input
@@ -1790,65 +1790,19 @@ function IssueModal({
               />
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='modal-description'>Description</Label>
-              <RichMarkdownEditor
-                markdown={description}
-                onChange={setDescription}
-                readOnly={disabled}
-              />
-            </div>
-
-            <div className='space-y-2'>
-              <Label>Linked docs</Label>
-              <div className='flex flex-wrap items-center gap-2'>
-                {linkedDocs.map((doc) => (
-                  <span
-                    key={doc.id}
-                    className='bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-xs'
-                  >
-                    <Link
-                      href={`/projects/${projectId}/docs?page=${doc.slug}`}
-                      className='flex items-center gap-1.5 hover:underline'
-                    >
-                      <Icons.post className='text-muted-foreground size-3.5' aria-hidden='true' />
-                      {doc.title}
-                    </Link>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon-xs'
-                      aria-label={`Unlink ${doc.title}`}
-                      disabled={linkPending || disabled}
-                      onClick={() => removeDocLink(doc)}
-                    >
-                      <Icons.close />
-                    </Button>
-                  </span>
-                ))}
-                <DocPicker
-                  docs={availableDocs.filter(
-                    (doc) => !linkedDocs.some((linked) => linked.id === doc.id)
-                  )}
-                  onSelect={addDocLink}
-                  disabled={linkPending || disabled}
-                />
-              </div>
-              {linkError && <p className='text-destructive text-xs'>{linkError}</p>}
-            </div>
-
-            <LinkedDrawingsField
+            <AiDescriptionEditor
               projectId={projectId}
-              drawings={linkedDrawings}
-              available={availableDrawings}
-              disabled={linkPending || disabled}
-              onAdd={(drawing) => changeDrawingLink(drawing, true)}
-              onRemove={(drawing) => changeDrawingLink(drawing, false)}
-              error={drawingError}
+              scopeId={issue.id}
+              title={title}
+              label='Description'
+              labelFor='modal-description'
+              value={description}
+              onChange={setDescription}
+              readOnly={disabled}
             />
           </div>
 
-          <div className='space-y-3 lg:border-l lg:pl-6'>
+          <div className='min-h-0 space-y-3 lg:overflow-y-auto lg:border-l lg:pl-6'>
             <p className='text-muted-foreground text-xs'>
               Created by{' '}
               <span className='text-foreground font-medium'>
@@ -1956,6 +1910,56 @@ function IssueModal({
               />
             </div>
 
+            <div className='space-y-3 border-t pt-3'>
+              <div className='space-y-2'>
+                <Label>Linked docs</Label>
+                <div className='flex flex-wrap items-center gap-2'>
+                  {linkedDocs.map((doc) => (
+                    <span
+                      key={doc.id}
+                      className='bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-xs'
+                    >
+                      <Link
+                        href={`/projects/${projectId}/docs?page=${doc.slug}`}
+                        className='flex items-center gap-1.5 hover:underline'
+                      >
+                        <Icons.post className='text-muted-foreground size-3.5' aria-hidden='true' />
+                        {doc.title}
+                      </Link>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='icon-xs'
+                        aria-label={`Unlink ${doc.title}`}
+                        disabled={linkPending || disabled}
+                        onClick={() => removeDocLink(doc)}
+                      >
+                        <Icons.close />
+                      </Button>
+                    </span>
+                  ))}
+                  <DocPicker
+                    docs={availableDocs.filter(
+                      (doc) => !linkedDocs.some((linked) => linked.id === doc.id)
+                    )}
+                    onSelect={addDocLink}
+                    disabled={linkPending || disabled}
+                  />
+                </div>
+                {linkError && <p className='text-destructive text-xs'>{linkError}</p>}
+              </div>
+
+              <LinkedDrawingsField
+                projectId={projectId}
+                drawings={linkedDrawings}
+                available={availableDrawings}
+                disabled={linkPending || disabled}
+                onAdd={(drawing) => changeDrawingLink(drawing, true)}
+                onRemove={(drawing) => changeDrawingLink(drawing, false)}
+                error={drawingError}
+              />
+            </div>
+
             <div className='space-y-2 border-t pt-3'>
               <Label>Branches &amp; pull requests</Label>
               <IssueGitLinks
@@ -1975,7 +1979,7 @@ function IssueModal({
           </div>
         </div>
 
-        <div className='flex justify-end gap-2 border-t pt-3'>
+        <div className='flex shrink-0 justify-end gap-2 border-t pt-3'>
           <Button
             variant='ghost'
             className='text-muted-foreground hover:text-destructive mr-auto'
@@ -2052,13 +2056,13 @@ function CreateIssueModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className='max-h-[90svh] overflow-y-auto sm:max-w-5xl'>
+      <DialogContent className='flex max-h-[90svh] flex-col overflow-hidden sm:max-w-5xl'>
         <DialogHeader>
           <DialogTitle>New task</DialogTitle>
           <DialogDescription>Adds a task to this project.</DialogDescription>
         </DialogHeader>
         <form
-          className='space-y-3'
+          className='flex min-h-0 flex-1 flex-col gap-3'
           onSubmit={(event) => {
             event.preventDefault();
             onError(undefined);
@@ -2090,8 +2094,8 @@ function CreateIssueModal({
             });
           }}
         >
-          <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]'>
-            <div className='min-w-0 space-y-3'>
+          <div className='grid min-h-0 flex-1 gap-6 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_18rem] lg:overflow-hidden'>
+            <div className='min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:pr-2'>
               <div className='space-y-2'>
                 <Label htmlFor='create-title'>Title</Label>
                 <Input
@@ -2105,62 +2109,19 @@ function CreateIssueModal({
                 />
               </div>
 
-              <div className='space-y-2'>
-                <Label htmlFor='create-description'>Description</Label>
-                <RichMarkdownEditor
-                  markdown={description}
-                  onChange={setDescription}
-                  readOnly={pending || disabled}
-                />
-              </div>
-
-              <div className='space-y-2'>
-                <Label>Linked docs</Label>
-                <div className='flex flex-wrap items-center gap-2'>
-                  {linkedDocs.map((doc) => (
-                    <span
-                      key={doc.id}
-                      className='bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-xs'
-                    >
-                      <Icons.post className='text-muted-foreground size-3.5' aria-hidden='true' />
-                      {doc.title}
-                      <Button
-                        type='button'
-                        variant='ghost'
-                        size='icon-xs'
-                        aria-label={`Remove ${doc.title}`}
-                        disabled={pending || disabled}
-                        onClick={() =>
-                          setLinkedDocs((current) => current.filter((entry) => entry.id !== doc.id))
-                        }
-                      >
-                        <Icons.close />
-                      </Button>
-                    </span>
-                  ))}
-                  <DocPicker
-                    docs={availableDocs.filter(
-                      (doc) => !linkedDocs.some((linked) => linked.id === doc.id)
-                    )}
-                    onSelect={(doc) => setLinkedDocs((current) => [...current, doc])}
-                    disabled={pending || disabled}
-                  />
-                </div>
-              </div>
-
-              <LinkedDrawingsField
+              <AiDescriptionEditor
                 projectId={projectId}
-                drawings={linkedDrawings}
-                available={availableDrawings}
-                disabled={pending || disabled}
-                onAdd={(drawing) => setLinkedDrawings((current) => [...current, drawing])}
-                onRemove={(drawing) =>
-                  setLinkedDrawings((current) => current.filter((entry) => entry.id !== drawing.id))
-                }
+                scopeId='new'
+                title={title}
+                label='Description'
+                labelFor='create-description'
+                value={description}
+                onChange={setDescription}
+                readOnly={pending || disabled}
               />
             </div>
 
-            <div className='space-y-3 lg:border-l lg:pl-6'>
+            <div className='min-h-0 space-y-3 lg:overflow-y-auto lg:border-l lg:pl-6'>
               <div className='grid grid-cols-2 gap-3'>
                 <div className='space-y-2'>
                   <Label htmlFor='create-type'>Type</Label>
@@ -2247,6 +2208,57 @@ function CreateIssueModal({
                 disabled={pending || disabled}
               />
 
+              <div className='space-y-3 border-t pt-3'>
+                <div className='space-y-2'>
+                  <Label>Linked docs</Label>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    {linkedDocs.map((doc) => (
+                      <span
+                        key={doc.id}
+                        className='bg-muted flex items-center gap-1.5 rounded-md py-1 pr-1 pl-2 text-xs'
+                      >
+                        <Icons.post className='text-muted-foreground size-3.5' aria-hidden='true' />
+                        {doc.title}
+                        <Button
+                          type='button'
+                          variant='ghost'
+                          size='icon-xs'
+                          aria-label={`Remove ${doc.title}`}
+                          disabled={pending || disabled}
+                          onClick={() =>
+                            setLinkedDocs((current) =>
+                              current.filter((entry) => entry.id !== doc.id)
+                            )
+                          }
+                        >
+                          <Icons.close />
+                        </Button>
+                      </span>
+                    ))}
+                    <DocPicker
+                      docs={availableDocs.filter(
+                        (doc) => !linkedDocs.some((linked) => linked.id === doc.id)
+                      )}
+                      onSelect={(doc) => setLinkedDocs((current) => [...current, doc])}
+                      disabled={pending || disabled}
+                    />
+                  </div>
+                </div>
+
+                <LinkedDrawingsField
+                  projectId={projectId}
+                  drawings={linkedDrawings}
+                  available={availableDrawings}
+                  disabled={pending || disabled}
+                  onAdd={(drawing) => setLinkedDrawings((current) => [...current, drawing])}
+                  onRemove={(drawing) =>
+                    setLinkedDrawings((current) =>
+                      current.filter((entry) => entry.id !== drawing.id)
+                    )
+                  }
+                />
+              </div>
+
               <div className='space-y-2 border-t pt-3'>
                 <Label>
                   Branch <span className='text-muted-foreground font-normal'>(optional)</span>
@@ -2261,7 +2273,7 @@ function CreateIssueModal({
             </div>
           </div>
 
-          <div className='flex justify-end gap-2 border-t pt-3'>
+          <div className='flex shrink-0 justify-end gap-2 border-t pt-3'>
             <Button
               type='button'
               variant='outline'

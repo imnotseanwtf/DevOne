@@ -141,3 +141,61 @@ header `x-devone-token-saver: off` to skip it for one request.
 | `src/features/ai-router/` | Database service, server actions, admin and account screens |
 | `src/app/api/ai/v1/` | The `chat/completions`, `messages`, `messages/count_tokens` and `models` endpoints |
 | `scripts/check-core.ts` | Checks for routing, fallback, streaming, keys and the rate limit |
+
+## Chat with the docs
+
+Every project's **Docs** page has an **Ask AI** button. It opens a chat docked beside the page you
+are reading. It answers from the project's own pages, streaming the answer as it is written, with
+the pages it used shown as links under each answer.
+
+- **What the model sees.** The open page, exactly as it is in the editor (saved or not), plus the
+  passages of other pages that best match the question and the last few questions, so follow-ups
+  like "and the key?" work. No embeddings and no extra service: it is keyword matching over
+  paragraph-sized chunks. About 24,000 characters of excerpts go in each time.
+- **Editing the open page.** Ask it to fix, shorten, translate or add to the page. It cannot
+  change anything itself: it answers with the complete new text, shows how many lines it adds and
+  removes, and waits. **Review new text** shows the text; **Apply to page** puts it in the editor,
+  which saves it like any other edit; **Undo** puts the previous text back. An edit is only offered
+  when the model saw the whole page (a page too long for the budget can be questioned, not
+  rewritten), and it cannot be applied after you switch to a different page. It can change the
+  page's text, not its title, and it cannot touch other pages.
+- **Hover to edit a block.** Move the mouse over a paragraph, heading, list, code block or table
+  in the editor: it is outlined and a small AI button appears. Click it, say what to change
+  ("make this shorter", "translate to Filipino"), and press Enter. Only that block is rewritten,
+  straight in the editor, and the page saves as usual. **Undo** puts the old block back. If the
+  page changes while the model is working, the edit is dropped instead of landing in the wrong
+  place.
+- **Hover to ask.** The text you last pointed at appears above the chat box as "Pointing at", so
+  "this" and "here" in your question mean that passage. Click the × to stop pointing.
+- **Who may ask.** The server picks the excerpts, so only members of a project can ask about it.
+  Requests count against the same per-person rate limit as the router and show up in
+  Admin → AI router → Usage.
+- **Which model.** A **Model** picker sits in the chat panel's header, under "Ask the docs". It lists
+  whatever the router offers: `auto`, your combos, plain model names and `Provider/model`
+  entries, so adding a provider or combo under Admin → AI router adds it here too. The default is
+  `auto` (the router's usual provider order and fallback). That one choice is used by the chat
+  and by hover edits (the hover box just shows which model it is using, and the picker is in the chat panel, so open **Ask AI** to change it), and it is remembered in
+  your browser; if a remembered model is later removed, it falls back to `auto`. An administrator
+  has to add at least one provider first.
+- **Off in the public demo** (`DEVONE_DEMO_MODE`), like the rest of the router.
+
+Answers are shown as plain text, not rendered Markdown, so a model can never inject HTML into the
+page. A proposed edit is Markdown for the editor, which renders it as it renders anything you type.
+
+### AI in task descriptions
+
+The description of a task, both in **New task** and when you open an existing task, has the same
+AI as the Docs pages:
+
+- **Hover to edit a block.** Hover a paragraph, heading or list in the description, click the
+  small AI button, say what to change and press Enter. Only that block changes, and **Undo**
+  puts it back. In an existing task the change is part of the form, so it is stored when you
+  press **Save changes** (and not at all if you close without saving).
+- **Ask AI.** The button above the description opens a chat under the editor. It can answer
+  questions about the task and the project's docs, and it can **write a description from
+  scratch** ("Write a description for this task") or propose a rewrite of the current one. Like
+  everywhere else, it only changes the description when you press **Apply to page**.
+- It knows the task's title as you type it, and it reads the project's docs for facts. It cannot
+  see other tasks or your code.
+- The model is the one picked in the chat's header and is shared with the Docs pages.
+

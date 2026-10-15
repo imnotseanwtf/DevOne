@@ -1,6 +1,8 @@
 'use client';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DocInlineAi } from '@/features/docs-chat/components/doc-inline-ai';
+import { useOptionalDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
 import { RichMarkdownEditor } from '@/components/rich-markdown-editor';
 import { Button } from '@/components/ui/button';
 import {
@@ -100,6 +102,22 @@ export function DocEditor({
     defaultValues: { title: initialTitle, body: initialBody }
   });
   const { title, body } = useStore(form.store, (state) => state.values);
+  const assistant = useOptionalDocsAssistant();
+  const register = assistant?.register;
+
+  // Lets the chat panel beside the editor read the page and, when asked, replace it.
+  useEffect(() => {
+    if (!register) return;
+    register({
+      docId,
+      getMarkdown: () => editorRef.current?.getMarkdown() ?? form.state.values.body,
+      replaceMarkdown: (markdown) => {
+        editorRef.current?.setMarkdown(markdown);
+        form.setFieldValue('body', markdown);
+      }
+    });
+    return () => register(null);
+  }, [docId, form, register]);
   const [error, setError] = useState<string>();
   const [savedValue, setSavedValue] = useState(lastSaved.current);
   const [saving, setSaving] = useState(false);
@@ -342,6 +360,7 @@ export function DocEditor({
             />
           )}
         </form.Field>
+        <DocInlineAi projectId={projectId} docId={docId} title={title} />
       </form.AppForm>
     </div>
   );

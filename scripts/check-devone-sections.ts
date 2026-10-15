@@ -21,7 +21,13 @@ const issueBoard = await readFile(
 assert.match(issueBoard, /aria-label=["']Backlog["']/);
 // The backlog's own "add task" starts the new task in the backlog.
 assert.match(issueBoard, /openCreate\(["']BACKLOG["']\)/);
-assert.equal(issueBoard.match(/<RichMarkdownEditor/g)?.length, 2);
+// Both description fields (new task, open task) are the rich editor with the docs AI around it.
+assert.equal(issueBoard.match(/<AiDescriptionEditor/g)?.length, 2);
+const aiDescription = await readFile(
+  new URL('../src/features/docs-chat/components/ai-description-editor.tsx', import.meta.url),
+  'utf8'
+);
+assert.match(aiDescription, /<RichMarkdownEditor/);
 assert.match(issueBoard, /onSave\(\{[\s\S]*description: description\.trim\(\),/);
 
 const docsPage = await readFile(
