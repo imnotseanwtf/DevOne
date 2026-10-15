@@ -3,9 +3,9 @@
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ModelSelect } from '@/features/docs-chat/components/model-select';
 import { useOptionalDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
 import { replaceBlock, splitBlocks } from '@/lib/docs-chat/blocks';
+import { DEFAULT_MODEL, modelLabel } from '@/lib/docs-chat/models';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -309,7 +309,9 @@ export function DocInlineAi({
                   <span className='sr-only'>Cancel</span>
                 </Button>
               </form>
-              <ModelSelect />
+              <p className='text-muted-foreground truncate text-xs'>
+                Using {modelLabel(model ?? DEFAULT_MODEL)} · change it at the top of the page
+              </p>
               {error && <p className='text-destructive text-xs'>{error}</p>}
             </>
           )}

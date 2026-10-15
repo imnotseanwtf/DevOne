@@ -61,19 +61,22 @@ async function readError(response: Response): Promise<string> {
   return body?.error?.message ?? `The assistant could not answer (${response.status})`;
 }
 
-/** The header button that shows or hides the docked chat. */
+/** The header controls: which model answers, and the button that shows or hides the chat. */
 export function DocsChatToggle() {
   const { open, setOpen } = useDocsAssistant();
   return (
-    <Button
-      variant={open ? 'secondary' : 'outline'}
-      size='sm'
-      aria-pressed={open}
-      onClick={() => setOpen(!open)}
-    >
-      <Icons.sparkles className='size-3.5' />
-      Ask AI
-    </Button>
+    <div className='flex items-center gap-2'>
+      <ModelSelect className='w-56' />
+      <Button
+        variant={open ? 'secondary' : 'outline'}
+        size='sm'
+        aria-pressed={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Icons.sparkles className='size-3.5' />
+        Ask AI
+      </Button>
+    </div>
   );
 }
 
@@ -361,8 +364,6 @@ export function DocsChat({
           })
         )}
       </div>
-
-      <ModelSelect className='border-t px-3 py-2' />
 
       {hovered && hovered.docId === getBridge()?.docId && (
         <div className='bg-muted/50 mx-3 mb-0 flex items-start gap-2 rounded-lg border px-2.5 py-1.5 text-xs'>
