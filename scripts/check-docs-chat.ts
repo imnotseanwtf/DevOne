@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { DEFAULT_MODEL, modelLabel, parseModelIds, pickModel } from '../src/lib/docs-chat/models';
 import { cleanBlockAnswer, replaceBlock, splitBlocks } from '../src/lib/docs-chat/blocks';
 import { splitAnswer, summarizeChange } from '../src/lib/docs-chat/proposal';
 import {
@@ -140,5 +141,19 @@ assert.equal(
   cleanBlockAnswer('Run:\n\n```sh\nbun test\n```'),
   'Run:\n\n```sh\nbun test\n```'
 );
+
+// Model choice: only ids the router offers, falling back to auto.
+assert.deepEqual(
+  parseModelIds({ data: [{ id: 'auto' }, { id: 'stack' }, { id: 'stack' }, { id: 7 }, null, { id: '' }] }),
+  ['auto', 'stack']
+);
+assert.equal(parseModelIds({ error: 'x' }), null);
+assert.equal(parseModelIds(null), null);
+assert.equal(pickModel('Beta/shared', ['auto', 'Beta/shared']), 'Beta/shared');
+assert.equal(pickModel('gone', ['auto', 'Beta/shared']), DEFAULT_MODEL, 'a removed model falls back');
+assert.equal(pickModel(null, ['auto']), DEFAULT_MODEL);
+assert.equal(pickModel('saved', null), 'saved', 'kept until the list says otherwise');
+assert.equal(modelLabel('auto'), 'Auto (first available)');
+assert.equal(modelLabel('Beta/shared'), 'Beta/shared');
 
 console.log('Docs chat checks passed');

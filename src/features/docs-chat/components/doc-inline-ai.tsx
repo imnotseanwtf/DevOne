@@ -3,6 +3,7 @@
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ModelSelect } from '@/features/docs-chat/components/model-select';
 import { useOptionalDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
 import { replaceBlock, splitBlocks } from '@/lib/docs-chat/blocks';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -74,6 +75,7 @@ export function DocInlineAi({
   const askingRef = useRef(false);
   const setHovered = assistant?.setHovered;
   const getBridge = assistant?.getBridge;
+  const model = assistant?.model;
 
   targetRef.current = target;
   askingRef.current = asking || busy || undo !== null;
@@ -178,7 +180,8 @@ export function DocInlineAi({
           block: block.raw,
           before: blocks[target.index - 1]?.raw.slice(-1_500),
           after: blocks[target.index + 1]?.raw.slice(0, 1_500),
-          title
+          title,
+          model
         }),
         signal: controller.signal
       });
@@ -306,6 +309,7 @@ export function DocInlineAi({
                   <span className='sr-only'>Cancel</span>
                 </Button>
               </form>
+              <ModelSelect />
               {error && <p className='text-destructive text-xs'>{error}</p>}
             </>
           )}

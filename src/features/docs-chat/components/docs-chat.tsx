@@ -4,6 +4,7 @@ import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { ModelSelect } from '@/features/docs-chat/components/model-select';
 import { useDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
 import { splitAnswer, summarizeChange } from '@/lib/docs-chat/proposal';
 import { cn } from '@/lib/utils';
@@ -90,7 +91,7 @@ export function DocsChat({
   currentSlug?: string;
   currentTitle?: string;
 }) {
-  const { open, setOpen, getBridge, hovered, setHovered } = useDocsAssistant();
+  const { open, setOpen, getBridge, hovered, setHovered, model } = useDocsAssistant();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -130,6 +131,7 @@ export function DocsChat({
         body: JSON.stringify({
           messages: history.map(({ role, content }) => ({ role, content })),
           currentSlug,
+          model,
           currentBody: bridge?.getMarkdown(),
           focus: hovered && hovered.docId === bridge?.docId ? hovered.text : undefined
         }),
@@ -359,6 +361,8 @@ export function DocsChat({
           })
         )}
       </div>
+
+      <ModelSelect className='border-t px-3 py-2' />
 
       {hovered && hovered.docId === getBridge()?.docId && (
         <div className='bg-muted/50 mx-3 mb-0 flex items-start gap-2 rounded-lg border px-2.5 py-1.5 text-xs'>
