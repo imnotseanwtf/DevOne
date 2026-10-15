@@ -310,7 +310,7 @@ export function DocInlineAi({
                 </Button>
               </form>
               <p className='text-muted-foreground truncate text-xs'>
-                Using {modelLabel(model ?? DEFAULT_MODEL)} · change it at the top of the page
+                Using {modelLabel(model ?? DEFAULT_MODEL)} · change it in Ask AI
               </p>
               {error && <p className='text-destructive text-xs'>{error}</p>}
             </>

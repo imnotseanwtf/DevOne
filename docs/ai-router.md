@@ -170,11 +170,11 @@ the pages it used shown as links under each answer.
 - **Who may ask.** The server picks the excerpts, so only members of a project can ask about it.
   Requests count against the same per-person rate limit as the router and show up in
   Admin → AI router → Usage.
-- **Which model.** A **Model** picker sits in the page header, next to **Ask AI**. It lists
+- **Which model.** A **Model** picker sits in the chat panel's header, under "Ask the docs". It lists
   whatever the router offers: `auto`, your combos, plain model names and `Provider/model`
   entries, so adding a provider or combo under Admin → AI router adds it here too. The default is
   `auto` (the router's usual provider order and fallback). That one choice is used by the chat
-  and by hover edits (the hover box just shows which model it is using), and it is remembered in
+  and by hover edits (the hover box just shows which model it is using, and the picker is in the chat panel, so open **Ask AI** to change it), and it is remembered in
   your browser; if a remembered model is later removed, it falls back to `auto`. An administrator
   has to add at least one provider first.
 - **Off in the public demo** (`DEVONE_DEMO_MODE`), like the rest of the router.

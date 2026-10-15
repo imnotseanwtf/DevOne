@@ -61,22 +61,19 @@ async function readError(response: Response): Promise<string> {
   return body?.error?.message ?? `The assistant could not answer (${response.status})`;
 }
 
-/** The header controls: which model answers, and the button that shows or hides the chat. */
+/** The header button that shows or hides the docked chat. */
 export function DocsChatToggle() {
   const { open, setOpen } = useDocsAssistant();
   return (
-    <div className='flex items-center gap-2'>
-      <ModelSelect className='w-56' />
-      <Button
-        variant={open ? 'secondary' : 'outline'}
-        size='sm'
-        aria-pressed={open}
-        onClick={() => setOpen(!open)}
-      >
-        <Icons.sparkles className='size-3.5' />
-        Ask AI
-      </Button>
-    </div>
+    <Button
+      variant={open ? 'secondary' : 'outline'}
+      size='sm'
+      aria-pressed={open}
+      onClick={() => setOpen(!open)}
+    >
+      <Icons.sparkles className='size-3.5' />
+      Ask AI
+    </Button>
   );
 }
 
@@ -207,7 +204,7 @@ export function DocsChat({
   return (
     <Card className='sticky top-4 flex h-[calc(100svh-15rem)] min-h-96 w-full flex-col gap-0 self-start overflow-hidden py-0 lg:w-96'>
       <div className='flex items-start justify-between gap-2 border-b p-3'>
-        <div className='min-w-0'>
+        <div className='min-w-0 flex-1'>
           <p className='flex items-center gap-1.5 text-sm font-medium'>
             <Icons.sparkles className='size-3.5' />
             Ask the docs
@@ -217,6 +214,7 @@ export function DocsChat({
               ? `Reading “${currentTitle}” and the other pages`
               : 'Answers come from this project’s pages'}
           </p>
+          <ModelSelect className='mt-2' />
         </div>
         <div className='flex shrink-0 items-center gap-1'>
           {messages.length > 0 && !busy && (
