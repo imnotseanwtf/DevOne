@@ -1,10 +1,7 @@
 {
   "duration": 72.23333333333332,
   "fps": 30,
-  "size": [
-    1920,
-    1080
-  ],
+  "size": [1920, 1080],
   "opening_seconds": 8.5,
   "closing_seconds": 7.0,
   "closing_message": "DevOne is open source. Feel free to contribute.",
