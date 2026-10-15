@@ -1,11 +1,3 @@
-import { DescribeTableCommand, DynamoDBClient, ListTablesCommand } from '@aws-sdk/client-dynamodb';
-import {
-  DeleteCommand,
-  DynamoDBDocumentClient,
-  PutCommand,
-  QueryCommand,
-  ScanCommand
-} from '@aws-sdk/lib-dynamodb';
 import {
   DocumentInputError,
   parseJsonObject,
@@ -17,19 +9,32 @@ import type { ConnectionConfig } from '@/lib/database/types';
 
 /** A DynamoDB "database" is the region the connection is pointed at. */
 export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter {
-  const raw = new DynamoDBClient({
-    region: config.host,
-    endpoint: config.endpoint || undefined,
-    credentials: { accessKeyId: config.username, secretAccessKey: config.password },
-    maxAttempts: 2,
-    requestHandler: { requestTimeout: config.statementTimeoutMs, connectionTimeout: 10_000 }
-  });
-  const client = DynamoDBDocumentClient.from(raw, {
-    marshallOptions: { removeUndefinedValues: true }
-  });
+  // The AWS SDK is loaded the first time this connection is used, not when the adapter
+  // registry loads, so people who never use DynamoDB don't pay for it.
+  type Sdk = Awaited<ReturnType<typeof loadSdk>>;
+  let sdk: Promise<Sdk> | undefined;
+  const loadSdk = async () => {
+    const [dynamo, lib] = await Promise.all([
+      import('@aws-sdk/client-dynamodb'),
+      import('@aws-sdk/lib-dynamodb')
+    ]);
+    const raw = new dynamo.DynamoDBClient({
+      region: config.host,
+      endpoint: config.endpoint || undefined,
+      credentials: { accessKeyId: config.username, secretAccessKey: config.password },
+      maxAttempts: 2,
+      requestHandler: { requestTimeout: config.statementTimeoutMs, connectionTimeout: 10_000 }
+    });
+    const client = lib.DynamoDBDocumentClient.from(raw, {
+      marshallOptions: { removeUndefinedValues: true }
+    });
+    return { dynamo, lib, raw, client };
+  };
+  const load = (): Promise<Sdk> => (sdk ??= loadSdk());
 
   const keyOf = async (table: string) => {
-    const { Table } = await raw.send(new DescribeTableCommand({ TableName: table }));
+    const { raw, dynamo } = await load();
+    const { Table } = await raw.send(new dynamo.DescribeTableCommand({ TableName: table }));
     const schema = Table?.KeySchema ?? [];
     return {
       partition: schema.find((entry) => entry.KeyType === 'HASH')?.AttributeName ?? '',
@@ -57,7 +62,8 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
     },
 
     async testConnection() {
-      await raw.send(new ListTablesCommand({ Limit: 1 }));
+      const { raw, dynamo } = await load();
+      await raw.send(new dynamo.ListTablesCommand({ Limit: 1 }));
     },
 
     async listDatabases() {
@@ -65,17 +71,20 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
     },
 
     async listCollections() {
+      const { raw, dynamo } = await load();
       const tables: string[] = [];
       let start: string | undefined;
       do {
-        const page = await raw.send(new ListTablesCommand({ ExclusiveStartTableName: start }));
+        const page = await raw.send(
+          new dynamo.ListTablesCommand({ ExclusiveStartTableName: start })
+        );
         tables.push(...(page.TableNames ?? []));
         start = page.LastEvaluatedTableName;
       } while (start);
 
       const summaries: CollectionSummary[] = [];
       for (const name of tables.toSorted()) {
-        const { Table } = await raw.send(new DescribeTableCommand({ TableName: name }));
+        const { Table } = await raw.send(new dynamo.DescribeTableCommand({ TableName: name }));
         const keys = (Table?.KeySchema ?? [])
           .map(
             (entry) => `${entry.AttributeName} (${entry.KeyType === 'HASH' ? 'partition' : 'sort'})`
@@ -88,6 +97,7 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
     },
 
     async listEntries(_database, table, { limit, cursor, filter }) {
+      const { client, lib } = await load();
       const key = await keyOf(table);
       const conditions = filter?.trim() ? parseJsonObject(filter, 'The filter') : {};
       const start = cursor ? (JSON.parse(cursor) as Record<string, unknown>) : undefined;
@@ -103,7 +113,7 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
       try {
         result = usesQuery
           ? await client.send(
-              new QueryCommand({
+              new lib.QueryCommand({
                 TableName: table,
                 KeyConditionExpression: '#pk = :pk',
                 FilterExpression: filterExpression,
@@ -114,7 +124,7 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
               })
             )
           : await client.send(
-              new ScanCommand({
+              new lib.ScanCommand({
                 TableName: table,
                 FilterExpression: filterExpression,
                 ExpressionAttributeNames: remaining.parts.length ? remaining.names : undefined,
@@ -159,17 +169,21 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
       } else if (key.partition && item[key.partition] === undefined) {
         throw new DocumentInputError(`"${key.partition}" (the partition key) is required`);
       }
-      await client.send(new PutCommand({ TableName: table, Item: item }));
+      const { client, lib } = await load();
+      await client.send(new lib.PutCommand({ TableName: table, Item: item }));
     },
 
     async deleteEntry(_database, table, id) {
+      const { client, lib } = await load();
       await client.send(
-        new DeleteCommand({ TableName: table, Key: JSON.parse(id) as Record<string, unknown> })
+        new lib.DeleteCommand({ TableName: table, Key: JSON.parse(id) as Record<string, unknown> })
       );
     },
 
     async disconnect() {
-      client.destroy();
+      if (!sdk) return;
+      (await sdk).client.destroy();
+      sdk = undefined;
     }
   };
 }

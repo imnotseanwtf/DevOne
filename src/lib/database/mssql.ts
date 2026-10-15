@@ -1,4 +1,4 @@
-import sql, { type ConnectionPool, type IResult } from 'mssql';
+import type { ConnectionPool, IResult } from 'mssql';
 import { columnFilterConditions } from '@/lib/database/column-filters';
 import { dialectOf } from '@/lib/database/dialect';
 import { finalize } from '@/lib/database/postgres';
@@ -119,7 +119,10 @@ function toResult(result: IResult<unknown[]>): { columns: string[]; rows: unknow
 
 export function createMssqlAdapter(config: ConnectionConfig): DatabaseAdapter {
   let pool: ConnectionPool | undefined;
-  const connect = async () => {
+  // The driver is loaded on first use, not when the adapter registry loads.
+  const driver = async () => (await import('mssql')).default;
+  const connect = async (): Promise<ConnectionPool> => {
+    const sql = await driver();
     pool ??= await new sql.ConnectionPool({
       server: config.host,
       port: config.port,
@@ -141,6 +144,7 @@ export function createMssqlAdapter(config: ConnectionConfig): DatabaseAdapter {
   };
 
   const inTransaction = async <T>(body: (run: typeof request) => Promise<T>, commit: boolean) => {
+    const sql = await driver();
     const transaction = new sql.Transaction(await connect());
     await transaction.begin();
     const run: typeof request = async (text, params = []) => {

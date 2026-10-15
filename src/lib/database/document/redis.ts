@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import type Redis from 'ioredis';
 import {
   DocumentInputError,
   type DocumentAdapter,
@@ -26,12 +26,14 @@ function need(condition: boolean, message: string): void {
 
 export function createRedisAdapter(config: ConnectionConfig): DocumentAdapter {
   const clients = new Map<number, Redis>();
-  const clientFor = (database: string): Redis => {
+  // ioredis is loaded the first time a client is needed, not when the adapter registry loads.
+  const clientFor = async (database: string): Promise<Redis> => {
     const index = Number(database.replace(/^db/, ''));
     if (!Number.isInteger(index) || index < 0) throw new DocumentInputError('Unknown database');
     let client = clients.get(index);
     if (!client) {
-      client = new Redis({
+      const { default: IORedis } = await import('ioredis');
+      client = new IORedis({
         host: config.host,
         port: config.port,
         username: config.username || undefined,
@@ -53,7 +55,7 @@ export function createRedisAdapter(config: ConnectionConfig): DocumentAdapter {
 
   /** lazyConnect leaves the client in 'wait' until first use; connect only from there. */
   const ready = async (database: string): Promise<Redis> => {
-    const client = clientFor(database);
+    const client = await clientFor(database);
     if (client.status === 'wait') await client.connect();
     return client;
   };

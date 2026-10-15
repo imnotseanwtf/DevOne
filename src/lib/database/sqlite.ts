@@ -1,10 +1,10 @@
-import Database from 'better-sqlite3';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { columnFilterConditions } from '@/lib/database/column-filters';
 import { dialectOf } from '@/lib/database/dialect';
 import { finalize } from '@/lib/database/postgres';
 import { buildRowStatement } from '@/lib/database/row-changes';
+import { openSqlite, type SqliteDb } from '@/lib/database/sqlite-driver';
 import {
   MAX_RESULT_ROWS,
   StatementFailedError,
@@ -45,38 +45,45 @@ export function resolveSqlitePath(input: string): string {
 
 /** Blobs can't cross to the browser as-is; show them as hex like other tools do. */
 function plain(value: unknown): unknown {
-  if (Buffer.isBuffer(value)) return `0x${value.toString('hex')}`;
+  if (value instanceof Uint8Array) return `0x${Buffer.from(value).toString('hex')}`;
   if (typeof value === 'bigint') return value.toString();
   return value;
 }
 
 export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
-  let db: Database.Database | undefined;
-  const open = () => {
-    if (!db) {
-      db = new Database(resolveSqlitePath(config.host), { fileMustExist: true, timeout: 10_000 });
-      db.defaultSafeIntegers(false);
-    }
+  let db: SqliteDb | undefined;
+  /** Opens the file on first use; every method starts here, then works on `current()`. */
+  const open = async () => {
+    db ??= await openSqlite(resolveSqlitePath(config.host));
+  };
+  const current = (): SqliteDb => {
+    if (!db) throw new Error('The SQLite file is not open');
     return db;
   };
 
   /** Rows as arrays plus column names, whatever kind of statement this is. */
   const run = (sql: string, params: unknown[] = []) => {
-    const statement = open().prepare(sql);
-    if (!statement.reader) {
-      statement.run(...params);
+    const statement = current().prepare(sql);
+    if (statement.columns.length === 0) {
+      statement.run(params);
       return { columns: [] as string[], rows: [] as unknown[][] };
     }
-    const columns = statement.columns().map((column) => column.name);
-    const rows = statement
-      .raw(true)
-      .all(...params)
-      .map((row) => (row as unknown[]).map(plain));
-    return { columns, rows };
+    return {
+      columns: statement.columns,
+      rows: statement.values(params).map((row) => row.map(plain))
+    };
+  };
+
+  /** Rows as objects keyed by column name, for the schema queries. */
+  const query = <T>(sql: string, params: unknown[] = []): T[] => {
+    const { columns, rows } = run(sql, params);
+    return rows.map(
+      (row) => Object.fromEntries(columns.map((name, index) => [name, row[index]])) as T
+    );
   };
 
   const transaction = <T>(body: () => T): T => {
-    const connection = open();
+    const connection = current();
     connection.exec('BEGIN');
     try {
       const result = body();
@@ -90,6 +97,7 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
 
   return {
     async testConnection() {
+      await open();
       run('SELECT 1');
     },
 
@@ -98,41 +106,37 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
     },
 
     async getSchema() {
-      const connection = open();
-      const names = connection
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name`
-        )
-        .all() as { name: string }[];
+      await open();
+      const names = query<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name`
+      );
 
       const tables: Table[] = names.map(({ name }) => {
-        const columns = connection.prepare('SELECT * FROM pragma_table_xinfo(?)').all(name) as {
+        const columns = query<{
           name: string;
           type: string;
           notnull: number;
           dflt_value: string | null;
           pk: number;
           hidden: number;
-        }[];
+        }>('SELECT * FROM pragma_table_xinfo(?)', [name]);
         const keyed = columns.filter((column) => column.pk > 0).toSorted((a, b) => a.pk - b.pk);
 
-        const foreign = connection
-          .prepare('SELECT * FROM pragma_foreign_key_list(?)')
-          .all(name) as {
+        const foreign = query<{
           id: number;
           seq: number;
           table: string;
           from: string;
           to: string | null;
-        }[];
+        }>('SELECT * FROM pragma_foreign_key_list(?)', [name]);
         const byId = new Map<number, typeof foreign>();
         for (const row of foreign) byId.set(row.id, [...(byId.get(row.id) ?? []), row]);
 
-        const indexRows = connection.prepare('SELECT * FROM pragma_index_list(?)').all(name) as {
+        const indexRows = query<{
           name: string;
           unique: number;
           origin: string;
-        }[];
+        }>('SELECT * FROM pragma_index_list(?)', [name]);
 
         return {
           schema: SCHEMA,
@@ -160,10 +164,9 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
             .map((index) => ({
               name: index.name,
               unique: index.unique === 1,
-              columns: (
-                connection
-                  .prepare('SELECT name FROM pragma_index_info(?) ORDER BY seqno')
-                  .all(index.name) as { name: string }[]
+              columns: query<{ name: string }>(
+                'SELECT name FROM pragma_index_info(?) ORDER BY seqno',
+                [index.name]
               ).map((column) => column.name)
             }))
         } satisfies Table;
@@ -173,10 +176,10 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
     },
 
     async execute(sql, readOnly) {
-      const connection = open();
+      await open();
       const started = performance.now();
       // query_only makes SQLite itself refuse every write, DDL included.
-      connection.pragma(`query_only = ${readOnly ? 'ON' : 'OFF'}`);
+      current().exec(`PRAGMA query_only = ${readOnly ? 'ON' : 'OFF'}`);
       try {
         const { columns, rows } = run(sql);
         return {
@@ -187,7 +190,7 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
           truncated: rows.length > MAX_RESULT_ROWS
         } satisfies QueryResult;
       } finally {
-        connection.pragma('query_only = OFF');
+        current().exec('PRAGMA query_only = OFF');
       }
     },
 
@@ -196,6 +199,7 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
       table,
       { limit, offset, filter, search, searchColumns, columnFilters = [] }
     ) {
+      await open();
       const conditions = filter ? [`(${filter})`] : [];
       const values: unknown[] = [];
       const bind = (value: unknown) => {
@@ -225,6 +229,7 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
     },
 
     async insertRow(schema, table, values) {
+      await open();
       const { sql, params } = buildRowStatement('SQLITE', schema, table, {
         kind: 'insert',
         values
@@ -233,6 +238,7 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
     },
 
     async updateRow(schema, table, values, where) {
+      await open();
       const { sql, params } = buildRowStatement('SQLITE', schema, table, {
         kind: 'update',
         values,
@@ -242,11 +248,13 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
     },
 
     async deleteRow(schema, table, where) {
+      await open();
       const { sql, params } = buildRowStatement('SQLITE', schema, table, { kind: 'delete', where });
       run(sql, params);
     },
 
     async applyRowChanges(schema, table, changes) {
+      await open();
       transaction(() => {
         for (const [index, change] of changes.entries()) {
           const { sql, params } = buildRowStatement('SQLITE', schema, table, change);
@@ -264,6 +272,7 @@ export function createSqliteAdapter(config: ConnectionConfig): DatabaseAdapter {
     },
 
     async applyStatements(statements) {
+      await open();
       transaction(() => {
         for (const [index, sql] of statements.entries()) {
           try {

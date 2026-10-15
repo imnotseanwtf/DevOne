@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import Database from 'better-sqlite3';
 import { connectionSchema, serverConnectionSchema } from '../src/features/database/schema';
 import { columnFilterConditions } from '../src/lib/database/column-filters';
 import { dialectOf } from '../src/lib/database/dialect';
@@ -10,6 +9,7 @@ import { assertMssqlReadable } from '../src/lib/database/mssql';
 import { buildRowStatement, renderRowStatement } from '../src/lib/database/row-changes';
 import { decryptSecret, encryptSecret } from '../src/lib/encryption/secrets';
 import { createSqliteAdapter, resolveSqlitePath } from '../src/lib/database/sqlite';
+import { openSqlite } from '../src/lib/database/sqlite-driver';
 import {
   DATABASE_PROVIDERS,
   DEFAULT_PORTS,
@@ -101,7 +101,7 @@ assert.ok(
 const dir = mkdtempSync(path.join(tmpdir(), 'devone-sqlite-'));
 try {
   const file = path.join(dir, 'app.db');
-  const seed = new Database(file);
+  const seed = await openSqlite(file, { create: true });
   seed.exec(`
     CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE);
     CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), title TEXT DEFAULT 'x');
