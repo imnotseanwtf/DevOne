@@ -22,7 +22,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "test": "bun scripts/check-devone-sections.ts && bun scripts/check-core.ts && bun scripts/check-engines.ts && bun scripts/check-docs-chat.ts && bun scripts/check-docs.ts",
+    "test": "bun scripts/check-devone-sections.ts && bun scripts/check-core.ts && bun scripts/check-engines.ts && bun scripts/check-docs-chat.ts && bun scripts/check-board-order.ts && bun scripts/check-docs.ts",
     "test:db": "bun scripts/check-database.ts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
