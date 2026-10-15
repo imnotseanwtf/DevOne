@@ -24,6 +24,9 @@ function afterId(ejson: Ejson, cursor: string | undefined): unknown {
   return ejson.parse(cursor, { relaxed: true })._id;
 }
 
+const collectionOf = (client: MongoClient, database: string, name: string) =>
+  client.db(database).collection(name);
+
 export function createMongoAdapter(config: ConnectionConfig): DocumentAdapter {
   // The driver (and its BSON) is loaded the first time this connection is used, so importing
   // the adapter registry costs nothing for people who never connect to MongoDB.
@@ -56,9 +59,6 @@ export function createMongoAdapter(config: ConnectionConfig): DocumentAdapter {
     return session;
   };
 
-  const collectionOf = (client: MongoClient, database: string, name: string) =>
-    client.db(database).collection(name);
-
   return {
     vocabulary: {
       collection: 'collection',
@@ -67,12 +67,12 @@ export function createMongoAdapter(config: ConnectionConfig): DocumentAdapter {
     },
 
     async testConnection() {
-      const { client, ejson } = await connect();
+      const { client } = await connect();
       await client.db('admin').command({ ping: 1 });
     },
 
     async listDatabases() {
-      const { client, ejson } = await connect();
+      const { client } = await connect();
       const { databases } = await client.db('admin').admin().listDatabases({ nameOnly: true });
       return databases
         .map((entry) => entry.name)
@@ -81,7 +81,7 @@ export function createMongoAdapter(config: ConnectionConfig): DocumentAdapter {
     },
 
     async listCollections(database) {
-      const { client, ejson } = await connect();
+      const { client } = await connect();
       const names = await client.db(database).listCollections({}, { nameOnly: true }).toArray();
       const summaries: CollectionSummary[] = [];
       for (const { name } of names.toSorted((a, b) => a.name.localeCompare(b.name))) {

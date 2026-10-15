@@ -21,7 +21,7 @@ Everything DevOne is built with, grouped by what it does. Versions match `packag
 | [Prisma](https://www.prisma.io) (`prisma`, `@prisma/client`) | 7.10 | Schema, migrations and queries (`prisma/schema.prisma`, `prisma.config.ts`) |
 | `@prisma/adapter-pg` + [`pg`](https://node-postgres.com) | 7.10 / 8.23 | Prisma's Postgres driver; also connects to users' Postgres databases in the Database browser |
 | [`mysql2`](https://sidorares.github.io/node-mysql2/docs) | 3.24 | Connects to users' MySQL databases in the Database browser |
-| [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3) | 13 | Opens SQLite files (set `DEVONE_SQLITE_DIR` to confine them to one folder) in the Database browser |
+| SQLite (built into the runtime: `bun:sqlite` on Bun, `node:sqlite` on Node 22.13+) | n/a | Opens SQLite files (set `DEVONE_SQLITE_DIR` to confine them to one folder) in the Database browser; no native add-on to compile |
 | [`mssql`](https://tediousjs.github.io/node-mssql) | 12 | Connects to users' SQL Server databases in the Database browser |
 | [`mongodb`](https://www.mongodb.com/docs/drivers/node/current/) | 7 | Browses and edits MongoDB (and Amazon DocumentDB) documents in the Database browser |
 | [`ioredis`](https://github.com/redis/ioredis) | 6 | Browses and edits Redis keys (also ElastiCache, MemoryDB, Valkey) in the Database browser |
@@ -142,7 +142,7 @@ These are in `package.json` but no source file imports them. They are either use
 | Docs | MDXEditor, `marked` + DOMPurify, shared folder list (`ContentFolder`, `useOptimistic`) |
 | Drawings | Excalidraw with DevOne live sync (`DrawingElement`, `DrawingPresence`), draw.io embed, Excalidraw link import |
 | Git | GitHub/GitLab REST APIs, CodeMirror 6 (+ `language-data`, `merge`), `react-resizable-panels` |
-| Database | `pg`, `mysql2`, `better-sqlite3`, `mssql`, `mongodb`, `ioredis`, AWS SDK (DynamoDB), TanStack Table, CodeMirror SQL, React Flow (ERD), `react-day-picker` |
+| Database | `pg`, `mysql2`, `mssql`, `mongodb`, `ioredis`, AWS SDK (DynamoDB), TanStack Table, CodeMirror SQL, React Flow (ERD), `react-day-picker` |
 | DevOps | Pipelines per merge request, jobs and logs from the GitHub/GitLab APIs; SSH terminal: `ssh2` on the server, xterm.js in the browser, Server-Sent Events + POSTs in between (`src/app/api/ssh`) |
 | API client | CodeMirror, `yaml`, OpenAPI / Postman / cURL importers; environments are project resources |
 | Settings / My account / Admin | Server actions + Prisma, audit log (`AuditEvent`), user preferences (`User.preferences`) |

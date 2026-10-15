@@ -7,6 +7,18 @@ import {
 } from '@/lib/database/document/types';
 import type { ConnectionConfig } from '@/lib/database/types';
 
+/** Equality map -> expression pieces, with placeholders so names/values are never inlined. */
+const equals = (filter: Record<string, unknown>, offset = 0) => {
+  const names: Record<string, string> = {};
+  const values: Record<string, unknown> = {};
+  const parts = Object.entries(filter).map(([attribute, value], index) => {
+    names[`#f${offset + index}`] = attribute;
+    values[`:f${offset + index}`] = value;
+    return `#f${offset + index} = :f${offset + index}`;
+  });
+  return { names, values, parts };
+};
+
 /** A DynamoDB "database" is the region the connection is pointed at. */
 export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter {
   // The AWS SDK is loaded the first time this connection is used, not when the adapter
@@ -40,18 +52,6 @@ export function createDynamoDbAdapter(config: ConnectionConfig): DocumentAdapter
       partition: schema.find((entry) => entry.KeyType === 'HASH')?.AttributeName ?? '',
       sort: schema.find((entry) => entry.KeyType === 'RANGE')?.AttributeName
     };
-  };
-
-  /** Equality map -> expression pieces, with placeholders so names/values are never inlined. */
-  const equals = (filter: Record<string, unknown>, offset = 0) => {
-    const names: Record<string, string> = {};
-    const values: Record<string, unknown> = {};
-    const parts = Object.entries(filter).map(([attribute, value], index) => {
-      names[`#f${offset + index}`] = attribute;
-      values[`:f${offset + index}`] = value;
-      return `#f${offset + index} = :f${offset + index}`;
-    });
-    return { names, values, parts };
   };
 
   return {
