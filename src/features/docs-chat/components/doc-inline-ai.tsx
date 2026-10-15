@@ -220,18 +220,40 @@ export function DocInlineAi({
     close();
   };
 
-  const cardWidth = Math.min(Math.max(rect.width, 320), 560);
-  const cardLeft = Math.max(8, Math.min(rect.left, window.innerWidth - cardWidth - 8));
-  const cardTop = Math.min(rect.bottom + 6, window.innerHeight - 150);
+  // Inside a dialog (which is itself transformed) fixed positioning would be relative to the
+  // dialog, so everything is placed relative to it instead; elsewhere it is the viewport.
+  const container = target.element.closest<HTMLElement>('[role="dialog"]');
+  const origin = container
+    ? (() => {
+        const box = container.getBoundingClientRect();
+        return {
+          left: box.left + container.clientLeft - container.scrollLeft,
+          top: box.top + container.clientTop - container.scrollTop,
+          width: container.clientWidth,
+          height: container.clientHeight
+        };
+      })()
+    : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  const mode = container ? 'absolute' : 'fixed';
+  const place = (top: number, left: number) => ({
+    top: top - origin.top,
+    left: left - origin.left
+  });
+
+  const cardWidth = Math.min(Math.max(rect.width, 320), 560, origin.width - 16);
+  const cardLeft = Math.max(
+    origin.left + 8,
+    Math.min(rect.left, origin.left + origin.width - cardWidth - 8)
+  );
+  const cardTop = container ? rect.bottom + 6 : Math.min(rect.bottom + 6, window.innerHeight - 150);
 
   return createPortal(
     <div data-docs-inline-ai>
       {!asking && undo === null && (
         <div
-          className='pointer-events-none fixed z-[70] rounded-md ring-2 ring-violet-500/40 bg-violet-500/5'
+          className={`pointer-events-none ${mode} z-[70] rounded-md bg-violet-500/5 ring-2 ring-violet-500/40`}
           style={{
-            top: rect.top - 2,
-            left: rect.left - 4,
+            ...place(rect.top - 2, rect.left - 4),
             width: rect.width + 8,
             height: rect.height + 4
           }}
@@ -242,8 +264,8 @@ export function DocInlineAi({
           type='button'
           size='icon-xs'
           variant='secondary'
-          className='fixed z-[71] rounded-full shadow'
-          style={{ top: rect.top - 2, left: rect.right - 14 }}
+          className={`${mode} z-[71] rounded-full shadow`}
+          style={place(rect.top - 2, rect.right - 14)}
           disabled={target.index === -1}
           title={target.index === -1 ? 'Can’t edit this block here' : 'Edit with AI'}
           onClick={() => setAsking(true)}
@@ -257,8 +279,8 @@ export function DocInlineAi({
         <div
           role='dialog'
           aria-label='Edit this block with AI'
-          className='bg-popover fixed z-[71] space-y-2 rounded-lg border p-2.5 shadow-lg'
-          style={{ top: cardTop, left: cardLeft, width: cardWidth }}
+          className={`bg-popover ${mode} z-[71] space-y-2 rounded-lg border p-2.5 shadow-lg`}
+          style={{ ...place(cardTop, cardLeft), width: cardWidth }}
         >
           {undo !== null ? (
             <div className='flex items-center justify-between gap-2 text-sm'>
@@ -277,26 +299,34 @@ export function DocInlineAi({
             </div>
           ) : (
             <>
-              <form
-                className='flex items-center gap-2'
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submit();
-                }}
-              >
+              <div className='flex items-center gap-2'>
                 <Icons.sparkles className='text-muted-foreground size-4 shrink-0' />
                 <Input
                   autoFocus
                   value={instruction}
                   onChange={(event) => setInstruction(event.target.value)}
-                  onKeyDown={(event) => event.key === 'Escape' && close()}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      // Closes this box, not the dialog it may be sitting in.
+                      event.stopPropagation();
+                      close();
+                    } else if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void submit();
+                    }
+                  }}
                   placeholder='Tell AI what to change here…'
                   disabled={busy}
                   maxLength={1000}
                   className='h-8 flex-1'
                   aria-label='Instruction for this block'
                 />
-                <Button type='submit' size='icon-sm' disabled={busy || !instruction.trim()}>
+                <Button
+                  type='button'
+                  size='icon-sm'
+                  disabled={busy || !instruction.trim()}
+                  onClick={() => void submit()}
+                >
                   {busy ? (
                     <Icons.spinner className='size-3.5 animate-spin' />
                   ) : (
@@ -308,7 +338,7 @@ export function DocInlineAi({
                   <Icons.close className='size-3.5' />
                   <span className='sr-only'>Cancel</span>
                 </Button>
-              </form>
+              </div>
               <p className='text-muted-foreground truncate text-xs'>
                 Using {modelLabel(model ?? DEFAULT_MODEL)} · change it in Ask AI
               </p>
@@ -318,6 +348,6 @@ export function DocInlineAi({
         </div>
       )}
     </div>,
-    document.body
+    container ?? document.body
   );
 }

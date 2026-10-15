@@ -181,3 +181,21 @@ the pages it used shown as links under each answer.
 
 Answers are shown as plain text, not rendered Markdown, so a model can never inject HTML into the
 page. A proposed edit is Markdown for the editor, which renders it as it renders anything you type.
+
+### AI in task descriptions
+
+The description of a task, both in **New task** and when you open an existing task, has the same
+AI as the Docs pages:
+
+- **Hover to edit a block.** Hover a paragraph, heading or list in the description, click the
+  small AI button, say what to change and press Enter. Only that block changes, and **Undo**
+  puts it back. In an existing task the change is part of the form, so it is stored when you
+  press **Save changes** (and not at all if you close without saving).
+- **Ask AI.** The button above the description opens a chat under the editor. It can answer
+  questions about the task and the project's docs, and it can **write a description from
+  scratch** ("Write a description for this task") or propose a rewrite of the current one. Like
+  everywhere else, it only changes the description when you press **Apply to page**.
+- It knows the task's title as you type it, and it reads the project's docs for facts. It cannot
+  see other tasks or your code.
+- The model is the one picked in the chat's header and is shared with the Docs pages.
+

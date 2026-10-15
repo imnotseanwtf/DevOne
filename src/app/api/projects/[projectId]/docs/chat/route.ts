@@ -24,6 +24,11 @@ const bodySchema = z.object({
   currentSlug: z.string().max(200).optional(),
   /** The open page as it is in the editor right now, which may be ahead of what is saved. */
   currentBody: z.string().max(200_000).optional(),
+  /**
+   * Set when the open text is a task's description rather than a docs page: the task's title.
+   * The description itself is `currentBody`.
+   */
+  taskTitle: z.string().max(300).optional(),
   /** The passage the person is pointing at in the page, if any. */
   focus: z.string().max(2_000).optional(),
   /** A router model name; "auto" unless the person picked one. */
@@ -53,7 +58,8 @@ export async function POST(
       'invalid_request'
     );
   }
-  const { messages, currentSlug, currentBody, focus, model } = parsed.data;
+  const { messages, currentSlug, currentBody, taskTitle, focus, model } = parsed.data;
+  const task = taskTitle !== undefined;
   const last = messages.at(-1);
   if (last?.role !== 'user') return routerError(400, 'End with a question', 'invalid_request');
 
@@ -72,13 +78,26 @@ export async function POST(
     .slice(-3)
     .map((message) => message.content)
     .join('\n');
-  const docs = project.docs.map((doc) =>
-    doc.slug === currentSlug && currentBody !== undefined ? { ...doc, body: currentBody } : doc
-  );
-  const current = docs.find((doc) => doc.slug === currentSlug);
+  const TASK_ID = '__task__';
+  const docs = task
+    ? // The task's description stands in as the open page, next to the project's real pages.
+      [
+        {
+          id: TASK_ID,
+          slug: TASK_ID,
+          title: taskTitle || 'This task',
+          folder: null,
+          body: currentBody ?? ''
+        },
+        ...project.docs
+      ]
+    : project.docs.map((doc) =>
+        doc.slug === currentSlug && currentBody !== undefined ? { ...doc, body: currentBody } : doc
+      );
+  const current = task ? docs[0] : docs.find((doc) => doc.slug === currentSlug);
   const excerpts = selectContext(search, docs, { currentDocId: current?.id });
-  // A rewrite is only safe when the model saw the whole page: it replaces the page's text.
-  const editable = !!current && current.body.trim() !== '' && containsWholePage(excerpts, current);
+  // A rewrite is only safe when the model saw the whole page: it replaces the text.
+  const editable = !!current && containsWholePage(excerpts, current);
 
   const headers = new Headers(request.headers);
   headers.set('content-type', 'application/json');
@@ -90,20 +109,23 @@ export async function POST(
       body: JSON.stringify({
         model,
         stream: true,
-        messages: buildChatMessages(
-          project.projectName,
-          excerpts,
-          messages,
-          editable ? current?.title : undefined,
-          focus
-        )
+        messages: buildChatMessages(project.projectName, excerpts, messages, {
+          editablePage: editable ? current?.title : undefined,
+          focus,
+          kind: task ? 'task' : 'page'
+        })
       }),
       signal: request.signal
     })
   );
 
   const responseHeaders = new Headers(upstream.headers);
-  responseHeaders.set('x-devone-sources', encodeURIComponent(JSON.stringify(sourcesOf(excerpts))));
+  responseHeaders.set(
+    'x-devone-sources',
+    encodeURIComponent(
+      JSON.stringify(sourcesOf(excerpts).filter((source) => source.slug !== TASK_ID))
+    )
+  );
   responseHeaders.set('x-devone-can-edit', editable ? '1' : '0');
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }

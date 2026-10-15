@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RichMarkdownEditor } from '@/components/rich-markdown-editor';
+import { AiDescriptionEditor } from '@/features/docs-chat/components/ai-description-editor';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { addDays, format, parseISO } from 'date-fns';
@@ -1790,14 +1790,16 @@ function IssueModal({
               />
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='modal-description'>Description</Label>
-              <RichMarkdownEditor
-                markdown={description}
-                onChange={setDescription}
-                readOnly={disabled}
-              />
-            </div>
+            <AiDescriptionEditor
+              projectId={projectId}
+              scopeId={issue.id}
+              title={title}
+              label='Description'
+              labelFor='modal-description'
+              value={description}
+              onChange={setDescription}
+              readOnly={disabled}
+            />
 
             <div className='space-y-2'>
               <Label>Linked docs</Label>
@@ -2105,14 +2107,16 @@ function CreateIssueModal({
                 />
               </div>
 
-              <div className='space-y-2'>
-                <Label htmlFor='create-description'>Description</Label>
-                <RichMarkdownEditor
-                  markdown={description}
-                  onChange={setDescription}
-                  readOnly={pending || disabled}
-                />
-              </div>
+              <AiDescriptionEditor
+                projectId={projectId}
+                scopeId='new'
+                title={title}
+                label='Description'
+                labelFor='create-description'
+                value={description}
+                onChange={setDescription}
+                readOnly={pending || disabled}
+              />
 
               <div className='space-y-2'>
                 <Label>Linked docs</Label>

@@ -35,10 +35,16 @@ interface Message {
   showProposal?: boolean;
 }
 
-const SUGGESTIONS = [
+const PAGE_SUGGESTIONS = [
   'Summarize this page',
   'Fix the grammar on this page',
   'Add a short “Troubleshooting” section'
+];
+
+const TASK_SUGGESTIONS = [
+  'Write a description for this task',
+  'Add acceptance criteria',
+  'Make this clearer and shorter'
 ];
 
 /** The text added by one SSE `data:` line of a chat completion. */
@@ -85,12 +91,19 @@ export function DocsChatToggle() {
 export function DocsChat({
   projectId,
   currentSlug,
-  currentTitle
+  currentTitle,
+  kind = 'page',
+  variant = 'dock'
 }: {
   projectId: string;
   currentSlug?: string;
   currentTitle?: string;
+  /** `task`: the open text is a task's description, with `currentTitle` the task's title. */
+  kind?: 'page' | 'task';
+  /** `dock`: a sticky column beside the page; `inline`: a block in the flow, e.g. in a dialog. */
+  variant?: 'dock' | 'inline';
 }) {
+  const task = kind === 'task';
   const { open, setOpen, getBridge, hovered, setHovered, model } = useDocsAssistant();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -130,7 +143,7 @@ export function DocsChat({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           messages: history.map(({ role, content }) => ({ role, content })),
-          currentSlug,
+          ...(task ? { taskTitle: currentTitle ?? '' } : { currentSlug }),
           model,
           currentBody: bridge?.getMarkdown(),
           focus: hovered && hovered.docId === bridge?.docId ? hovered.text : undefined
@@ -202,17 +215,26 @@ export function DocsChat({
   };
 
   return (
-    <Card className='sticky top-4 flex h-[calc(100svh-15rem)] min-h-96 w-full flex-col gap-0 self-start overflow-hidden py-0 lg:w-96'>
+    <Card
+      className={cn(
+        'flex w-full flex-col gap-0 overflow-hidden py-0',
+        variant === 'dock'
+          ? 'sticky top-4 h-[calc(100svh-15rem)] min-h-96 self-start lg:w-96'
+          : 'h-[26rem]'
+      )}
+    >
       <div className='flex items-start justify-between gap-2 border-b p-3'>
         <div className='min-w-0 flex-1'>
           <p className='flex items-center gap-1.5 text-sm font-medium'>
             <Icons.sparkles className='size-3.5' />
-            Ask the docs
+            {task ? 'Ask AI about this task' : 'Ask the docs'}
           </p>
           <p className='text-muted-foreground mt-0.5 truncate text-xs'>
-            {currentTitle
-              ? `Reading “${currentTitle}” and the other pages`
-              : 'Answers come from this project’s pages'}
+            {task
+              ? 'Reading this task’s description and the project’s docs'
+              : currentTitle
+                ? `Reading “${currentTitle}” and the other pages`
+                : 'Answers come from this project’s pages'}
           </p>
           <ModelSelect className='mt-2' />
         </div>
@@ -234,10 +256,10 @@ export function DocsChat({
         {messages.length === 0 ? (
           <div className='space-y-2'>
             <p className='text-muted-foreground text-sm'>
-              Ask a question, or ask me to change this page. I propose edits; you decide whether to
-              apply them.
+              Ask a question, or ask me to change this {task ? 'description' : 'page'}. I propose
+              edits; you decide whether to apply them.
             </p>
-            {SUGGESTIONS.map((suggestion) => (
+            {(task ? TASK_SUGGESTIONS : PAGE_SUGGESTIONS).map((suggestion) => (
               <button
                 key={suggestion}
                 type='button'
@@ -381,13 +403,7 @@ export function DocsChat({
         </div>
       )}
 
-      <form
-        className='flex items-end gap-2 border-t p-3'
-        onSubmit={(event) => {
-          event.preventDefault();
-          void ask(input);
-        }}
-      >
+      <div className='flex items-end gap-2 border-t p-3'>
         <Textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
@@ -414,12 +430,17 @@ export function DocsChat({
             <span className='sr-only'>Stop</span>
           </Button>
         ) : (
-          <Button type='submit' size='icon' disabled={!input.trim()}>
+          <Button
+            type='button'
+            size='icon'
+            disabled={!input.trim()}
+            onClick={() => void ask(input)}
+          >
             <Icons.send className='size-4' />
             <span className='sr-only'>Send</span>
           </Button>
         )}
-      </form>
+      </div>
     </Card>
   );
 }

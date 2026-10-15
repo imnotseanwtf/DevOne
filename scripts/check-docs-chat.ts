@@ -86,7 +86,7 @@ assert.match(built[0].content, /### Page: Database/);
 const whole = selectContext('anything', docs, { currentDocId: 'db' });
 assert.ok(containsWholePage(whole, docs[1]));
 assert.ok(!containsWholePage(trimmed, big), 'a trimmed page cannot be rewritten safely');
-assert.match(buildChatMessages('Demo', whole, [], 'Database')[0].content, /devone-doc/);
+assert.match(buildChatMessages('Demo', whole, [], { editablePage: 'Database' })[0].content, /devone-doc/);
 assert.doesNotMatch(buildChatMessages('Demo', whole, [])[0].content, /devone-doc/);
 
 // Parsing the answer: prose, proposal, and nested code fences inside the proposal.
@@ -108,7 +108,7 @@ assert.deepEqual(summarizeChange('a\nb\nc', 'a\nc\nd\ne'), { added: 2, removed: 
 assert.deepEqual(summarizeChange('same', 'same'), { added: 0, removed: 0 });
 
 // The passage the person points at is given to the model as context, not as a command.
-const pointed = buildChatMessages('Demo', whole, [], undefined, 'Lunch is at noon.')[0].content;
+const pointed = buildChatMessages('Demo', whole, [], { focus: 'Lunch is at noon.' })[0].content;
 assert.match(pointed, /<focus>\nLunch is at noon\.\n<\/focus>/);
 assert.match(pointed, /refer to it/);
 assert.doesNotMatch(buildChatMessages('Demo', whole, [])[0].content, /<focus>/);
@@ -155,5 +155,14 @@ assert.equal(pickModel(null, ['auto']), DEFAULT_MODEL);
 assert.equal(pickModel('saved', null), 'saved', 'kept until the list says otherwise');
 assert.equal(modelLabel('auto'), 'Auto (first available)');
 assert.equal(modelLabel('Beta/shared'), 'Beta/shared');
+
+// A task's description gets task wording, and an empty one can still be written from scratch.
+const taskPrompt = buildChatMessages('Demo', whole, [], { editablePage: 'Fix login', kind: 'task' })[0].content;
+assert.match(taskPrompt, /help the team write and understand a task/);
+assert.match(taskPrompt, /open task description "Fix login"/);
+assert.match(taskPrompt, /devone-doc/);
+assert.doesNotMatch(taskPrompt, /documentation of the project/);
+const empty = doc('task', 'New task', '');
+assert.ok(containsWholePage(selectContext('write it', [empty, ...docs], { currentDocId: 'task' }), empty));
 
 console.log('Docs chat checks passed');
