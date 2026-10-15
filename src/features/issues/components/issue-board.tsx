@@ -94,7 +94,7 @@ import {
   type BranchChoice
 } from '@/features/issues/components/issue-git-links';
 import { planMove, sortColumn } from '@/features/issues/board-order';
-import { FlipList } from '@/features/issues/components/flip-list';
+import { FlipGroup } from '@/features/issues/components/flip-group';
 import { IssueHistory } from '@/features/issues/components/issue-history';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -1037,9 +1037,15 @@ export function IssueBoard({
               onCreate={(date) => openCreate(columns[0]?.name ?? 'BACKLOG', date)}
             />
           )}
-          <div className={cn('space-y-6', (switchingBoard || view !== 'board') && 'hidden')}>
+          <FlipGroup
+            signature={filtered
+              .map((issue) => `${issue.id}:${issue.status}:${issue.position ?? 0}`)
+              .join('|')}
+            className={cn('space-y-6', (switchingBoard || view !== 'board') && 'hidden')}
+          >
             <section
               aria-label='Board'
+              data-flip-scroll
               ref={boardScrollRef}
               onPointerDown={onBoardPointerDown}
               onPointerMove={onBoardPointerMove}
@@ -1103,10 +1109,7 @@ export function IssueBoard({
                         <Icons.add />
                       </Button>
                     </div>
-                    <FlipList
-                      signature={columnIssues.map((issue) => issue.id).join(',')}
-                      className='flex flex-1 flex-col gap-2 px-2 pt-2 pb-2'
-                    >
+                    <ul className='flex flex-1 flex-col gap-2 px-2 pt-2 pb-2'>
                       {columnIssues.map((issue) => (
                         <li key={issue.id} data-flip-id={issue.id} className='relative'>
                           {cardHint?.anchorId === issue.id && drag?.id !== issue.id && (
@@ -1144,7 +1147,7 @@ export function IssueBoard({
                           {isOver ? 'Drop here' : 'No tasks'}
                         </li>
                       )}
-                    </FlipList>
+                    </ul>
                   </div>
                 );
               })}
@@ -1181,10 +1184,7 @@ export function IssueBoard({
                   <Icons.add />
                 </Button>
               </div>
-              <FlipList
-                signature={backlogIssues.map((issue) => issue.id).join(',')}
-                className='grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
-              >
+              <ul className='grid gap-2 p-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
                 {backlogIssues.map((issue, index) => {
                   const backlogHint =
                     hint?.kind === 'card' && hint.status === 'BACKLOG' ? hint : null;
@@ -1229,9 +1229,9 @@ export function IssueBoard({
                       : 'Nothing in the backlog'}
                   </li>
                 )}
-              </FlipList>
+              </ul>
             </section>
-          </div>
+          </FlipGroup>
         </div>
 
         {selected && (
