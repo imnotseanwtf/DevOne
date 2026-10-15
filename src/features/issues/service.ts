@@ -530,7 +530,7 @@ export async function moveIssueBefore(
         NOT: { id: issueId }
       },
       orderBy: [{ position: 'asc' }, { number: 'asc' }],
-      select: { id: true }
+      select: { id: true, position: true }
     });
 
     let insertAt = siblings.length;
@@ -540,7 +540,11 @@ export async function moveIssueBefore(
       insertAt = found;
     }
 
-    const ordered = [...siblings.slice(0, insertAt), { id: issueId }, ...siblings.slice(insertAt)];
+    const ordered: { id: string; position?: number }[] = [
+      ...siblings.slice(0, insertAt),
+      { id: issueId },
+      ...siblings.slice(insertAt)
+    ];
 
     if (target.status !== issue.status) {
       await transaction.issueEvent.create({
@@ -561,7 +565,8 @@ export async function moveIssueBefore(
           where: { id: entry.id },
           data: { status: target.status, position: index }
         });
-      } else {
+      } else if (entry.position !== index) {
+        // Only the cards that actually shifted are written.
         await transaction.issue.update({
           where: { id: entry.id },
           data: { position: index }

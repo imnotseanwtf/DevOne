@@ -93,6 +93,8 @@ import {
   NewTaskBranchField,
   type BranchChoice
 } from '@/features/issues/components/issue-git-links';
+import { planMove, sortColumn } from '@/features/issues/board-order';
+import { FlipGroup } from '@/features/issues/components/flip-group';
 import { IssueHistory } from '@/features/issues/components/issue-history';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -167,15 +169,6 @@ function personLabel(username: string, name: string | null): string {
   return name ? `${username} (${name})` : username;
 }
 
-function sortColumn(entries: BoardIssue[]): BoardIssue[] {
-  return [...entries].toSorted((a, b) => {
-    const pa = a.position ?? 0;
-    const pb = b.position ?? 0;
-    if (pa !== pb) return pa - pb;
-    return a.issueKey.localeCompare(b.issueKey);
-  });
-}
-
 type DragItem = { kind: 'card'; id: string } | { kind: 'column'; id: string };
 
 /** Where the dragged thing would land; drives the drop line and the drop itself. */
@@ -183,6 +176,16 @@ type DropHint =
   | { kind: 'column'; targetId: string; side: 'before' | 'after' }
   /** `anchorId` null means the end of the column (or an empty one). */
   | { kind: 'card'; status: string; anchorId: string | null; side: 'before' | 'after' };
+
+function sameHint(a: DropHint, b: DropHint): boolean {
+  if (a.kind === 'column' && b.kind === 'column') {
+    return a.targetId === b.targetId && a.side === b.side;
+  }
+  if (a.kind === 'card' && b.kind === 'card') {
+    return a.status === b.status && a.anchorId === b.anchorId && a.side === b.side;
+  }
+  return false;
+}
 
 /** Which half of `element` the pointer is over, along the list's direction. */
 function sideOf(event: React.DragEvent, axis: 'x' | 'y'): 'before' | 'after' {
@@ -382,26 +385,8 @@ export function IssueBoard({
   /** Moves a card into `status` (a board column's name, or "BACKLOG"),
    * optionally before another card. */
   function move(issueId: string, status: string, beforeId: string | null) {
-    const current = optimistic ?? issues;
-    const moving = current.find((entry) => entry.id === issueId);
-    if (!moving) return;
-    if (beforeId === issueId) return;
-    if (moving.status === status && beforeId === null) return;
-
-    const updated: BoardIssue = { ...moving, status };
-
-    // Optimistic reorder: remove, then insert before the target (or at the end).
-    const without = current.filter((entry) => entry.id !== issueId);
-    const targetColumnIssues = sortColumn(without.filter((entry) => entry.status === status));
-    let next: BoardIssue[];
-    if (beforeId) {
-      const idx = without.findIndex((entry) => entry.id === beforeId);
-      if (idx === -1) return;
-      next = [...without.slice(0, idx), updated, ...without.slice(idx)];
-    } else {
-      const others = without.filter((entry) => entry.status !== status);
-      next = [...others, ...targetColumnIssues, updated];
-    }
+    const next = planMove(optimistic ?? issues, issueId, status, beforeId);
+    if (!next) return;
 
     setError(undefined);
     setOptimistic(next);
@@ -444,6 +429,11 @@ export function IssueBoard({
     stopEdgeScroll();
   }
 
+  /** Dragover fires about sixty times a second; only re-render when the hint really changed. */
+  function updateHint(next: DropHint) {
+    setHint((previous) => (previous && sameHint(previous, next) ? previous : next));
+  }
+
   /** Hovering a column: statuses land beside it, cards at its end unless over a card. */
   function hoverColumn(event: React.DragEvent, columnId: string, status: string) {
     if (!drag) return;
@@ -451,9 +441,9 @@ export function IssueBoard({
     event.dataTransfer.dropEffect = 'move';
     if (drag.kind === 'column') {
       const side = drag.id === columnId ? 'before' : sideOf(event, 'x');
-      setHint({ kind: 'column', targetId: columnId, side });
+      updateHint({ kind: 'column', targetId: columnId, side });
     } else {
-      setHint({ kind: 'card', status, anchorId: null, side: 'after' });
+      updateHint({ kind: 'card', status, anchorId: null, side: 'after' });
     }
   }
 
@@ -462,7 +452,7 @@ export function IssueBoard({
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    setHint({ kind: 'card', status, anchorId: issueId, side: sideOf(event, axis) });
+    updateHint({ kind: 'card', status, anchorId: issueId, side: sideOf(event, axis) });
   }
 
   function clearHintOnLeave(event: React.DragEvent<HTMLElement>) {
@@ -485,6 +475,8 @@ export function IssueBoard({
     }
 
     if (item.kind === 'card' && target.kind === 'card') {
+      // Dropped on itself: it stays where it is (not the top of the column).
+      if (target.anchorId === item.id) return;
       const list = sortColumn(
         filtered.filter((issue) => issue.status === target.status && issue.id !== item.id)
       );
@@ -1045,9 +1037,15 @@ export function IssueBoard({
               onCreate={(date) => openCreate(columns[0]?.name ?? 'BACKLOG', date)}
             />
           )}
-          <div className={cn('space-y-6', (switchingBoard || view !== 'board') && 'hidden')}>
+          <FlipGroup
+            signature={filtered
+              .map((issue) => `${issue.id}:${issue.status}:${issue.position ?? 0}`)
+              .join('|')}
+            className={cn('space-y-6', (switchingBoard || view !== 'board') && 'hidden')}
+          >
             <section
               aria-label='Board'
+              data-flip-scroll
               ref={boardScrollRef}
               onPointerDown={onBoardPointerDown}
               onPointerMove={onBoardPointerMove}
@@ -1113,7 +1111,7 @@ export function IssueBoard({
                     </div>
                     <ul className='flex flex-1 flex-col gap-2 px-2 pt-2 pb-2'>
                       {columnIssues.map((issue) => (
-                        <li key={issue.id} className='relative'>
+                        <li key={issue.id} data-flip-id={issue.id} className='relative'>
                           {cardHint?.anchorId === issue.id && drag?.id !== issue.id && (
                             <DropLine side={cardHint.side} axis='y' />
                           )}
@@ -1192,7 +1190,7 @@ export function IssueBoard({
                     hint?.kind === 'card' && hint.status === 'BACKLOG' ? hint : null;
                   const isLast = index === backlogIssues.length - 1;
                   return (
-                    <li key={issue.id} className='relative'>
+                    <li key={issue.id} data-flip-id={issue.id} className='relative'>
                       {backlogHint?.anchorId === issue.id && drag?.id !== issue.id && (
                         <DropLine side={backlogHint.side} axis='x' />
                       )}
@@ -1233,7 +1231,7 @@ export function IssueBoard({
                 )}
               </ul>
             </section>
-          </div>
+          </FlipGroup>
         </div>
 
         {selected && (
