@@ -16,15 +16,18 @@ export interface SplitAnswer {
   writing: boolean;
 }
 
-const OPEN = new RegExp(`^(\`{3,})${PROPOSAL_LANG}[ \\t]*$`, 'm');
+/** The fence label of a complete plan, which the person turns into a new page. */
+export const PLAN_LANG = 'devone-plan';
+
+const openFence = (lang: string) => new RegExp(`^(\`{3,})${lang}[ \\t]*$`, 'm');
 
 /**
  * Splits an answer into prose and a proposed page. The proposal may contain
  * code fences of its own, so it ends at the last line made only of backticks
  * that is at least as long as the opening fence.
  */
-export function splitAnswer(text: string): SplitAnswer {
-  const open = OPEN.exec(text);
+export function splitAnswer(text: string, lang: string = PROPOSAL_LANG): SplitAnswer {
+  const open = openFence(lang).exec(text);
   if (!open) return { prose: text, proposal: null, writing: false };
 
   const fence = open[1].length;

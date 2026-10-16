@@ -10,7 +10,8 @@ import {
   type CodeSelection,
   type CodeTreeEntry
 } from '@/lib/docs-chat/code';
-import type { ChatDoc } from '@/lib/docs-chat/retrieval';
+import { clipToolResult } from '@/lib/docs-chat/plan';
+import { selectContext, type ChatDoc } from '@/lib/docs-chat/retrieval';
 
 export class DocsChatAccessError extends Error {
   constructor() {
@@ -140,4 +141,105 @@ export async function loadCodeContext(
     folders,
     files
   });
+}
+
+/**
+ * Runs the planning assistant's tools for one answer. Everything is scoped to the
+ * project: a repository must be linked to it, and a branch must exist.
+ */
+export function createPlanToolRunner(
+  userId: string,
+  projectId: string,
+  docs: ChatDoc[],
+  picked: CodeSelection | null
+) {
+  const verified = new Map<string, boolean>();
+  let repositories: Promise<ChatRepository[]> | null = null;
+  const linked = () => (repositories ??= listChatRepositories(userId, projectId));
+
+  /** The repository and branch a call means: its own arguments, else the picked branch. */
+  const resolve = async (args: Record<string, string>) => {
+    let repositoryId = picked?.repositoryId;
+    let branch = picked?.branch;
+    if (args.repository || args.branch) {
+      const all = await linked();
+      const repository =
+        all.find((entry) => entry.id === args.repository || entry.name === args.repository) ??
+        (args.repository ? undefined : all.find((entry) => entry.id === repositoryId));
+      if (!repository) throw new Error('Unknown repository. Call list_branches first.');
+      repositoryId = repository.id;
+      branch = args.branch ?? (args.repository ? repository.defaultBranch : branch);
+    }
+    if (!repositoryId || !branch || !isSafeBranchName(branch)) {
+      throw new Error('No branch is picked. Call list_branches, then pass repository and branch.');
+    }
+    const key = `${repositoryId}\n${branch}`;
+    if (!verified.has(key)) {
+      const all = await linked();
+      verified.set(
+        key,
+        !!all.find((entry) => entry.id === repositoryId)?.branches.includes(branch)
+      );
+    }
+    if (!verified.get(key)) throw new Error('That branch does not exist in this project.');
+    return { ...(await openRepository(userId, repositoryId)), branch };
+  };
+
+  const tools: Record<string, (args: Record<string, string>) => Promise<string>> = {
+    async search_docs({ query = '' }) {
+      const found = selectContext(query, docs, { maxChars: 6_000, maxExcerpts: 5 });
+      return found.length
+        ? found.map((excerpt) => `### ${excerpt.title}\n${excerpt.text}`).join('\n\n')
+        : 'No page matched.';
+    },
+    async read_doc({ title = '' }) {
+      const wanted = title.trim().toLowerCase();
+      const doc = docs.find((entry) => entry.title.toLowerCase() === wanted);
+      if (!doc) return `No page titled "${title}". Pages: ${docs.map((d) => d.title).join(', ')}`;
+      return `# ${doc.title}\n${doc.body}`;
+    },
+    async list_branches() {
+      const all = await linked();
+      return all.length
+        ? all
+            .map(
+              (r) => `${r.name} (id ${r.id}, default ${r.defaultBranch}): ${r.branches.join(', ')}`
+            )
+            .join('\n')
+        : 'No repository is linked to this project.';
+    },
+    async list_files(args) {
+      const { client, token, repository, branch } = await resolve(args);
+      const entries = await client.getTree(
+        token,
+        repository.providerRepositoryId,
+        args.path ?? '',
+        branch
+      );
+      return entries
+        .slice(0, 150)
+        .map((entry) => `${entry.type === 'dir' ? '[dir] ' : ''}${entry.path}`)
+        .join('\n');
+    },
+    async read_file(args) {
+      const { client, token, repository, branch } = await resolve(args);
+      const file = await client.getFile(
+        token,
+        repository.providerRepositoryId,
+        args.path ?? '',
+        branch
+      );
+      return file.text || (file.truncated ? '(too large to read)' : '(empty)');
+    }
+  };
+
+  return async (name: string, args: Record<string, string>): Promise<string> => {
+    const run = tools[name];
+    if (!run) return `Unknown tool "${name}".`;
+    try {
+      return clipToolResult(await run(args));
+    } catch (error) {
+      return `Error: ${error instanceof Error ? error.message : 'the tool failed'}`;
+    }
+  };
 }

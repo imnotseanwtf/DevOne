@@ -211,3 +211,44 @@ assert.match(
   /## Code: acme\/app @ main/
 );
 console.log('Docs chat code checks passed');
+
+// Plan skill: tools, the plan fence and the interview prompt.
+import {
+  PLAN_TOOLS,
+  buildPlanMessages,
+  clipToolResult,
+  describeToolCall,
+  parseToolArgs
+} from '../src/lib/docs-chat/plan';
+import { PLAN_LANG } from '../src/lib/docs-chat/proposal';
+
+assert.deepEqual(parseToolArgs('{"path":"src/a.ts","n":3}'), { path: 'src/a.ts' });
+assert.deepEqual(parseToolArgs('not json'), {});
+assert.deepEqual(parseToolArgs('[1]'), {});
+assert.equal(describeToolCall('read_file', { path: 'package.json' }), 'read file: package.json');
+assert.equal(describeToolCall('list_branches', {}), 'list branches');
+assert.ok(clipToolResult('x'.repeat(9000)).endsWith('…(cut)'));
+assert.deepEqual(
+  PLAN_TOOLS.map((tool) => tool.function.name),
+  ['search_docs', 'read_doc', 'list_branches', 'list_files', 'read_file']
+);
+const plan = '# Add SSO\n\n## Checklist\n- [ ] Add route src/app/sso.ts';
+const planAnswer = splitAnswer(`Here is the plan.\n\n\`\`\`\`${PLAN_LANG}\n${plan}\n\`\`\`\``, PLAN_LANG);
+assert.equal(planAnswer.proposal, plan);
+assert.equal(planAnswer.prose, 'Here is the plan.');
+assert.equal(splitAnswer(`\`\`\`\`${PLAN_LANG}\n${plan}\n\`\`\`\``).proposal, null, 'a plan is not a page edit');
+const planPrompt = buildPlanMessages('Demo', [{ role: 'user', content: 'plan SSO' }], {
+  branch: 'acme/app @ main',
+  toolsAvailable: true
+});
+assert.equal(planPrompt[0].role, 'system');
+assert.match(planPrompt[0].content, /ONE short question/);
+assert.match(planPrompt[0].content, /devone-plan/);
+assert.match(planPrompt[0].content, /acme\/app @ main/);
+assert.match(planPrompt[0].content, /never invent paths/);
+assert.doesNotMatch(planPrompt[0].content, /## Excerpts/);
+assert.match(
+  buildPlanMessages('Demo', [], { toolsAvailable: false, context: '### Page: A' })[0].content,
+  /No branch is picked[\s\S]*## Excerpts/
+);
+console.log('Docs chat plan checks passed');

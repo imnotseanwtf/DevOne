@@ -11,10 +11,12 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ModelSelect } from '@/features/docs-chat/components/model-select';
 import { useDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
-import { splitAnswer, summarizeChange } from '@/lib/docs-chat/proposal';
+import { saveDocAction } from '@/features/platform/actions';
+import { PLAN_LANG, splitAnswer, summarizeChange } from '@/lib/docs-chat/proposal';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 interface Source {
   slug: string;
@@ -38,6 +40,23 @@ interface Message {
   docId?: string;
   applied?: Applied;
   showProposal?: boolean;
+  /** Answered in Plan mode: the fenced block is a plan to save as a new page. */
+  plan?: boolean;
+  /** What the assistant looked up to answer, e.g. `read file: package.json`. */
+  tools?: string[];
+  /** The page the plan was saved as. */
+  created?: Source;
+}
+
+const PLAN_SUGGESTIONS = [
+  'Plan a new feature for this app',
+  'Plan a refactor of a part of the code',
+  'Plan how to release the next version'
+];
+
+/** The first `# Heading` of a plan, which names the page it is saved as. */
+function planTitle(plan: string): string {
+  return /^#\s+(.+)$/m.exec(plan)?.[1].trim().slice(0, 200) || 'Plan';
 }
 
 interface ChatRepository {
@@ -123,6 +142,7 @@ export function DocsChat({
   const [repositories, setRepositories] = useState<ChatRepository[]>([]);
   /** `repositoryId\n branch` of the branch whose code the chat may read; empty for none. */
   const [branch, setBranch] = useState('');
+  const [mode, setMode] = useState<'ask' | 'plan'>('ask');
   const abort = useRef<AbortController | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -171,6 +191,7 @@ export function DocsChat({
           messages: history.map(({ role, content }) => ({ role, content })),
           ...(task ? { taskTitle: currentTitle ?? '' } : { currentSlug }),
           model,
+          mode,
           ...(branch
             ? { code: { repositoryId: branch.split('\n')[0], branch: branch.split('\n')[1] } }
             : {}),
@@ -194,7 +215,22 @@ export function DocsChat({
         }
       })();
       const canEdit = response.headers.get('x-devone-can-edit') === '1';
-      patchLast((message) => ({ ...message, canEdit, docId: bridge?.docId }));
+      const tools = (() => {
+        try {
+          return JSON.parse(
+            decodeURIComponent(response.headers.get('x-devone-tools') ?? '[]')
+          ) as string[];
+        } catch {
+          return [];
+        }
+      })();
+      patchLast((message) => ({
+        ...message,
+        canEdit,
+        docId: bridge?.docId,
+        plan: mode === 'plan',
+        tools
+      }));
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -235,6 +271,24 @@ export function DocsChat({
     patchAt(index, (message) => ({ ...message, applied: { before, undone: false } }));
   };
 
+  const savePlan = async (index: number, plan: string) => {
+    const result = await saveDocAction({
+      projectId,
+      title: planTitle(plan),
+      body: plan,
+      folder: 'Plans'
+    }).catch(() => null);
+    if (!result?.ok || !result.slug) {
+      toast.error(result?.error ?? 'Could not save the plan');
+      return;
+    }
+    patchAt(index, (message) => ({
+      ...message,
+      created: { slug: result.slug as string, title: planTitle(plan) }
+    }));
+    toast.success('Plan saved as a new page');
+  };
+
   const undo = (index: number) => {
     const applied = messages[index]?.applied;
     const bridge = getBridge();
@@ -265,6 +319,26 @@ export function DocsChat({
                 ? `Reading “${currentTitle}” and the other pages`
                 : 'Answers come from this project’s pages'}
           </p>
+          <div
+            className='mt-2 grid grid-cols-2 gap-1 rounded-lg border p-0.5 text-xs'
+            role='group'
+            aria-label='Chat mode'
+          >
+            {(['ask', 'plan'] as const).map((value) => (
+              <button
+                key={value}
+                type='button'
+                aria-pressed={mode === value}
+                onClick={() => setMode(value)}
+                className={cn(
+                  'rounded-md px-2 py-1 font-medium',
+                  mode === value ? 'bg-secondary' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {value === 'ask' ? 'Ask' : 'Plan'}
+              </button>
+            ))}
+          </div>
           <ModelSelect className='mt-2' />
           {repositories.length > 0 && (
             <label className='mt-2 flex items-center gap-2 text-xs'>
@@ -308,26 +382,31 @@ export function DocsChat({
         {messages.length === 0 ? (
           <div className='space-y-2'>
             <p className='text-muted-foreground text-sm'>
-              Ask a question, or ask me to change this {task ? 'description' : 'page'}. I propose
-              edits; you decide whether to apply them.
+              {mode === 'plan'
+                ? 'Tell me what you want to build. I look through the docs and code, ask a few questions one at a time, then write a checklist plan you can save as a page.'
+                : `Ask a question, or ask me to change this ${task ? 'description' : 'page'}. I propose edits; you decide whether to apply them.`}
             </p>
-            {(task ? TASK_SUGGESTIONS : PAGE_SUGGESTIONS).map((suggestion) => (
-              <button
-                key={suggestion}
-                type='button'
-                onClick={() => ask(suggestion)}
-                className='hover:bg-muted block w-full rounded-lg border px-3 py-2 text-left text-sm'
-              >
-                {suggestion}
-              </button>
-            ))}
+            {(mode === 'plan' ? PLAN_SUGGESTIONS : task ? TASK_SUGGESTIONS : PAGE_SUGGESTIONS).map(
+              (suggestion) => (
+                <button
+                  key={suggestion}
+                  type='button'
+                  onClick={() => ask(suggestion)}
+                  className='hover:bg-muted block w-full rounded-lg border px-3 py-2 text-left text-sm'
+                >
+                  {suggestion}
+                </button>
+              )
+            )}
           </div>
         ) : (
           messages.map((message, index) => {
             const answer =
-              message.role === 'assistant' && message.canEdit
-                ? splitAnswer(message.content)
-                : { prose: message.content, proposal: null, writing: false };
+              message.role === 'assistant' && message.plan
+                ? splitAnswer(message.content, PLAN_LANG)
+                : message.role === 'assistant' && message.canEdit
+                  ? splitAnswer(message.content)
+                  : { prose: message.content, proposal: null, writing: false };
             const bridge = getBridge();
             const samePage = !!bridge && bridge.docId === message.docId;
             const change =
@@ -355,7 +434,69 @@ export function DocsChat({
                   )}
                 </div>
 
-                {answer.proposal !== null && (
+                {message.tools && message.tools.length > 0 && (
+                  <div className='flex max-w-[95%] flex-wrap gap-1'>
+                    {message.tools.map((tool, i) => (
+                      <span
+                        key={i}
+                        className='text-muted-foreground flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs'
+                      >
+                        <Icons.search className='size-3' />
+                        {tool}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {answer.proposal !== null && message.plan && (
+                  <div className='bg-card w-full max-w-[95%] space-y-2 rounded-lg border p-2.5 text-xs'>
+                    <p className='font-medium'>
+                      {message.created ? 'Plan saved' : 'Plan'}: {planTitle(answer.proposal)}
+                      <span className='text-muted-foreground ml-2 font-normal'>
+                        {(answer.proposal.match(/^\s*[-*] \[ \]/gm) ?? []).length} checklist items
+                      </span>
+                    </p>
+                    {message.showProposal && (
+                      <pre className='bg-muted max-h-64 overflow-auto rounded p-2 whitespace-pre-wrap'>
+                        {answer.proposal}
+                      </pre>
+                    )}
+                    <div className='flex flex-wrap items-center gap-1.5'>
+                      {message.created ? (
+                        <Link
+                          href={`/projects/${projectId}/docs?page=${message.created.slug}`}
+                          className='hover:bg-muted rounded-md border px-2 py-1 font-medium'
+                        >
+                          Open plan page
+                        </Link>
+                      ) : (
+                        <Button
+                          type='button'
+                          size='xs'
+                          disabled={busy}
+                          onClick={() => void savePlan(index, answer.proposal as string)}
+                        >
+                          Create plan page
+                        </Button>
+                      )}
+                      <Button
+                        type='button'
+                        size='xs'
+                        variant='ghost'
+                        onClick={() =>
+                          patchAt(index, (entry) => ({
+                            ...entry,
+                            showProposal: !entry.showProposal
+                          }))
+                        }
+                      >
+                        {message.showProposal ? 'Hide' : 'Review'} plan
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {answer.proposal !== null && !message.plan && (
                   <div className='bg-card w-full max-w-[95%] space-y-2 rounded-lg border p-2.5 text-xs'>
                     <p className='font-medium'>
                       {message.applied
