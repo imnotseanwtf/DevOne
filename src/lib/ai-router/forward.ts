@@ -1,228 +1,376 @@
+import { shouldFallBack, usageFromJson, type RouteTarget, type TokenUsage } from './routing';
+import type { ProviderCredential, ProviderFormat } from './types';
+import { executeTarget, type UpstreamExecution } from './executors';
 import {
-  providerUrl,
-  shouldFallBack,
-  usageFromJson,
-  usageFromSse,
-  type RouteTarget,
-  type TokenUsage
-} from '@/lib/ai-router/routing';
+  ProtocolError,
+  translateResponse,
+  normalizedUsage,
+  object,
+  type JsonObject
+} from './translation';
+import {
+  SseReader,
+  ChatStreamTranslator,
+  ClientStreamTranslator,
+  ChatAccumulator,
+  upstreamError,
+  hasOutput
+} from './streaming';
 
 export interface AttemptFailure {
   target: RouteTarget;
-  /** The provider's HTTP status, or 0 when it could not be reached. */
   status: number;
   error: string;
   retryAfter: string | null;
 }
-
 export interface ForwardOutcome {
-  /** The provider model that answered, or null when none did. */
   target: RouteTarget | null;
   status: number;
   attempts: number;
   usage: TokenUsage;
   error: string | null;
 }
-
 export interface ForwardOptions {
-  /** The client's chat completion request, as parsed JSON. */
   body: Record<string, unknown>;
   targets: RouteTarget[];
   apiKeyFor: (providerId: string) => string | null;
+  credentialFor?: (target: RouteTarget) => Promise<ProviderCredential | null>;
+  refreshCredential?: (
+    target: RouteTarget,
+    failedAccessToken?: string | null
+  ) => Promise<ProviderCredential | null>;
+  validateUrl?: (url: string) => Promise<void>;
+  sourceFormat?: ProviderFormat;
   fetchImpl?: typeof fetch;
-  /** The client's request signal: a client that leaves stops the upstream call. */
   signal?: AbortSignal;
-  /** How long to wait for a provider to start answering before moving on. */
   timeoutMs?: number;
   onFailure?: (failure: AttemptFailure) => void | Promise<void>;
-  /** Called once, after the answer has been sent in full (or the request failed). */
   onFinish?: (outcome: ForwardOutcome) => void | Promise<void>;
 }
-
-const DEFAULT_TIMEOUT_MS = 60_000;
-/** A streamed answer's usage is in its last chunks; only this much of the tail is kept. */
-const SSE_TAIL_CHARS = 64 * 1024;
-
 const NO_USAGE: TokenUsage = { promptTokens: null, completionTokens: null };
-
 export function routerError(status: number, message: string, code: string): Response {
   return Response.json({ error: { message, type: 'devone_router_error', code } }, { status });
 }
-
-function upstreamBody(body: Record<string, unknown>, model: string): string {
-  const next: Record<string, unknown> = { ...body, model };
-  // Ask for token counts in the last streamed chunk, unless the client chose otherwise.
-  if (next.stream === true && next.stream_options === undefined) {
-    next.stream_options = { include_usage: true };
-  }
-  return JSON.stringify(next);
+function usageOf(usage: JsonObject | undefined): TokenUsage {
+  return {
+    promptTokens: typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : null,
+    completionTokens: typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : null
+  };
 }
-
-async function readError(response: Response): Promise<string> {
-  const text = await response.text().catch(() => '');
-  try {
-    const parsed = JSON.parse(text) as { error?: { message?: unknown } | string };
-    const message = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message;
-    if (typeof message === 'string' && message) return message.slice(0, 500);
-  } catch {
-    // Not JSON: use the text as it is.
-  }
-  return (text || response.statusText || `HTTP ${response.status}`).slice(0, 500);
-}
-
-function answerHeaders(response: Response, target: RouteTarget, attempts: number): Headers {
+function headersFor(target: RouteTarget, attempts: number, streaming: boolean): Headers {
   const headers = new Headers({
-    'content-type': response.headers.get('content-type') ?? 'application/json',
+    'content-type': streaming ? 'text/event-stream' : 'application/json',
     'x-devone-provider': target.provider.name,
     'x-devone-model': target.model,
     'x-devone-attempts': String(attempts)
   });
-  if ((headers.get('content-type') ?? '').includes('text/event-stream')) {
+  if (streaming) {
     headers.set('cache-control', 'no-cache, no-transform');
     headers.set('x-accel-buffering', 'no');
   }
   return headers;
 }
-
-/** Passes a streamed answer through untouched, reading token counts from its tail. */
-function relayStream(
-  body: ReadableStream<Uint8Array>,
-  finish: (usage: TokenUsage, error: string | null) => void
-): ReadableStream<Uint8Array> {
+async function readText(execution: UpstreamExecution): Promise<string> {
   const decoder = new TextDecoder();
-  let tail = '';
-  let done = false;
-  const end = (error: string | null) => {
-    if (done) return;
-    done = true;
-    finish(usageFromSse(tail + decoder.decode()), error);
-  };
-  const reader = body.getReader();
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const { value, done: finished } = await reader.read();
-        if (finished) {
-          end(null);
-          controller.close();
-          return;
-        }
-        tail = (tail + decoder.decode(value, { stream: true })).slice(-SSE_TAIL_CHARS);
-        controller.enqueue(value);
-      } catch (error) {
-        end(error instanceof Error ? error.message : 'Stream interrupted');
-        controller.error(error);
-      }
-    },
-    async cancel(reason) {
-      end('Client disconnected');
-      await reader.cancel(reason).catch(() => undefined);
-    }
-  });
+  let text = '',
+    bytes = 0;
+  while (true) {
+    const next = await execution.read();
+    if (next.done) return text + decoder.decode();
+    bytes += next.value.byteLength;
+    if (bytes > 16 * 1024 * 1024) throw new ProtocolError('Upstream answer too large', 502);
+    text += decoder.decode(next.value, { stream: true });
+  }
 }
-
-/**
- * Sends a chat completion to each target in turn until one answers. A
- * provider that is down, rate-limited or refuses its key hands over to the
- * next; a request the provider calls malformed goes back to the client as is.
- * Once a provider starts answering, the answer is relayed as it arrives.
- */
+function safeError(error: unknown, secrets: string[]): string {
+  let text = error instanceof ProtocolError ? error.message : 'Could not reach the provider';
+  for (const secret of secrets) if (secret) text = text.split(secret).join('[redacted]');
+  return text.slice(0, 500);
+}
+function httpError(text: string, status: number): ProtocolError {
+  try {
+    const body = object(JSON.parse(text)),
+      error = upstreamError(body);
+    if (error) return new ProtocolError(error.message, status);
+  } catch {
+    /* A provider may return plain text. */
+  }
+  return new ProtocolError(text || `HTTP ${status}`, status);
+}
+/** Fallback and credential refresh stay here; each executor handles just one account. */
 export async function forwardChatCompletion(options: ForwardOptions): Promise<Response> {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const finish = (outcome: ForwardOutcome) => {
-    void Promise.resolve(options.onFinish?.(outcome)).catch(() => undefined);
+  const source = options.sourceFormat ?? 'openai';
+  let attempts = 0,
+    finished = false;
+  const secrets: string[] = [];
+  const finish = async (
+    target: RouteTarget | null,
+    status: number,
+    usage: TokenUsage,
+    error: string | null
+  ) => {
+    if (finished) return;
+    finished = true;
+    await Promise.resolve(options.onFinish?.({ target, status, attempts, usage, error })).catch(
+      () => undefined
+    );
   };
-  const requested = typeof options.body.model === 'string' ? options.body.model : '';
-
-  if (options.targets.length === 0) {
-    const message = `No enabled provider serves the model "${requested}"`;
-    finish({ target: null, status: 404, attempts: 0, usage: NO_USAGE, error: message });
+  const failure = async (
+    target: RouteTarget,
+    status: number,
+    error: string,
+    retryAfter: string | null
+  ) => {
+    await Promise.resolve(options.onFailure?.({ target, status, error, retryAfter })).catch(
+      () => undefined
+    );
+  };
+  if (!options.targets.length) {
+    const message = `No enabled provider serves the model "${String(options.body.model ?? '')}"`;
+    await finish(null, 404, NO_USAGE, message);
     return routerError(404, message, 'model_not_found');
   }
-
-  let attempts = 0;
   let last: { status: number; error: string } | null = null;
-
-  for (const target of options.targets) {
+  const tried = new Set<string>(),
+    refreshedAccounts = new Set<string>(),
+    failedAccounts = new Set<string>();
+  const overrides = new Map<string, ProviderCredential>();
+  const candidates = [...options.targets];
+  for (let targetIndex = 0; targetIndex < candidates.length; targetIndex++) {
+    const target = candidates[targetIndex];
     if (options.signal?.aborted) break;
-    attempts += 1;
-
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    options.signal?.addEventListener('abort', abort, { once: true });
-    const timer = setTimeout(abort, timeoutMs);
-    const apiKey = options.apiKeyFor(target.provider.id);
-
-    let response: Response;
+    const accountId = `${target.provider.id}:${target.connectionId ?? 'legacy'}`;
+    const account = `${accountId}:${target.model}`;
+    if (failedAccounts.has(accountId)) continue;
+    if (tried.has(account)) continue;
+    tried.add(account);
+    let credential: ProviderCredential | null = null,
+      execution: UpstreamExecution | undefined,
+      retryAfter: string | null = null;
     try {
-      response = await fetchImpl(providerUrl(target.provider.baseUrl, 'chat/completions'), {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          accept: options.body.stream === true ? 'text/event-stream' : 'application/json',
-          'x-title': 'DevOne',
-          ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
-        },
-        body: upstreamBody(options.body, target.model),
-        signal: controller.signal
-      });
-    } catch (error) {
-      clearTimeout(timer);
-      options.signal?.removeEventListener('abort', abort);
-      const message = options.signal?.aborted
-        ? 'Client disconnected'
-        : controller.signal.aborted
-          ? `No answer within ${Math.round(timeoutMs / 1000)} s`
-          : error instanceof Error
-            ? error.message
-            : 'Could not reach the provider';
-      last = { status: 0, error: message };
-      await options.onFailure?.({ target, status: 0, error: message, retryAfter: null });
-      continue;
-    }
-    clearTimeout(timer);
-
-    if (!response.ok) {
-      options.signal?.removeEventListener('abort', abort);
-      const error = await readError(response);
-      last = { status: response.status, error };
-      if (shouldFallBack(response.status)) {
-        await options.onFailure?.({
-          target,
-          status: response.status,
-          error,
-          retryAfter: response.headers.get('retry-after')
+      credential =
+        overrides.get(account) ??
+        (options.credentialFor
+          ? await options.credentialFor(target)
+          : {
+              id: target.connectionId ?? target.provider.id,
+              providerId: target.provider.id,
+              authType: target.provider.authType ?? 'api_key',
+              apiKey: options.apiKeyFor(target.provider.id)
+            });
+      if (options.credentialFor && !credential)
+        throw new ProtocolError('Account credential unavailable', 401);
+      for (let retry = 0; retry < 2; retry++) {
+        if (credential)
+          for (const key of [
+            credential.apiKey,
+            credential.accessToken,
+            credential.refreshToken,
+            credential.idToken
+          ])
+            if (key) secrets.push(key);
+        attempts++;
+        execution = await executeTarget(options, target, credential);
+        retryAfter = execution.response.headers.get('retry-after');
+        if (
+          (execution.response.status === 401 || execution.response.status === 403) &&
+          retry === 0 &&
+          !refreshedAccounts.has(account) &&
+          options.refreshCredential &&
+          (credential?.authType === 'oauth' || credential?.authType === 'access_token')
+        ) {
+          const rejected = httpError(await readText(execution), execution.response.status);
+          execution.cancel();
+          refreshedAccounts.add(account);
+          let refreshed: ProviderCredential | null = null;
+          try {
+            refreshed = await options.refreshCredential(target, credential.accessToken);
+          } catch {
+            /* Try the next account when refresh fails. */
+          }
+          if (refreshed) {
+            credential = refreshed;
+            continue;
+          }
+          throw rejected;
+        }
+        break;
+      }
+      if (!execution) throw new ProtocolError('Could not execute request', 502);
+      if (!execution.response.ok)
+        throw httpError(await readText(execution), execution.response.status);
+      if (!execution.streamed) {
+        const text = await readText(execution);
+        let body: JsonObject;
+        try {
+          body = object(JSON.parse(text));
+        } catch {
+          throw new ProtocolError('Malformed upstream JSON response', 502);
+        }
+        body = execution.restore?.(body) ?? body;
+        const error = upstreamError(body);
+        if (error) throw error;
+        const chat =
+          execution.format === source
+            ? { usage: normalizedUsage(body.usage) }
+            : translateResponse(body, execution.format, 'openai');
+        const answer = translateResponse(body, execution.format, source);
+        execution.close();
+        await finish(target, execution.response.status, usageFromJson(JSON.stringify(chat)), null);
+        return Response.json(answer, {
+          status: execution.response.status,
+          headers: headersFor(target, attempts, false)
         });
+      }
+      const nativePassthrough =
+        options.body.stream === true && execution.format === source && source !== 'openai';
+      const iterator = new SseReader(execution).events()[Symbol.asyncIterator](),
+        normalizer = new ChatStreamTranslator(execution.format, nativePassthrough);
+      const pending: (JsonObject | 'DONE')[] = [];
+      let ended = false,
+        buffered = 0;
+      // Read ahead until actual answer content, a terminal frame, or an error. Role/usage metadata cannot commit an error response.
+      while (!pending.some(hasOutput)) {
+        const frame = await iterator.next();
+        if (frame.done) {
+          if (!normalizer.ended)
+            throw new ProtocolError('Upstream stream ended before completion', 502);
+          break;
+        }
+        const values = normalizer.accept(frame.value);
+        pending.push(...values);
+        buffered += frame.value.data.length;
+        if (buffered > 1024 * 1024)
+          throw new ProtocolError('Upstream stream did not produce answer content', 502);
+        if (values.includes('DONE')) {
+          ended = true;
+          break;
+        }
+      }
+      if (options.body.stream !== true) {
+        const accumulated = new ChatAccumulator();
+        for (const value of pending) if (value !== 'DONE') accumulated.accept(value);
+        while (!ended) {
+          const frame = await iterator.next();
+          if (frame.done) {
+            if (!normalizer.ended)
+              throw new ProtocolError('Upstream stream ended before completion', 502);
+            break;
+          }
+          for (const value of normalizer.accept(frame.value)) {
+            if (value === 'DONE') ended = true;
+            else accumulated.accept(value);
+          }
+        }
+        execution.cancel();
+        const answer = translateResponse(accumulated.answer(), 'openai', source);
+        await finish(target, 200, usageOf(normalizer.usage), null);
+        return Response.json(answer, { headers: headersFor(target, attempts, false) });
+      }
+      const upstream = execution,
+        client = new ClientStreamTranslator(source, nativePassthrough);
+      const queue: Uint8Array[] = [];
+      let doneSent = false,
+        done = false;
+      const enqueue = (values: (JsonObject | 'DONE')[]) => {
+        for (const value of values) {
+          if (doneSent) break;
+          queue.push(...client.accept(value));
+          if (value === 'DONE') doneSent = true;
+        }
+      };
+      enqueue(pending);
+      const output = new ReadableStream<Uint8Array>(
+        {
+          async pull(controller) {
+            try {
+              while (!queue.length) {
+                if (doneSent) break;
+                const frame = await iterator.next();
+                if (frame.done) {
+                  if (!normalizer.ended)
+                    throw new ProtocolError('Upstream stream ended before completion', 502);
+                  enqueue(['DONE']);
+                  break;
+                }
+                enqueue(normalizer.accept(frame.value));
+              }
+              if (queue.length) {
+                controller.enqueue(queue.shift()!);
+                return;
+              }
+              if (!done) {
+                done = true;
+                upstream.cancel();
+                await finish(target, 200, usageOf(normalizer.usage), null);
+                controller.close();
+              }
+            } catch (error) {
+              if (done) return;
+              done = true;
+              const message = safeError(error, secrets),
+                status = error instanceof ProtocolError ? error.status : 502;
+              upstream.cancel();
+              if (status !== 499) await failure(target, status, message, retryAfter);
+              await finish(target, status, usageOf(normalizer.usage), message);
+              for (const bytes of client.error(message)) controller.enqueue(bytes);
+              controller.close();
+            }
+          },
+          async cancel() {
+            if (done) return;
+            done = true;
+            upstream.cancel();
+            await finish(target, 499, usageOf(normalizer.usage), 'Client disconnected');
+          }
+        },
+        { highWaterMark: 0 }
+      );
+      return new Response(output, { headers: headersFor(target, attempts, true) });
+    } catch (error) {
+      execution?.cancel();
+      const status = error instanceof ProtocolError ? error.status : 0,
+        message = safeError(error, secrets);
+      last = { status, error: message };
+      if (options.signal?.aborted || status === 499) break;
+      if (
+        (status === 401 || status === 403) &&
+        !refreshedAccounts.has(account) &&
+        options.refreshCredential &&
+        (credential?.authType === 'oauth' || credential?.authType === 'access_token')
+      ) {
+        refreshedAccounts.add(account);
+        let refreshed: ProviderCredential | null = null;
+        try {
+          refreshed = await options.refreshCredential(target, credential.accessToken);
+        } catch {
+          /* Try the next account when refresh fails. */
+        }
+        if (refreshed) {
+          overrides.set(account, refreshed);
+          tried.delete(account);
+          candidates.splice(targetIndex + 1, 0, target);
+          continue;
+        }
+      }
+      if (status === 0 || shouldFallBack(status)) {
+        if (status !== 404) failedAccounts.add(accountId);
+        await failure(target, status, message, retryAfter);
         continue;
       }
-      finish({ target, status: response.status, attempts, usage: NO_USAGE, error });
+      await finish(target, status, NO_USAGE, message);
       return Response.json(
-        { error: { message: error, type: 'upstream_error', code: response.status } },
-        { status: response.status, headers: answerHeaders(response, target, attempts) }
+        { error: { message, type: 'upstream_error', code: status } },
+        { status, headers: headersFor(target, attempts, false) }
       );
     }
-
-    const headers = answerHeaders(response, target, attempts);
-    const streamed = (headers.get('content-type') ?? '').includes('text/event-stream');
-    if (streamed && response.body) {
-      const body = relayStream(response.body, (usage, error) => {
-        options.signal?.removeEventListener('abort', abort);
-        finish({ target, status: response.status, attempts, usage, error });
-      });
-      return new Response(body, { status: response.status, headers });
-    }
-
-    const text = await response.text();
-    options.signal?.removeEventListener('abort', abort);
-    finish({ target, status: response.status, attempts, usage: usageFromJson(text), error: null });
-    return new Response(text, { status: response.status, headers });
   }
-
-  const status = last && last.status >= 400 ? last.status : 502;
-  const message = last
-    ? `Every provider failed. Last error: ${last.error}`
-    : 'The request was cancelled';
-  finish({ target: null, status, attempts, usage: NO_USAGE, error: message });
+  const status = options.signal?.aborted ? 499 : last && last.status >= 400 ? last.status : 502;
+  const message = options.signal?.aborted
+    ? 'Client disconnected'
+    : last
+      ? `Every provider failed. Last error: ${last.error}`
+      : 'The request was cancelled';
+  await finish(null, status, NO_USAGE, message);
   return routerError(status, message, 'all_providers_failed');
 }
