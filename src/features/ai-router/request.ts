@@ -1,27 +1,28 @@
 import {
   findCallerByKey,
-  loadRouterSettings,
   loadRouterState,
   recordProviderFailure,
   recordUsage,
+  gatewayFetch,
+  requireAiAdmin,
   type RouterCaller
 } from '@/features/ai-router/service';
-import {
-  anthropicError,
-  anthropicToOpenAI,
-  errorMessage,
-  estimateTokens,
-  openAIToAnthropic,
-  translateStream
-} from '@/lib/ai-router/anthropic';
-import { compressToolMessages } from '@/lib/ai-router/compress';
-import { forwardChatCompletion, routerError } from '@/lib/ai-router/forward';
+import { anthropicError, estimateTokens } from '@/lib/ai-router/anthropic';
+import { forwardChatCompletion, routerError, type ForwardOutcome } from '@/lib/ai-router/forward';
 import { readAiApiKey } from '@/lib/ai-router/keys';
 import { aiRateLimit, createRateLimiter } from '@/lib/ai-router/rate-limit';
 import { listModelIds, resolveTargets } from '@/lib/ai-router/routing';
 import { getCurrentUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
 import { isSameOrigin } from '@/lib/http/same-origin';
+import {
+  compressToolMessages,
+  GatewayRequestError,
+  readGatewayBody
+} from '@/lib/ai-router/security';
+import type { ProviderFormat } from '@/lib/ai-router/types';
+import { after } from 'next/server';
+import { connectionTestSchema } from './schema';
 
 const limiter = createRateLimiter(aiRateLimit());
 
@@ -35,6 +36,9 @@ async function authenticate(request: Request): Promise<RouterCaller | Response> 
   if (key) {
     const caller = await findCallerByKey(key);
     return caller ?? routerError(401, 'Invalid API key', 'invalid_api_key');
+  }
+  if (request.headers.has('authorization') || request.headers.has('x-api-key')) {
+    return routerError(401, 'Invalid gateway API key', 'invalid_api_key');
   }
   if (request.method !== 'GET' && !isSameOrigin(request)) {
     return routerError(
@@ -66,118 +70,146 @@ export async function handleModels(request: Request): Promise<Response> {
   });
 }
 
-interface Prepared {
-  caller: RouterCaller;
-  body: Record<string, unknown>;
-  state: Awaited<ReturnType<typeof loadRouterState>>;
-}
-
-/** Checks, in order: demo mode, who is calling, the rate limit, the JSON body and the providers. */
-async function prepare(
+export async function handleChatCompletion(
   request: Request,
-  fail: (status: number, message: string, code: string) => Response
-): Promise<Prepared | Response> {
-  if (isDemoMode()) return fail(403, DEMO_DISABLED_MESSAGE, 'demo_mode');
+  sourceFormat: ProviderFormat = 'openai',
+  connectionId?: string
+): Promise<Response> {
+  if (isDemoMode()) return routerError(403, DEMO_DISABLED_MESSAGE, 'demo_mode');
   const caller = await authenticate(request);
   if (caller instanceof Response) return caller;
-  if (!limiter.take(caller.userId)) {
-    return fail(429, 'Too many requests. Wait a minute and try again.', 'rate_limited');
+  if (connectionId) {
+    try {
+      await requireAiAdmin(caller.userId);
+    } catch {
+      return routerError(403, 'Administrators only', 'forbidden');
+    }
   }
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return fail(400, 'The body must be a JSON object', 'invalid_request');
+  if (!limiter.take(caller.userId)) {
+    return routerError(429, 'Too many requests. Wait a minute and try again.', 'rate_limited');
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await readGatewayBody(request);
+  } catch (error) {
+    return routerError(
+      error instanceof GatewayRequestError ? error.status : 400,
+      error instanceof Error ? error.message : 'Invalid request',
+      'invalid_request'
+    );
+  }
+  if (connectionId) {
+    const parsed = connectionTestSchema.safeParse(body);
+    if (!parsed.success)
+      return routerError(
+        400,
+        'Choose a model and send up to 24 text messages, each at most 8000 characters.',
+        'invalid_request'
+      );
+    body = { ...parsed.data, stream: false };
   }
   if (typeof body.model !== 'string' || !body.model.trim()) {
-    return fail(400, 'Say which "model" to use', 'invalid_request');
+    return routerError(400, 'Say which "model" to use', 'invalid_request');
   }
-  if (!Array.isArray(body.messages)) {
-    return fail(400, '"messages" must be an array', 'invalid_request');
+  // Validate the envelope here; the executor validates translation for each target format.
+  // Native options (for example encrypted reasoning) must survive native routing.
+  const conversation = sourceFormat === 'openai-responses' ? body.input : body.messages;
+  if (
+    !(Array.isArray(conversation) && conversation.length) &&
+    !(
+      sourceFormat === 'openai-responses' &&
+      typeof conversation === 'string' &&
+      conversation.trim()
+    )
+  ) {
+    return routerError(400, 'A nonempty conversation is required', 'invalid_request');
   }
+
+  const requested = body.model.trim();
   const state = await loadRouterState();
   if (!state.providers.some((provider) => provider.enabled)) {
-    return fail(
+    return routerError(
       503,
-      'No AI providers are set up. An administrator adds them under Admin → AI router.',
+      'No AI providers are set up. An administrator adds them under Router → Providers.',
       'no_providers'
     );
   }
-  return { caller, body, state };
-}
-
-/**
- * Where a request for `requested` goes. A name nothing serves (Claude Code
- * asking for "claude-sonnet-…") goes to the administrator's default model.
- */
-function targetsFor(requested: string, state: Prepared['state'], defaultModel: string | null) {
-  const targets = resolveTargets(requested, state.providers, state.combos);
-  if (targets.length > 0 || !defaultModel) return targets;
-  return resolveTargets(defaultModel, state.providers, state.combos);
-}
-
-const tokenSaverOff = (request: Request) =>
-  request.headers.get('x-devone-token-saver')?.trim().toLowerCase() === 'off';
-
-async function run(
-  request: Request,
-  prepared: Prepared,
-  chatBody: Record<string, unknown>,
-  requested: string
-): Promise<Response> {
-  const settings = await loadRouterSettings();
-  let savedChars = 0;
-  if (settings.compressToolOutput && !tokenSaverOff(request) && Array.isArray(chatBody.messages)) {
-    const compressed = compressToolMessages(chatBody.messages, settings.maxToolOutputChars);
-    chatBody = { ...chatBody, messages: compressed.messages };
-    savedChars = compressed.savedChars;
+  let selectedModel = requested;
+  // Diagnostics use a raw model ID and the explicit account ID, independent of global model namespaces.
+  let targets = connectionId
+    ? state.providers
+        .filter((provider) => provider.enabled && provider.models.includes(requested))
+        .map((provider) => ({ provider, model: requested }))
+    : resolveTargets(selectedModel, state.providers, state.combos);
+  const configured = connectionId
+    ? state.providers.some((provider) => provider.models.includes(requested))
+    : state.combos.some((combo) => combo.name === requested) ||
+      resolveTargets(
+        requested,
+        state.providers.map((provider) => ({ ...provider, enabled: true })),
+        state.combos
+      ).length > 0;
+  if (connectionId && !configured) {
+    return routerError(400, 'Choose a model configured for this provider.', 'invalid_model');
   }
-  const startedAt = Date.now();
-  return forwardChatCompletion({
-    body: chatBody,
-    targets: targetsFor(requested, prepared.state, settings.defaultModel),
-    apiKeyFor: prepared.state.apiKeyFor,
-    signal: request.signal,
-    onFailure: recordProviderFailure,
-    onFinish: (outcome) => recordUsage(prepared.caller, requested, startedAt, outcome, savedChars)
-  });
-}
-
-export async function handleChatCompletion(request: Request): Promise<Response> {
-  const prepared = await prepare(request, routerError);
-  if (prepared instanceof Response) return prepared;
-  return run(request, prepared, prepared.body, (prepared.body.model as string).trim());
-}
-
-const anthropicFail = (status: number, message: string) =>
-  Response.json(anthropicError(status, message), { status });
-
-/** Anthropic Messages (Claude Code): translated to a chat completion and back. */
-export async function handleMessages(request: Request): Promise<Response> {
-  const prepared = await prepare(request, (status, message) => anthropicFail(status, message));
-  if (prepared instanceof Response) return prepared;
-  const requested = (prepared.body.model as string).trim();
-  const upstream = await run(request, prepared, anthropicToOpenAI(prepared.body), requested);
-  const headers = new Headers();
-  for (const name of ['x-devone-provider', 'x-devone-model', 'x-devone-attempts']) {
-    const value = upstream.headers.get(name);
-    if (value) headers.set(name, value);
+  // Model defaults apply only to unknown models, never override a known exhausted account.
+  if (
+    !connectionId &&
+    !targets.length &&
+    !configured &&
+    state.settings.defaultModel &&
+    selectedModel !== state.settings.defaultModel
+  ) {
+    selectedModel = state.settings.defaultModel;
+    targets = resolveTargets(selectedModel, state.providers, state.combos);
   }
-
-  if (!upstream.ok) {
-    const body = (await upstream.json().catch(() => null)) as unknown;
-    return Response.json(
-      anthropicError(upstream.status, errorMessage(body, upstream.statusText || 'Request failed')),
-      { status: upstream.status, headers }
+  const compressed =
+    state.settings.compressToolOutput && request.headers.get('x-devone-token-saver') !== 'off'
+      ? compressToolMessages(body, state.settings.maxToolOutputChars)
+      : { body, savedChars: 0 };
+  body = { ...compressed.body, model: selectedModel };
+  const accountTargets = state
+    .targetsFor(targets)
+    .filter((target) => !connectionId || target.connectionId === connectionId);
+  if (connectionId && !accountTargets.length)
+    return routerError(
+      503,
+      'This account is unavailable for the selected model. Enable the provider and account, or clear its cooldown before retrying.',
+      'account_unavailable'
     );
-  }
-  if ((upstream.headers.get('content-type') ?? '').includes('text/event-stream') && upstream.body) {
-    headers.set('content-type', 'text/event-stream');
-    headers.set('cache-control', 'no-cache, no-transform');
-    headers.set('x-accel-buffering', 'no');
-    return new Response(translateStream(upstream.body, requested), { headers });
-  }
-  const completion = (await upstream.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!completion) return anthropicFail(502, 'The provider sent an unreadable answer');
-  return Response.json(openAIToAnthropic(completion, requested), { headers });
+  // Codex rejects token-limit fields; its diagnostic still has the normal response-size bound and a deadline.
+  if (connectionId && accountTargets[0].provider.providerType !== 'codex') body.max_tokens = 512;
+  const startedAt = Date.now();
+  let complete!: (outcome: ForwardOutcome) => void;
+  const finished = new Promise<ForwardOutcome>((resolve) => {
+    complete = resolve;
+  });
+  // Register while the route's request scope is active; the outcome resolves at stream completion.
+  after(async () =>
+    recordUsage(caller, requested, startedAt, await finished, compressed.savedChars)
+  );
+  const deadline = connectionId ? AbortSignal.timeout(30_000) : undefined;
+  const timedOut = () => Boolean(deadline?.aborted && !request.signal.aborted);
+  const response = await forwardChatCompletion({
+    body,
+    targets: accountTargets,
+    apiKeyFor: state.apiKeyFor,
+    signal: deadline ? AbortSignal.any([request.signal, deadline]) : request.signal,
+    sourceFormat,
+    credentialFor: state.credentialFor,
+    refreshCredential: state.refreshCredential,
+    fetchImpl: gatewayFetch,
+    timeoutMs: connectionId ? 30_000 : undefined,
+    onFailure: recordProviderFailure,
+    onFinish: (outcome) =>
+      complete(
+        timedOut() ? { ...outcome, status: 504, error: 'Connection test timed out' } : outcome
+      )
+  });
+  return timedOut()
+    ? routerError(504, 'Connection test timed out after 30 seconds.', 'test_timeout')
+    : response;
 }
 
 /** Claude Code asks for a token count before some requests; an estimate is enough. */
@@ -186,7 +218,10 @@ export async function handleCountTokens(request: Request): Promise<Response> {
   const caller = await authenticate(request);
   if (caller instanceof Response) return caller;
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body || typeof body !== 'object')
+  if (!body || typeof body !== 'object' || Array.isArray(body))
     return anthropicFail(400, 'The body must be a JSON object');
   return Response.json({ input_tokens: estimateTokens(body) });
 }
+
+const anthropicFail = (status: number, message: string) =>
+  Response.json(anthropicError(status, message), { status });

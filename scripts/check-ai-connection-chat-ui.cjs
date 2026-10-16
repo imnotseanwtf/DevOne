@@ -1,0 +1,98 @@
+const assert=require('node:assert/strict');
+const crypto=require('node:crypto');
+const fs=require('node:fs');
+const http=require('node:http');
+const {createRequire}=require('node:module');
+const repo=createRequire(process.cwd()+'/package.json');
+const {chromium}=require(process.env.DEVONE_PLAYWRIGHT_PATH||'playwright');
+const env={...repo('dotenv').parse(fs.readFileSync('.env')),...process.env};
+assert.ok(['localhost','127.0.0.1','[::1]'].includes(new URL(env.DEVONE_APP_URL).hostname),'Run against a local server only');
+assert.ok(env.DEVONE_AI_ALLOWED_HOSTS?.split(',').includes('127.0.0.1:18081'),'Allow the local fixture host before running');
+const {Pool}=repo('pg');
+const {createSessionToken,hashSessionToken}=repo('./src/lib/auth/session-token.ts');
+const {encryptSecret,parseEncryptionKey}=repo('./src/lib/encryption/secrets.ts');
+const db=new Pool({connectionString:env.DATABASE_URL});
+const id='chat-ui-'+crypto.randomBytes(6).toString('hex');
+const token=createSessionToken(),secretA=crypto.randomBytes(16).toString('hex'),secretB=crypto.randomBytes(16).toString('hex');
+let browser,page,requests=[],metadataRequests=[],slowStarted,slowAborted;
+const started=new Promise(resolve=>slowStarted=resolve),aborted=new Promise(resolve=>slowAborted=resolve);
+const upstream=http.createServer(async(req,res)=>{
+ if(req.method==='GET'&&req.url==='/v1/models'){
+   metadataRequests.push(req.headers.authorization);
+   res.writeHead(200,{'content-type':'application/json'});
+   res.end(JSON.stringify({data:[{id:'test-model'},{id:'refreshed-model'}]}));return;
+ }
+ let raw='';for await(const bytes of req)raw+=bytes;
+ const body=JSON.parse(raw);requests.push({body,authorization:req.headers.authorization});
+ const last=body.messages.at(-1).content;
+ if(last==='force failure'){res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({error:{message:'Fixture account rejected'}}));return;}
+ if(last==='slow check'){
+   slowStarted();const timer=setTimeout(()=>res.end('{}'),30000);
+   res.on('close',()=>{clearTimeout(timer);if(!res.writableEnded)slowAborted();});return;
+ }
+ res.writeHead(200,{'content-type':'application/json'});
+ res.end(JSON.stringify({model:body.model,choices:[{index:0,message:{role:'assistant',content:last==='long reply'?'x'.repeat(8001):'Reply from test account B'},finish_reason:'stop'}],usage:{prompt_tokens:5,completion_tokens:5,total_tokens:10}}));
+});
+(async()=>{
+ await new Promise((resolve,reject)=>{upstream.once('error',reject);upstream.listen(18081,'127.0.0.1',resolve);});
+ for(const [uid,role] of [[id,'ADMIN'],[id+'-member','MEMBER']])await db.query('INSERT INTO "User" (id,provider,"providerUserId",username,role,"updatedAt") VALUES ($1,\'GITHUB\',$1,$1,$2,now())',[uid,role]);
+ await db.query('INSERT INTO "Session" (id,"tokenHash","userId","expiresAt") VALUES ($1,$2,$1,now()+interval \'1 hour\')',[id,hashSessionToken(token)]);
+ await db.query('INSERT INTO "AiProvider" (id,name,"providerType",format,"authType","baseUrl",models,"updatedAt") VALUES ($1,$1,\'custom\',\'openai\',\'api_key\',\'http://127.0.0.1:18081/v1\',ARRAY[\'test-model\',\'other-model\'],now())',[id]);
+ for(const [suffix,secret,priority] of [['a',secretA,1],['b',secretB,10]])await db.query('INSERT INTO "AiConnection" (id,"providerId",name,"authType","encryptedApiKey",priority,"allowedModels","updatedAt") VALUES ($1,$2,$3,\'api_key\',$4,$5,ARRAY[\'test-model\'],now())',[id+'-'+suffix,id,'Test account '+suffix.toUpperCase(),encryptSecret(secret,parseEncryptionKey(env.DEVONE_ENCRYPTION_KEY)),priority]);
+ browser=await chromium.launch({headless:true});const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+ await ctx.addCookies([{name:'devone_session',value:token,url:env.DEVONE_APP_URL,httpOnly:true,sameSite:'Lax'}]);
+ page=await ctx.newPage();page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(env.DEVONE_APP_URL+'/router?tab=providers&provider='+id,{waitUntil:'networkidle'});
+ // Model refresh works during cooldown and updates the UI without modifying accounts.
+ await db.query('UPDATE "AiConnection" SET "rateLimitedUntil"=now()+interval \'1 hour\',"lastError"=\'HTTP 429: fixture\' WHERE "providerId"=$1',[id]);
+ const accountSnapshot=(await db.query('SELECT * FROM "AiConnection" WHERE "providerId"=$1 ORDER BY id',[id])).rows;
+ await page.reload({waitUntil:'networkidle'});
+ await page.getByRole('button',{name:'Refresh models',exact:true}).click();
+ await page.getByText(/3 models.*refreshed-model/).waitFor();
+ assert.deepEqual(metadataRequests,['Bearer '+secretA]);
+ assert.deepEqual((await db.query('SELECT models FROM "AiProvider" WHERE id=$1',[id])).rows[0].models,['test-model','other-model','refreshed-model']);
+ assert.ok(JSON.stringify((await db.query('SELECT * FROM "AiConnection" WHERE "providerId"=$1 ORDER BY id',[id])).rows)===JSON.stringify(accountSnapshot),'refresh must preserve credentials, restrictions and cooldowns');
+ await db.query('UPDATE "AiConnection" SET "rateLimitedUntil"=NULL,"lastError"=NULL WHERE "providerId"=$1',[id]);
+ await page.reload({waitUntil:'networkidle'});
+ console.log('PASS model refresh during cooldown, persisted catalog and query invalidation');
+ await page.getByRole('button',{name:'Test connection Test account B',exact:true}).click();
+ const dialog=page.getByRole('dialog');await dialog.getByRole('heading',{name:'Test Test account B',exact:true}).waitFor();
+ await dialog.getByLabel(/^Model/).click();await page.getByRole('option',{name:'test-model',exact:true}).waitFor();assert.equal(await page.getByRole('option',{name:'other-model',exact:true}).count(),0);await page.getByRole('option',{name:'test-model',exact:true}).click();
+ await dialog.getByRole('textbox',{name:/^Message/}).fill('Unsent draft');
+ await dialog.getByRole('button',{name:'Quick test',exact:true}).click();
+ await dialog.getByText('Reply from test account B',{exact:true}).waitFor();
+ await dialog.getByText(/^Connected · test-model/).waitFor();
+ await page.screenshot({path:'/tmp/devone-router-chat-template.png',fullPage:true});
+ assert.equal(requests[0].authorization,'Bearer '+secretB,'The lower-priority selected account must be used');
+ assert.equal(requests[0].body.max_tokens,512);
+ assert.equal(await dialog.getByRole('textbox',{name:/^Message/}).inputValue(),'Unsent draft','Quick tests must preserve an unsent draft');
+ await dialog.getByRole('textbox',{name:/^Message/}).fill('Follow up');await dialog.getByRole('button',{name:'Send',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelectorAll('[data-slot="bubble-content"]').length===4);
+ assert.equal(requests[1].body.messages.length,3);
+ assert.equal(requests[1].body.messages[1].content,'Reply from test account B');
+ await dialog.getByRole('button',{name:'Clear chat',exact:true}).click();assert.equal(await dialog.locator('[data-slot="bubble-content"]').count(),0);
+ await dialog.getByRole('textbox',{name:/^Message/}).fill('long reply');await dialog.getByRole('button',{name:'Send',exact:true}).click();
+ await dialog.getByText('Reply shortened to 8000 characters for this test.',{exact:true}).waitFor();
+ await dialog.getByRole('textbox',{name:/^Message/}).fill('After long reply');await dialog.getByRole('button',{name:'Send',exact:true}).click();
+ await dialog.getByText('Reply from test account B',{exact:true}).waitFor();
+ assert.equal(requests.at(-1).body.messages[1].content.length,8000);
+ console.log('PASS exact account, restricted model picker, quick test/draft preservation, follow-up history, bounded replies and clear chat');
+ await dialog.getByRole('textbox',{name:/^Message/}).fill('force failure');await dialog.getByRole('button',{name:'Send',exact:true}).click();
+ await dialog.getByRole('alert').filter({hasText:'Fixture account rejected'}).waitFor();
+ assert.equal(requests.length,5,'A failure must not trigger a request with the other account');
+ await dialog.getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'Try again now',exact:true}).click();
+ await page.getByText(/Cooling down until/).waitFor({state:'hidden'});
+ await page.getByRole('button',{name:'Test connection Test account B',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});
+ await dialog.getByRole('textbox',{name:/^Message/}).fill('slow check');await dialog.getByRole('button',{name:'Send',exact:true}).click();
+ await started;await dialog.getByRole('log').getByText('Thinking…',{exact:true}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+ await page.screenshot({path:'/tmp/devone-router-chat-mobile.png',fullPage:true});
+ await dialog.getByRole('button',{name:'Close',exact:true}).click();
+ await Promise.race([aborted,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('Closing test chat did not cancel its upstream request')),5000);timer.unref();})]);
+ console.log('PASS upstream errors without fallback, cooldown recovery, mobile layout and close cancellation');
+ const memberToken=createSessionToken();await db.query('INSERT INTO "Session" (id,"tokenHash","userId","expiresAt") VALUES ($1,$2,$1,now()+interval \'1 hour\')',[id+'-member',hashSessionToken(memberToken)]);
+ const member=await browser.newContext();await member.addCookies([{name:'devone_session',value:memberToken,url:env.DEVONE_APP_URL,httpOnly:true,sameSite:'Lax'}]);
+ const denied=await member.request.post(env.DEVONE_APP_URL+'/api/ai/connections/'+id+'-b/test',{headers:{origin:env.DEVONE_APP_URL},data:{model:'test-model',messages:[{role:'user',content:'Hello'}]}});assert.equal(denied.status(),403);await member.close();
+ assert.deepEqual(errors,[]);console.log('ALL CONNECTION CHAT BROWSER CHECKS PASSED');
+})().catch(async error=>{console.error(error.message);if(page)await page.screenshot({path:'/tmp/devone-router-chat-failure.png',fullPage:true});process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();upstream.closeAllConnections();await new Promise(resolve=>upstream.close(resolve));await db.query('DELETE FROM "AiUsage" WHERE "userId"=ANY($1::text[])',[[id,id+'-member']]);await db.query('DELETE FROM "AiProvider" WHERE id=$1',[id]);await db.query('DELETE FROM "AuditEvent" WHERE "actorId"=ANY($1::text[])',[[id,id+'-member']]);await db.query('DELETE FROM "User" WHERE id=ANY($1::text[])',[[id,id+'-member']]);await db.end();});

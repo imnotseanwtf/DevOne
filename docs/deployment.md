@@ -179,11 +179,11 @@ one (no input or output for an hour) closes, as does one whose browser tab has b
   pinned host key, remove), sessions (sign out other devices) and preferences: language, theme,
   terminal font size and start page.
 - **Admin** (administrators only): change roles, disable or enable people (disabling signs them
-  out everywhere and refuses their sign-in), the AI router's providers, combos and usage, a
-  read-only view of the sign-in environment variables, and the audit log of the whole
-  installation.
-- **AI router**: one OpenAI-compatible endpoint (`/api/ai/v1`) that falls back across the model
-  providers an administrator sets up; people create their own keys under My account → AI keys.
+  out everywhere and refuses their sign-in), a read-only view of the sign-in environment
+  variables, and the audit log of the whole installation.
+- **Router** (username menu): its own screen with Providers, Endpoint & Keys, Combos, Usage and
+  Settings tabs. Administrators connect multiple accounts per provider; everyone can create
+  personal gateway keys. The endpoint (`/api/ai/v1`) falls back across accounts and providers.
   `DEVONE_AI_RATE_LIMIT` caps requests per person per minute (default 60, `0` for no limit). See
   [ai-router.md](./ai-router.md).
 

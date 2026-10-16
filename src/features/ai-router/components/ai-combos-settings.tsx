@@ -28,7 +28,8 @@ import { Icons } from '@/components/icons';
 import { deleteComboAction, saveComboAction } from '@/features/ai-router/actions';
 import type { AiProviderRow } from '@/features/ai-router/components/ai-providers-settings';
 import { useT } from '@/i18n/client';
-import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { aiGatewayKeys } from '../api/queries';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -49,7 +50,7 @@ export function AiCombosSettings({
   providers: ProviderOption[];
 }) {
   const t = useT();
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState<Editing>(null);
   const [removing, setRemoving] = useState<AiComboRow | null>(null);
@@ -124,10 +125,10 @@ export function AiCombosSettings({
           combo={editing.mode === 'edit' ? editing.combo : null}
           providers={providers}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          onSaved={async () => {
             setEditing(null);
             toast.success(t('aiRouter.combos.saved'));
-            router.refresh();
+            await queryClient.invalidateQueries({ queryKey: aiGatewayKeys.all });
           }}
         />
       )}
@@ -157,7 +158,7 @@ export function AiCombosSettings({
                     return;
                   }
                   toast.success(t('aiRouter.combos.removed'));
-                  router.refresh();
+                  await queryClient.invalidateQueries({ queryKey: aiGatewayKeys.all });
                 });
               }}
             >
@@ -179,7 +180,7 @@ function ComboDialog({
   combo: AiComboRow | null;
   providers: ProviderOption[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => Promise<void>;
 }) {
   const t = useT();
   const firstStep = () => ({
@@ -217,7 +218,7 @@ function ComboDialog({
                 setError(result.error);
                 return;
               }
-              onSaved();
+              await onSaved();
             });
           }}
         >

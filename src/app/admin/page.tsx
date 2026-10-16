@@ -4,31 +4,19 @@ import { SettingsTabs } from '@/components/layout/settings-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UsersTable } from '@/features/admin/components/users-table';
-import { AiCombosSettings } from '@/features/ai-router/components/ai-combos-settings';
-import { AiRouterSettings } from '@/features/ai-router/components/ai-router-settings';
-import { AiProvidersSettings } from '@/features/ai-router/components/ai-providers-settings';
-import { AiUsageCard } from '@/features/ai-router/components/ai-usage-card';
-import { routerEndpoint } from '@/features/ai-router/endpoint';
-import {
-  listCombos,
-  listProviders,
-  loadRouterSettings,
-  usageOverview
-} from '@/features/ai-router/service';
 import { listAuditEvents, listUsers, signInPolicy } from '@/features/admin/service';
 import { getT } from '@/i18n/server';
 import { requireUser } from '@/lib/auth/session';
-import { isDemoMode } from '@/lib/demo';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 export const metadata: Metadata = { title: 'Admin' };
 
-const TABS = ['users', 'ai', 'policy', 'audit'] as const;
+const TABS = ['users', 'policy', 'audit'] as const;
 type AdminTab = (typeof TABS)[number];
 
 interface AdminPageProps {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; aiOAuth?: string }>;
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
@@ -36,7 +24,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   // Not "forbidden": to anyone else the page simply doesn't exist.
   if (user.role !== 'ADMIN') notFound();
   const t = await getT();
-  const { tab } = await searchParams;
+  const { tab, aiOAuth } = await searchParams;
+  if (tab === 'ai') redirect(`/router${aiOAuth ? `?aiOAuth=${encodeURIComponent(aiOAuth)}` : ''}`);
   const active: AdminTab = TABS.includes(tab as AdminTab) ? (tab as AdminTab) : 'users';
 
   return (
@@ -49,7 +38,6 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           tabs={TABS.map((id) => ({ id, label: t(`admin.tabs.${id}`) }))}
         />
         {active === 'users' && <UsersTab adminId={user.id} />}
-        {active === 'ai' && <AiRouterTab adminId={user.id} />}
         {active === 'policy' && <PolicyTab />}
         {active === 'audit' && <AuditTab adminId={user.id} />}
       </div>
@@ -66,35 +54,6 @@ async function UsersTab({ adminId }: { adminId: string }) {
         {t('admin.users.count', { count: users.length })}
       </p>
       <UsersTable users={users} currentUserId={adminId} />
-    </div>
-  );
-}
-
-async function AiRouterTab({ adminId }: { adminId: string }) {
-  const t = await getT();
-  if (isDemoMode()) {
-    return <p className='text-muted-foreground text-sm'>{t('aiRouter.keys.disabledInDemo')}</p>;
-  }
-  const [providers, combos, usage, endpoint, settings] = await Promise.all([
-    listProviders(adminId),
-    listCombos(adminId),
-    usageOverview(adminId),
-    routerEndpoint(),
-    loadRouterSettings()
-  ]);
-  return (
-    <div className='space-y-6'>
-      <div className='text-muted-foreground space-y-2 text-sm'>
-        <p>{t('aiRouter.intro')}</p>
-        <p>
-          {t('aiRouter.endpoint')}:{' '}
-          <code className='bg-muted rounded px-1.5 py-0.5'>{endpoint}</code>
-        </p>
-      </div>
-      <AiProvidersSettings providers={providers} />
-      <AiCombosSettings combos={combos} providers={providers} />
-      <AiRouterSettings settings={settings} />
-      <AiUsageCard usage={usage} />
     </div>
   );
 }

@@ -32,6 +32,8 @@ import {
   IconBold,
   IconBox,
   IconBrandApple,
+  IconBrandOpenai,
+  IconBrandGoogle,
   IconBrandDebian,
   IconBrandGithub,
   IconBrandRedhat,
@@ -209,6 +211,8 @@ export const Icons = {
   teams: IconUsers,
 
   // Brand
+  openai: IconBrandOpenai,
+  google: IconBrandGoogle,
   github: IconBrandGithub,
   gitlab: IconBrandGitlab,
   apple: IconBrandApple,

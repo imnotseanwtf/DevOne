@@ -1,8 +1,7 @@
-/**
- * Starting points for the "Add provider" form. Every one speaks the OpenAI
- * chat completions API. Free tiers change often: check each provider's terms
- * and what it does with your prompts before relying on it.
- */
+import type { TKey } from '@/i18n/messages';
+import type { ProviderAuthType, ProviderFormat } from './types';
+
+/** Starting points; models can be fetched or entered manually. */
 export interface AiProviderPreset {
   id: string;
   name: string;
@@ -10,18 +9,33 @@ export interface AiProviderPreset {
   /** Some models to start with; "Fetch models" lists the rest. */
   models: string[];
   needsKey: boolean;
+  category?: 'free';
   /** Where to get a key, or what to know before using it. */
-  hint: string;
+  hintKey: TKey;
+  providerType?: string;
+  format?: ProviderFormat;
+  authType?: ProviderAuthType;
 }
 
 export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
   {
+    id: 'opencode',
+    providerType: 'opencode',
+    name: 'OpenCode Free',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    models: ['big-pickle'],
+    authType: 'none',
+    needsKey: false,
+    category: 'free',
+    hintKey: 'aiRouter.presets.opencodeFree'
+  },
+  {
     id: 'opencode-zen',
     name: 'OpenCode Zen',
     baseUrl: 'https://opencode.ai/zen/v1',
-    models: ['big-pickle'],
+    models: [],
     needsKey: true,
-    hint: 'Key from opencode.ai/auth. Free models such as Big Pickle may log prompts and can change at any time.'
+    hintKey: 'aiRouter.presets.opencodeZen'
   },
   {
     id: 'openrouter',
@@ -29,7 +43,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     baseUrl: 'https://openrouter.ai/api/v1',
     models: [],
     needsKey: true,
-    hint: 'Key from openrouter.ai/keys. Model ids ending in ":free" cost nothing but are rate-limited.'
+    hintKey: 'aiRouter.presets.openrouter'
   },
   {
     id: 'groq',
@@ -37,7 +51,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     baseUrl: 'https://api.groq.com/openai/v1',
     models: [],
     needsKey: true,
-    hint: 'Key from console.groq.com. Has a free tier with daily limits.'
+    hintKey: 'aiRouter.presets.groq'
   },
   {
     id: 'gemini',
@@ -45,7 +59,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     models: [],
     needsKey: true,
-    hint: 'Key from aistudio.google.com. Has a free tier with daily limits.'
+    hintKey: 'aiRouter.presets.gemini'
   },
   {
     id: 'cerebras',
@@ -53,7 +67,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     baseUrl: 'https://api.cerebras.ai/v1',
     models: [],
     needsKey: true,
-    hint: 'Key from cloud.cerebras.ai. Has a free tier with daily limits.'
+    hintKey: 'aiRouter.presets.cerebras'
   },
   {
     id: 'mistral',
@@ -61,23 +75,66 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     baseUrl: 'https://api.mistral.ai/v1',
     models: [],
     needsKey: true,
-    hint: 'Key from console.mistral.ai.'
+    hintKey: 'aiRouter.presets.mistral'
   },
   {
     id: 'deepseek',
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat'],
+    models: [],
     needsKey: true,
-    hint: 'Key from platform.deepseek.com. Paid, but cheap.'
+    hintKey: 'aiRouter.presets.deepseek'
   },
   {
     id: 'ollama',
+    providerType: 'ollama',
+    authType: 'none',
     name: 'Ollama',
     baseUrl: 'http://localhost:11434/v1',
     models: [],
     needsKey: false,
-    hint: 'Models running on your own machine. The address is as the DevOne server sees it.'
+    hintKey: 'aiRouter.presets.ollama'
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    providerType: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    models: [],
+    needsKey: true,
+    hintKey: 'aiRouter.presets.openai'
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    providerType: 'anthropic',
+    format: 'claude',
+    baseUrl: 'https://api.anthropic.com/v1',
+    models: [],
+    needsKey: true,
+    hintKey: 'aiRouter.presets.anthropic'
+  },
+  {
+    id: 'claude',
+    name: 'Claude',
+    providerType: 'claude',
+    format: 'claude',
+    authType: 'oauth',
+    baseUrl: 'https://api.anthropic.com/v1',
+    models: [],
+    needsKey: false,
+    hintKey: 'aiRouter.presets.oauth'
+  },
+  {
+    id: 'codex',
+    name: 'Codex',
+    providerType: 'codex',
+    format: 'openai-responses',
+    authType: 'oauth',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    models: [],
+    needsKey: false,
+    hintKey: 'aiRouter.presets.oauth'
   },
   {
     id: 'custom',
@@ -85,6 +142,6 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     baseUrl: '',
     models: [],
     needsKey: true,
-    hint: 'Any API that speaks the OpenAI chat completions format.'
+    hintKey: 'aiRouter.presets.custom'
   }
 ];

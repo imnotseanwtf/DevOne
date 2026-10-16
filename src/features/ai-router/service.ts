@@ -11,7 +11,21 @@ import {
 } from '@/lib/ai-router/routing';
 import { createAiApiKey, hashAiApiKey } from '@/lib/ai-router/keys';
 import type { AttemptFailure, ForwardOutcome } from '@/lib/ai-router/forward';
-import { assertSafeProviderUrl, UnsafeProviderUrlError } from '@/lib/ai-router/safe-url';
+import type { RouteTarget } from '@/lib/ai-router/routing';
+import { openCodeFreeModels } from '@/lib/ai-router/opencode-free';
+import { CODEX_CLIENT_VERSION, getProviderDefinition } from '@/lib/ai-router/registry';
+import { createCredentialManager } from '@/lib/ai-router/credentials';
+import { assertGatewayUrl } from '@/lib/ai-router/security';
+import { safeGatewayFetch } from '@/lib/ai-router/outbound';
+import { selectConnections } from '@/lib/ai-router/selection';
+import type { ProviderAuthType, ProviderFormat } from '@/lib/ai-router/types';
+import type {
+  AiProviderSummary,
+  AiConnectionSummary,
+  AiRouterSettings,
+  ConnectionInput
+} from './api/types';
+import { createConnectionRepository } from './connection-repository';
 import { recordAudit } from '@/lib/audit/record';
 import { getPrisma } from '@/lib/db/prisma';
 import { decryptSecret, encryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
@@ -24,22 +38,16 @@ export class AiRouterError extends Error {
   }
 }
 
-async function assertSafeUrl(baseUrl: string) {
-  try {
-    await assertSafeProviderUrl(baseUrl);
-  } catch (error) {
-    if (error instanceof UnsafeProviderUrlError) throw new AiRouterError(error.message);
-    throw error;
-  }
-}
-
-async function requireAdmin(userId: string) {
-  const user = await getPrisma().user.findUnique({
-    where: { id: userId },
-    select: { role: true }
-  });
+export async function requireAiAdmin(userId: string): Promise<void> {
+  const user = await getPrisma().user.findUnique({ where: { id: userId }, select: { role: true } });
   if (user?.role !== UserRole.ADMIN) throw new AiRouterError('Administrators only');
 }
+
+const requireAdmin = requireAiAdmin;
+
+export const gatewayFetch: typeof fetch = async (input, init) => {
+  return safeGatewayFetch(input, init);
+};
 
 function readSteps(value: Prisma.JsonValue): ComboStep[] {
   const parsed = comboStepSchema.array().safeParse(value);
@@ -53,33 +61,95 @@ export interface RouterState {
   providers: RouterProvider[];
   combos: RouterCombo[];
   apiKeyFor: (providerId: string) => string | null;
+  settings: AiRouterSettings;
+  targetsFor: (targets: RouteTarget[]) => RouteTarget[];
+  credentialFor: NonNullable<import('@/lib/ai-router/forward').ForwardOptions['credentialFor']>;
+  refreshCredential: NonNullable<
+    import('@/lib/ai-router/forward').ForwardOptions['refreshCredential']
+  >;
 }
 
 /** Everything one request needs, keys decrypted only when that provider is tried. */
 export async function loadRouterState(): Promise<RouterState> {
-  const [providers, combos] = await Promise.all([
-    getPrisma().aiProvider.findMany(),
-    getPrisma().aiCombo.findMany({ select: { name: true, steps: true } })
+  const [providers, combos, settings] = await Promise.all([
+    getPrisma().aiProvider.findMany({ include: { connections: true } }),
+    getPrisma().aiCombo.findMany({ select: { name: true, steps: true } }),
+    getPrisma().aiRouterSettings.findUnique({ where: { id: 'default' } })
   ]);
   const encrypted = new Map(providers.map((provider) => [provider.id, provider.encryptedApiKey]));
+  const definitions = new Map(
+    providers.map((provider) => [provider.id, getProviderDefinition(provider.providerType)])
+  );
+  const manager = createCredentialManager(
+    createConnectionRepository(),
+    (id) => definitions.get(id)?.oauth,
+    gatewayFetch
+  );
   return {
-    providers: providers.map(({ id, name, baseUrl, models, priority, enabled, cooldownUntil }) => ({
-      id,
-      name,
-      baseUrl,
-      models,
-      priority,
-      enabled,
-      cooldownUntil
-    })),
-    combos: combos.map((combo) => ({
-      name: combo.name,
-      steps: readSteps(combo.steps)
-    })),
+    providers: providers.map((provider) => {
+      const definition = definitions.get(provider.id);
+      const format = provider.format as ProviderFormat;
+      return {
+        id: provider.id,
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        models: provider.models,
+        priority: provider.priority,
+        enabled: provider.enabled,
+        // Account cooldowns are enforced below; a single failing account doesn't rest its siblings.
+        cooldownUntil: null,
+        alias:
+          provider.alias ?? (provider.providerType !== 'custom' ? definition?.alias : undefined),
+        providerType: provider.providerType,
+        format,
+        authType: provider.authType as ProviderAuthType,
+        upstreamPath:
+          definition?.transport.format === format
+            ? definition.transport.path
+            : format === 'claude'
+              ? '/messages'
+              : format === 'openai-responses'
+                ? '/responses'
+                : '/chat/completions',
+        forceStream: definition?.transport.forceStream,
+        headers: {
+          ...definition?.transport.headers,
+          ...(format === 'claude' ? { 'anthropic-version': '2023-06-01' } : {})
+        },
+        authHeader: format === 'claude' ? 'x-api-key' : definition?.transport.auth.header,
+        authScheme: format === 'claude' ? 'raw' : definition?.transport.auth.scheme
+      };
+    }),
+    combos: combos.map((combo) => ({ name: combo.name, steps: readSteps(combo.steps) })),
     apiKeyFor: (providerId) => {
       const value = encrypted.get(providerId);
       return value ? decryptSecret(value, getEncryptionKey()) : null;
-    }
+    },
+    settings: settings ?? {
+      defaultModel: null,
+      compressToolOutput: true,
+      maxToolOutputChars: 30000
+    },
+    targetsFor: (targets) => {
+      const excluded = new Set<string>();
+      return targets.flatMap((target) => {
+        const provider = providers.find((candidate) => candidate.id === target.provider.id);
+        if (!provider) return [];
+        return selectConnections(provider.connections, target.model).flatMap((connection) => {
+          const key = `${connection.id}:${target.model}`;
+          if (excluded.has(key)) return [];
+          excluded.add(key);
+          const upstreamModel = definitions
+            .get(provider.id)
+            ?.models.find((model) => model.id === target.model)?.upstreamModelId;
+          return [{ ...target, model: upstreamModel ?? target.model, connectionId: connection.id }];
+        });
+      });
+    },
+    credentialFor: (target) =>
+      target.connectionId ? manager.ensureFresh(target.connectionId) : Promise.resolve(null),
+    refreshCredential: (target, token) =>
+      target.connectionId ? manager.forceRefresh(target.connectionId, token) : Promise.resolve(null)
   };
 }
 
@@ -99,10 +169,7 @@ export async function findCallerByKey(key: string): Promise<RouterCaller | null>
   // Touch at most once a minute: every request would otherwise write here.
   if (!record.lastUsedAt || Date.now() - record.lastUsedAt.getTime() > 60_000) {
     await getPrisma()
-      .aiApiKey.update({
-        where: { id: record.id },
-        data: { lastUsedAt: new Date() }
-      })
+      .aiApiKey.update({ where: { id: record.id }, data: { lastUsedAt: new Date() } })
       .catch(() => undefined);
   }
   return { userId: record.userId, apiKeyId: record.id };
@@ -112,6 +179,37 @@ export async function findCallerByKey(key: string): Promise<RouterCaller | null>
 export async function recordProviderFailure(failure: AttemptFailure): Promise<void> {
   const rest = cooldownMs(failure.status, failure.retryAfter);
   const label = failure.status ? `HTTP ${failure.status}: ${failure.error}` : failure.error;
+  if (failure.target.connectionId) {
+    const connection = await getPrisma().aiConnection.findUnique({
+      where: { id: failure.target.connectionId }
+    });
+    if (!connection) return;
+    const locks =
+      connection.modelLocks &&
+      typeof connection.modelLocks === 'object' &&
+      !Array.isArray(connection.modelLocks)
+        ? (connection.modelLocks as Record<string, Prisma.JsonValue>)
+        : {};
+    await getPrisma()
+      .aiConnection.update({
+        where: { id: connection.id },
+        data: {
+          lastError: label.slice(0, 500),
+          lastErrorAt: new Date(),
+          rateLimitedUntil: rest > 0 ? new Date(Date.now() + rest) : undefined,
+          ...(failure.status === 404
+            ? {
+                modelLocks: {
+                  ...locks,
+                  [failure.target.model]: new Date(Date.now() + 60000).toISOString()
+                }
+              }
+            : {})
+        }
+      })
+      .catch(() => undefined);
+    return;
+  }
   await getPrisma()
     .aiProvider.update({
       where: { id: failure.target.provider.id },
@@ -139,6 +237,7 @@ export async function recordUsage(
           userId: caller.userId,
           apiKeyId: caller.apiKeyId,
           providerId: provider?.id ?? null,
+          connectionId: outcome.target?.connectionId ?? null,
           providerName: provider?.name ?? null,
           requestedModel: requestedModel.slice(0, 200),
           model: outcome.target?.model.slice(0, 200) ?? null,
@@ -147,17 +246,17 @@ export async function recordUsage(
           promptTokens: outcome.usage.promptTokens,
           completionTokens: outcome.usage.completionTokens,
           latencyMs: Date.now() - startedAt,
-          savedChars: savedChars > 0 ? savedChars : null,
+          savedChars,
           error: outcome.error?.slice(0, 500) ?? null
         }
       })
       .catch(() => undefined),
     // An answer means the provider is healthy again.
-    provider && outcome.status < 400
-      ? prisma.aiProvider
+    outcome.target?.connectionId && outcome.status < 400 && !outcome.error
+      ? prisma.aiConnection
           .update({
-            where: { id: provider.id },
-            data: { cooldownUntil: null, lastError: null }
+            where: { id: outcome.target.connectionId },
+            data: { rateLimitedUntil: null, lastError: null, lastErrorAt: null }
           })
           .catch(() => undefined)
       : undefined
@@ -165,83 +264,51 @@ export async function recordUsage(
 }
 
 // ---------------------------------------------------------------------------
-// Router settings
-
-export interface RouterSettings {
-  defaultModel: string | null;
-  compressToolOutput: boolean;
-  maxToolOutputChars: number;
-}
-
-const DEFAULT_SETTINGS: RouterSettings = {
-  defaultModel: null,
-  compressToolOutput: true,
-  maxToolOutputChars: 30_000
-};
-
-export async function loadRouterSettings(): Promise<RouterSettings> {
-  const row = await getPrisma().aiRouterSettings.findUnique({
-    where: { id: 'default' }
-  });
-  return row
-    ? {
-        defaultModel: row.defaultModel,
-        compressToolOutput: row.compressToolOutput,
-        maxToolOutputChars: row.maxToolOutputChars
-      }
-    : DEFAULT_SETTINGS;
-}
-
-export async function saveRouterSettings(adminId: string, input: RouterSettings) {
-  await requireAdmin(adminId);
-  const data = { ...input, defaultModel: input.defaultModel?.trim() || null };
-  await getPrisma().aiRouterSettings.upsert({
-    where: { id: 'default' },
-    create: { id: 'default', ...data },
-    update: data
-  });
-  await recordAudit({
-    actorId: adminId,
-    action: 'admin.ai.settings',
-    target: 'default'
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Administration
 
-export async function listProviders(adminId: string) {
+export async function listProviders(adminId: string): Promise<AiProviderSummary[]> {
   await requireAdmin(adminId);
   const providers = await getPrisma().aiProvider.findMany({
     orderBy: [{ priority: 'asc' }, { name: 'asc' }]
   });
   return providers.map(({ encryptedApiKey, ...provider }) => ({
     ...provider,
-    hasApiKey: encryptedApiKey !== null
+    format: provider.format as ProviderFormat,
+    authType: provider.authType as ProviderAuthType,
+    hasApiKey: encryptedApiKey !== null,
+    oauthConfigured: Boolean(getProviderDefinition(provider.providerType)?.oauth)
   }));
 }
 
-export type AiProviderSummary = Awaited<ReturnType<typeof listProviders>>[number];
+export type { AiProviderSummary } from './api/types';
 
-export async function saveProvider(adminId: string, input: ProviderInput) {
+export async function saveProvider(adminId: string, input: ProviderInput): Promise<string> {
   await requireAdmin(adminId);
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   if (!baseUrl) throw new AiRouterError('Enter an http:// or https:// base URL');
-  await assertSafeUrl(baseUrl);
+  await assertGatewayUrl(baseUrl);
+  const definition = getProviderDefinition(input.providerType);
+  if (!definition || !definition.authTypes?.includes(input.authType))
+    throw new AiRouterError('Unsupported provider authentication mode');
   if (input.name.trim().toLowerCase() === AUTO_MODEL) {
     throw new AiRouterError(`"${AUTO_MODEL}" is reserved`);
   }
   const prisma = getPrisma();
-  const clash = await prisma.aiProvider.findFirst({
-    where: {
-      name: { equals: input.name, mode: 'insensitive' },
-      NOT: { id: input.id ?? '' }
-    },
-    select: { id: true }
-  });
-  if (clash) throw new AiRouterError('Another provider has that name');
+  const effectiveAlias = input.alias ?? (input.providerType !== 'custom' ? definition.alias : null);
+  const identifiers = new Set([
+    input.name.toLowerCase(),
+    ...(effectiveAlias ? [effectiveAlias.toLowerCase()] : [])
+  ]);
+  if (effectiveAlias?.toLowerCase() === AUTO_MODEL)
+    throw new AiRouterError(`"${AUTO_MODEL}" is reserved`);
 
   const models = [...new Set(input.models)];
+  if (
+    input.providerType === 'opencode' &&
+    (input.format !== 'openai' || openCodeFreeModels(models).length !== models.length)
+  ) {
+    throw new AiRouterError('OpenCode Free supports its free Chat models only');
+  }
   const apiKey = input.apiKey
     ? encryptSecret(input.apiKey, getEncryptionKey())
     : input.clearApiKey
@@ -249,37 +316,119 @@ export async function saveProvider(adminId: string, input: ProviderInput) {
       : undefined;
   const data = {
     name: input.name,
+    providerType: input.providerType,
+    alias: effectiveAlias,
+    format: input.format,
+    authType: input.authType,
     baseUrl,
     models,
     priority: input.priority,
     enabled: input.enabled
   };
 
-  if (input.id) {
-    const existing = await prisma.aiProvider.findUnique({
-      where: { id: input.id }
+  const providerId = await prisma.$transaction(async (transaction) => {
+    // Names and aliases share one routing namespace. Serialize the check and write together.
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('devone-ai-provider-namespace', 0))`;
+    const others = await transaction.aiProvider.findMany({
+      where: { NOT: { id: input.id ?? '' } },
+      select: { name: true, alias: true, providerType: true }
     });
-    if (!existing) throw new AiRouterError('Provider not found');
-    await prisma.aiProvider.update({
-      where: { id: input.id },
-      data: {
-        ...data,
-        ...(apiKey !== undefined ? { encryptedApiKey: apiKey } : {}),
-        // New settings deserve a fresh try.
-        cooldownUntil: null,
-        lastError: null
-      }
-    });
-  } else {
-    await prisma.aiProvider.create({
-      data: { ...data, encryptedApiKey: apiKey ?? null }
-    });
-  }
+    for (const other of others) {
+      const alias =
+        other.alias ??
+        (other.providerType !== 'custom' ? getProviderDefinition(other.providerType)?.alias : null);
+      if (
+        identifiers.has(other.name.toLowerCase()) ||
+        (alias && identifiers.has(alias.toLowerCase()))
+      )
+        throw new AiRouterError('Another provider uses that name or alias');
+    }
+    const existing = input.id
+      ? await transaction.aiProvider.findUnique({
+          where: { id: input.id },
+          include: { connections: true }
+        })
+      : null;
+    if (input.id && !existing) throw new AiRouterError('Provider not found');
+    const primary = existing?.connections.find(
+      (account) => account.id === `${existing.id}-primary`
+    );
+    const savedSecret =
+      input.authType === 'access_token' ? primary?.encryptedAccessToken : primary?.encryptedApiKey;
+    const encryptedValue =
+      apiKey === undefined ? (savedSecret ?? existing?.encryptedApiKey ?? null) : apiKey;
+    if (
+      input.authType !== 'oauth' &&
+      input.authType !== 'none' &&
+      !encryptedValue &&
+      !existing?.connections.length
+    ) {
+      throw new AiRouterError('Enter a provider API key or access token');
+    }
+    const provider = existing
+      ? await transaction.aiProvider.update({
+          where: { id: existing.id },
+          data: {
+            ...data,
+            ...(apiKey !== undefined ? { encryptedApiKey: apiKey } : {}),
+            cooldownUntil: null,
+            lastError: null
+          }
+        })
+      : await transaction.aiProvider.create({ data: { ...data, encryptedApiKey: apiKey ?? null } });
+    if (
+      existing &&
+      (existing.providerType !== input.providerType ||
+        existing.baseUrl !== baseUrl ||
+        existing.format !== input.format ||
+        existing.authType !== input.authType)
+    ) {
+      await transaction.aiOAuthSession.deleteMany({ where: { providerId: existing.id } });
+    }
+    if (
+      existing &&
+      (existing.providerType !== input.providerType || existing.baseUrl !== baseUrl)
+    ) {
+      await transaction.aiConnection.updateMany({
+        where: { providerId: existing.id, authType: 'oauth' },
+        data: {
+          isActive: false,
+          lastError: 'Provider configuration changed. Connect this account again.',
+          lastErrorAt: new Date()
+        }
+      });
+    }
+    if (input.authType !== 'oauth' && (encryptedValue || input.authType === 'none' || primary)) {
+      const primaryId = `${provider.id}-primary`;
+      const credentialData = {
+        authType: input.authType,
+        encryptedApiKey: input.authType === 'api_key' ? encryptedValue : null,
+        encryptedAccessToken: input.authType === 'access_token' ? encryptedValue : null,
+        encryptedRefreshToken: null,
+        encryptedIdToken: null,
+        expiresAt: null,
+        lastRefreshAt: null,
+        rateLimitedUntil: null,
+        modelLocks: {},
+        lastError: null,
+        lastErrorAt: null
+      };
+      if (input.authType !== 'none' && !encryptedValue)
+        throw new AiRouterError('Enter a provider key, or select No authentication');
+      await transaction.aiConnection.upsert({
+        where: { id: primaryId },
+        create: { id: primaryId, providerId: provider.id, name: 'Primary', ...credentialData },
+        update: credentialData
+      });
+    }
+    return provider.id;
+  });
   await recordAudit({
     actorId: adminId,
     action: input.id ? 'admin.ai.provider.update' : 'admin.ai.provider.add',
     target: input.name
   });
+  return providerId;
 }
 
 export async function setProviderEnabled(adminId: string, providerId: string, enabled: boolean) {
@@ -302,14 +451,16 @@ export async function clearProviderCooldown(adminId: string, providerId: string)
     where: { id: providerId },
     data: { cooldownUntil: null, lastError: null }
   });
+  await getPrisma().aiConnection.updateMany({
+    where: { providerId },
+    data: { rateLimitedUntil: null, modelLocks: {}, lastError: null, lastErrorAt: null }
+  });
 }
 
 export async function deleteProvider(adminId: string, providerId: string) {
   await requireAdmin(adminId);
   const prisma = getPrisma();
-  const provider = await prisma.aiProvider.delete({
-    where: { id: providerId }
-  });
+  const provider = await prisma.aiProvider.delete({ where: { id: providerId } });
   // Drop the provider from every combo that used it.
   const combos = await prisma.aiCombo.findMany();
   await Promise.all(
@@ -318,10 +469,7 @@ export async function deleteProvider(adminId: string, providerId: string) {
       const kept = steps.filter((step) => step.providerId !== providerId);
       return kept.length === steps.length
         ? undefined
-        : prisma.aiCombo.update({
-            where: { id: combo.id },
-            data: { steps: kept }
-          });
+        : prisma.aiCombo.update({ where: { id: combo.id }, data: { steps: kept } });
     })
   );
   await recordAudit({
@@ -337,51 +485,206 @@ export async function deleteProvider(adminId: string, providerId: string) {
  */
 export async function fetchProviderModels(
   adminId: string,
-  input: { providerId?: string; baseUrl: string; apiKey?: string },
-  fetchImpl: typeof fetch = fetch
+  input: {
+    providerId?: string;
+    baseUrl: string;
+    apiKey?: string;
+    providerType?: string;
+    format?: ProviderFormat;
+    authType?: ProviderAuthType;
+  },
+  fetchImpl: typeof fetch = gatewayFetch
 ): Promise<string[]> {
   await requireAdmin(adminId);
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   if (!baseUrl) throw new AiRouterError('Enter an http:// or https:// base URL');
-  await assertSafeUrl(baseUrl);
+  await assertGatewayUrl(baseUrl);
   let apiKey = input.apiKey || null;
+  let providerType = input.providerType ?? 'custom';
+  let format = input.format ?? 'openai';
+  let authType = input.authType ?? 'api_key';
+  let codexAccountId: unknown;
   if (!apiKey && input.providerId) {
     const saved = await getPrisma().aiProvider.findUnique({
       where: { id: input.providerId },
-      select: { encryptedApiKey: true }
+      select: {
+        encryptedApiKey: true,
+        baseUrl: true,
+        format: true,
+        providerType: true,
+        authType: true,
+        connections: { where: { isActive: true }, orderBy: { priority: 'asc' } }
+      }
     });
-    apiKey = saved?.encryptedApiKey
-      ? decryptSecret(saved.encryptedApiKey, getEncryptionKey())
-      : null;
+    if (!saved || saved.baseUrl !== baseUrl)
+      throw new AiRouterError('Saved credentials can only be used with the saved provider URL');
+    providerType = input.providerType ?? saved.providerType;
+    format = input.format ?? (saved.format as ProviderFormat);
+    authType = saved.authType as ProviderAuthType;
+    // Inference cooldowns do not prevent authenticated metadata discovery.
+    const account =
+      saved.connections.find(
+        (connection) => !connection.rateLimitedUntil || connection.rateLimitedUntil <= new Date()
+      ) ?? saved.connections[0];
+    if (account) {
+      const manager = createCredentialManager(
+        createConnectionRepository(),
+        () => getProviderDefinition(saved.providerType)?.oauth,
+        gatewayFetch
+      );
+      const credential = await manager.ensureFresh(account.id);
+      if (!credential) throw new AiRouterError('Reconnect the provider account');
+      authType = credential.authType;
+      codexAccountId =
+        credential.providerSpecificData?.workspaceId ??
+        credential.providerSpecificData?.chatgptAccountId ??
+        credential.providerSpecificData?.accountId;
+      apiKey =
+        authType === 'api_key' ? (credential.apiKey ?? null) : (credential.accessToken ?? null);
+    } else {
+      apiKey = saved.encryptedApiKey
+        ? decryptSecret(saved.encryptedApiKey, getEncryptionKey())
+        : null;
+    }
+  }
+  const definition = getProviderDefinition(providerType);
+  const tokenAuth = authType === 'oauth' || authType === 'access_token';
+  const headers = new Headers({ ...definition?.transport.headers, accept: 'application/json' });
+  if (format === 'claude') headers.set('anthropic-version', '2023-06-01');
+  if (providerType === 'codex' && typeof codexAccountId === 'string' && codexAccountId) {
+    if (/[\r\n]/.test(codexAccountId)) throw new AiRouterError('Invalid Codex account metadata');
+    headers.set('ChatGPT-Account-ID', codexAccountId);
+  }
+  if (format === 'claude' && tokenAuth && ['claude', 'anthropic'].includes(providerType)) {
+    headers.append('anthropic-beta', 'oauth-2025-04-20');
+  }
+  if (apiKey) {
+    const authHeader = tokenAuth
+      ? 'authorization'
+      : format === 'claude'
+        ? 'x-api-key'
+        : (definition?.transport.auth.header ?? 'authorization');
+    const scheme = tokenAuth
+      ? 'bearer'
+      : format === 'claude'
+        ? 'raw'
+        : (definition?.transport.auth.scheme ?? 'bearer');
+    headers.set(authHeader, scheme === 'bearer' ? `Bearer ${apiKey}` : apiKey);
   }
   let response: Response;
   try {
-    response = await fetchImpl(providerUrl(baseUrl, 'models'), {
-      headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
-      signal: AbortSignal.timeout(15_000)
+    const url = new URL(providerUrl(baseUrl, 'models'));
+    if (format === 'claude') url.searchParams.set('limit', '1000');
+    if (providerType === 'codex') url.searchParams.set('client_version', CODEX_CLIENT_VERSION);
+    response = await fetchImpl(url.toString(), {
+      headers,
+      signal: AbortSignal.timeout(15_000),
+      redirect: 'error'
     });
   } catch {
     throw new AiRouterError('Could not reach the provider');
   }
   if (response.status === 401 || response.status === 403) {
-    throw new AiRouterError('The provider refused the API key');
+    throw new AiRouterError('The provider refused the credentials');
   }
   if (!response.ok) throw new AiRouterError(`The provider answered HTTP ${response.status}`);
-  const models = parseModelList(await response.json().catch(() => null));
+  const catalog = await response.json().catch(() => null);
+  const nativeModels = (
+    catalog as { models?: { slug?: unknown; id?: unknown; kind?: unknown }[] } | null
+  )?.models;
+  const listed = parseModelList(
+    providerType === 'codex' && Array.isArray(nativeModels)
+      ? {
+          data: nativeModels
+            .filter((model) => model?.kind !== 'image')
+            .map((model) => ({ id: model?.slug ?? model?.id }))
+        }
+      : catalog
+  );
+  const models =
+    providerType === 'opencode'
+      ? openCodeFreeModels(listed)
+      : providerType === 'codex'
+        ? listed.filter((model) => !model.startsWith('gpt-image-') && !model.endsWith('-image'))
+        : listed;
   if (models.length === 0) throw new AiRouterError('The provider listed no models');
   return models;
 }
 
+/** Refresh only the catalog; keep configured defaults, accounts and cooldowns intact. */
+export async function refreshProviderModels(
+  adminId: string,
+  providerId: string,
+  fetchImpl: typeof fetch = gatewayFetch
+): Promise<void> {
+  await requireAdmin(adminId);
+  const prisma = getPrisma();
+  const provider = await prisma.aiProvider.findUnique({ where: { id: providerId } });
+  if (!provider) throw new AiRouterError('Provider not found');
+  const models = await fetchProviderModels(
+    adminId,
+    { providerId, baseUrl: provider.baseUrl },
+    fetchImpl
+  );
+  const name = await prisma.$transaction(async (transaction) => {
+    // Share saveProvider's lock so an edit during discovery keeps its model order and additions.
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('devone-ai-provider-namespace', 0))`;
+    const current = await transaction.aiProvider.findUnique({ where: { id: providerId } });
+    if (!current) throw new AiRouterError('Provider not found');
+    if (
+      current.baseUrl !== provider.baseUrl ||
+      current.providerType !== provider.providerType ||
+      current.format !== provider.format ||
+      current.authType !== provider.authType
+    ) {
+      throw new AiRouterError('Provider configuration changed. Refresh the models again.');
+    }
+    await transaction.aiProvider.update({
+      where: { id: providerId },
+      data: { models: [...new Set([...current.models, ...models])] }
+    });
+    return current.name;
+  });
+  await recordAudit({
+    actorId: adminId,
+    action: 'admin.ai.provider.models.refresh',
+    target: name
+  });
+}
+
+/** Create the anonymous free provider only when explicitly selected in the catalog. */
+export async function connectFreeProvider(adminId: string): Promise<string> {
+  await requireAdmin(adminId);
+  const existing = await getPrisma().aiProvider.findFirst({
+    where: { providerType: 'opencode' },
+    orderBy: { priority: 'asc' },
+    select: { id: true }
+  });
+  if (existing) return existing.id;
+  const definition = getProviderDefinition('opencode')!;
+  const models = await fetchProviderModels(adminId, {
+    providerType: 'opencode',
+    baseUrl: definition.transport.baseUrl,
+    authType: 'none',
+    format: 'openai'
+  });
+  return saveProvider(adminId, {
+    name: definition.name,
+    providerType: 'opencode',
+    alias: definition.alias,
+    baseUrl: definition.transport.baseUrl,
+    authType: 'none',
+    format: 'openai',
+    models,
+    priority: 40,
+    enabled: true
+  });
+}
+
 export async function listCombos(adminId: string) {
   await requireAdmin(adminId);
-  const combos = await getPrisma().aiCombo.findMany({
-    orderBy: { name: 'asc' }
-  });
-  return combos.map((combo) => ({
-    id: combo.id,
-    name: combo.name,
-    steps: readSteps(combo.steps)
-  }));
+  const combos = await getPrisma().aiCombo.findMany({ orderBy: { name: 'asc' } });
+  return combos.map((combo) => ({ id: combo.id, name: combo.name, steps: readSteps(combo.steps) }));
 }
 
 export type AiComboSummary = Awaited<ReturnType<typeof listCombos>>[number];
@@ -414,11 +717,7 @@ export async function saveCombo(adminId: string, input: ComboInput) {
 export async function deleteCombo(adminId: string, comboId: string) {
   await requireAdmin(adminId);
   const combo = await getPrisma().aiCombo.delete({ where: { id: comboId } });
-  await recordAudit({
-    actorId: adminId,
-    action: 'admin.ai.combo.delete',
-    target: combo.name
-  });
+  await recordAudit({ actorId: adminId, action: 'admin.ai.combo.delete', target: combo.name });
 }
 
 /** Requests, tokens and failures per provider over the last day, and the latest requests. */
@@ -467,13 +766,7 @@ export type AiUsageOverview = Awaited<ReturnType<typeof usageOverview>>;
 export async function listApiKeys(userId: string) {
   return getPrisma().aiApiKey.findMany({
     where: { userId },
-    select: {
-      id: true,
-      name: true,
-      prefix: true,
-      lastUsedAt: true,
-      createdAt: true
-    },
+    select: { id: true, name: true, prefix: true, lastUsedAt: true, createdAt: true },
     orderBy: { createdAt: 'desc' }
   });
 }
@@ -489,21 +782,153 @@ export async function createApiKey(userId: string, name: string): Promise<string
     throw new AiRouterError(`You can have at most ${MAX_KEYS} keys`);
   }
   const { key, hash, prefix } = createAiApiKey();
-  await prisma.aiApiKey.create({
-    data: { userId, name, tokenHash: hash, prefix }
-  });
-  await recordAudit({
-    actorId: userId,
-    action: 'account.ai_key.create',
-    target: name
-  });
+  await prisma.aiApiKey.create({ data: { userId, name, tokenHash: hash, prefix } });
+  await recordAudit({ actorId: userId, action: 'account.ai_key.create', target: name });
   return key;
 }
 
 export async function deleteApiKey(userId: string, keyId: string) {
-  const { count } = await getPrisma().aiApiKey.deleteMany({
-    where: { id: keyId, userId }
-  });
+  const { count } = await getPrisma().aiApiKey.deleteMany({ where: { id: keyId, userId } });
   if (count === 0) throw new AiRouterError('Key not found');
   await recordAudit({ actorId: userId, action: 'account.ai_key.delete' });
+}
+
+// Account and installation settings used by the admin service layer.
+export async function listConnections(adminId: string): Promise<AiConnectionSummary[]> {
+  await requireAdmin(adminId);
+  const accounts = await getPrisma().aiConnection.findMany({
+    orderBy: [{ providerId: 'asc' }, { priority: 'asc' }]
+  });
+  return accounts.map((account) => ({
+    id: account.id,
+    providerId: account.providerId,
+    name: account.name,
+    authType: account.authType as ProviderAuthType,
+    priority: account.priority,
+    isActive: account.isActive,
+    allowedModels: account.allowedModels,
+    expiresAt: account.expiresAt,
+    rateLimitedUntil: account.rateLimitedUntil,
+    lastError: account.lastError,
+    hasApiKey: Boolean(account.encryptedApiKey),
+    hasAccessToken: Boolean(account.encryptedAccessToken),
+    hasRefreshToken: Boolean(account.encryptedRefreshToken)
+  }));
+}
+
+export async function saveConnection(adminId: string, input: ConnectionInput): Promise<void> {
+  await requireAdmin(adminId);
+  const prisma = getPrisma();
+  const provider = await prisma.aiProvider.findUnique({ where: { id: input.providerId } });
+  if (!provider) throw new AiRouterError('Provider not found');
+  const existing = input.id
+    ? await prisma.aiConnection.findUnique({ where: { id: input.id } })
+    : null;
+  if (input.id && (!existing || existing.providerId !== input.providerId))
+    throw new AiRouterError('Account not found');
+  if (input.authType === 'oauth' && (!existing || existing.authType !== 'oauth' || input.apiKey)) {
+    throw new AiRouterError('Use Connect to add an OAuth account');
+  }
+  if (!getProviderDefinition(provider.providerType)?.authTypes?.includes(input.authType))
+    throw new AiRouterError('Unsupported provider authentication mode');
+  const secret = input.apiKey ? encryptSecret(input.apiKey, getEncryptionKey()) : undefined;
+  const preserved =
+    input.authType === 'api_key' ? existing?.encryptedApiKey : existing?.encryptedAccessToken;
+  if ((input.authType === 'api_key' || input.authType === 'access_token') && !secret && !preserved)
+    throw new AiRouterError('Enter a provider key or access token');
+  const data = {
+    name: input.name,
+    authType: input.authType,
+    priority: input.priority,
+    isActive: input.isActive,
+    allowedModels: input.allowedModels,
+    ...(input.authType === 'oauth'
+      ? {}
+      : {
+          encryptedApiKey:
+            input.authType === 'api_key' ? (secret ?? existing?.encryptedApiKey ?? null) : null,
+          encryptedAccessToken:
+            input.authType === 'access_token'
+              ? (secret ?? existing?.encryptedAccessToken ?? null)
+              : null,
+          encryptedRefreshToken: null,
+          encryptedIdToken: null,
+          expiresAt: null,
+          lastRefreshAt: null
+        }),
+    rateLimitedUntil: null,
+    modelLocks: {},
+    lastError: null,
+    lastErrorAt: null
+  };
+  if (existing) await prisma.aiConnection.update({ where: { id: existing.id }, data });
+  else await prisma.aiConnection.create({ data: { ...data, providerId: provider.id } });
+  await recordAudit({ actorId: adminId, action: 'admin.ai.account.save', target: input.name });
+}
+
+export async function deleteConnection(adminId: string, connectionId: string): Promise<void> {
+  await requireAdmin(adminId);
+  const account = await getPrisma().aiConnection.delete({ where: { id: connectionId } });
+  // The legacy key is never a fallback after its primary account is removed.
+  if (account.id === `${account.providerId}-primary`) {
+    await getPrisma().aiProvider.update({
+      where: { id: account.providerId },
+      data: { encryptedApiKey: null }
+    });
+  }
+  await recordAudit({ actorId: adminId, action: 'admin.ai.account.delete', target: account.name });
+}
+
+export async function setConnectionEnabled(
+  adminId: string,
+  connectionId: string,
+  isActive: boolean
+): Promise<void> {
+  await requireAdmin(adminId);
+  const account = await getPrisma().aiConnection.update({
+    where: { id: connectionId },
+    data: { isActive }
+  });
+  await recordAudit({
+    actorId: adminId,
+    action: 'admin.ai.account.update',
+    target: account.name,
+    details: { isActive }
+  });
+}
+
+export async function clearConnectionCooldown(
+  adminId: string,
+  connectionId: string
+): Promise<void> {
+  await requireAdmin(adminId);
+  await getPrisma().aiConnection.update({
+    where: { id: connectionId },
+    data: { rateLimitedUntil: null, modelLocks: {}, lastError: null, lastErrorAt: null }
+  });
+}
+
+export async function getRouterSettings(adminId: string): Promise<AiRouterSettings> {
+  await requireAdmin(adminId);
+  return (
+    (await getPrisma().aiRouterSettings.findUnique({ where: { id: 'default' } })) ?? {
+      defaultModel: null,
+      compressToolOutput: true,
+      maxToolOutputChars: 30000
+    }
+  );
+}
+
+export async function saveRouterSettings(
+  adminId: string,
+  settings: AiRouterSettings
+): Promise<void> {
+  await requireAdmin(adminId);
+  const data = { ...settings, defaultModel: settings.defaultModel?.trim() || null };
+  await getPrisma().aiRouterSettings.upsert({
+    where: { id: 'default' },
+    create: { id: 'default', ...data },
+    update: data
+  });
+  await recordAudit({ actorId: adminId, action: 'admin.ai.settings.update', target: 'AI router' });
 }

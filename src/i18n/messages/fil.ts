@@ -48,6 +48,7 @@ export const fil: MessageShape<typeof en> = {
   userMenu: {
     signedInAs: 'Naka-sign in bilang @{username}',
     account: 'Aking account',
+    router: 'Router',
     admin: 'Admin',
     signOut: 'Mag-sign out'
   },
@@ -359,17 +360,65 @@ export const fil: MessageShape<typeof en> = {
     admin_ai_combo_add: 'nagdagdag ng AI combo',
     admin_ai_combo_update: 'nagbago ng AI combo',
     admin_ai_combo_delete: 'nag-alis ng AI combo',
+    admin_ai_account_save: 'nag-save ng AI account',
+    admin_ai_account_update: 'nagbago ng AI account',
+    admin_ai_account_delete: 'nag-alis ng AI account',
+    admin_ai_account_connect: 'nagkonekta ng AI OAuth account',
+    admin_ai_settings_update: 'nagbago ng mga setting ng AI router',
     account_ai_key_create: 'gumawa ng AI key',
     account_ai_key_delete: 'nagbura ng AI key'
   },
   aiRouter: {
+    workspace: {
+      title: 'Router',
+      backToProjects: 'Bumalik sa mga proyekto',
+      description:
+        'Ikonekta ang iyong mga AI account at gamitin ang iisang endpoint para sa bawat tool.',
+      tabs: {
+        providers: 'Mga provider',
+        endpoint: 'Endpoint at mga key',
+        combos: 'Mga combo',
+        usage: 'Paggamit',
+        settings: 'Mga setting'
+      },
+      providerHint: 'Pumili ng provider para pamahalaan ang mga account, credential at model nito.',
+      customProviders: 'Mga custom provider (OpenAI / Anthropic compatible)',
+      freeProviders: 'Mga free tier provider',
+      noKeyNeeded: 'Hindi kailangan ng API key',
+      oauthProviders: 'Mga OAuth provider',
+      apiProviders: 'Mga API key provider',
+      localProviders: 'Mga lokal na provider',
+      addAnthropic: 'Magdagdag ng Anthropic compatible',
+      addOpenai: 'Magdagdag ng OpenAI compatible',
+      emptyCustom:
+        'Wala pang custom provider — magdagdag ng OpenAI o Anthropic compatible na endpoint.',
+      search: 'Maghanap ng provider…',
+      filter: 'Salain ang mga provider',
+      all: 'Lahat',
+      connected: 'Nakakonekta',
+      available: 'Magagamit',
+      accountCount: '{total} account · {available} magagamit',
+      noConnections: 'Walang koneksyon',
+      noResults: 'Walang provider na tugma sa iyong paghahanap.',
+      backProviders: 'Lahat ng provider',
+      providerMissing: 'Wala na ang provider na ito.',
+      apiEndpoint: 'API endpoint',
+      endpointHint:
+        'Gamitin ang base URL na ito sa iyong mga tool. Kailangan ng personal na API key sa mga panlabas na request.',
+      personalKeys: 'Mga API key',
+      protocol: 'Format ng API',
+      example: 'Halimbawang request',
+      copyModel: 'Kopyahin ang model ID',
+      modelsHint:
+        'Gamitin ang auto para sa fallback, pangalan ng combo, o provider/model para sa isang provider.'
+    },
     intro:
       'Iisang OpenAI-compatible na endpoint para sa lahat ng model na naka-set up dito. Napupunta ang request sa unang provider na sumagot; kapag rate-limited, ubos ang quota o down ang isa, ipapasa ito sa susunod.',
     endpoint: 'Endpoint',
     providers: {
       title: 'Mga provider',
       description:
-        'Mga OpenAI-compatible na API na magagamit ng router. Naka-encrypt ang mga key at hindi na ipapakita ulit.',
+        'Mga API na magagamit ng router sa Chat, Messages o Responses na format. Naka-encrypt ang mga credential at hindi na ipapakita ulit.',
       empty: 'Wala pang provider. Magdagdag ng isa para magsimulang mag-route ng mga request.',
       add: 'Magdagdag ng provider',
       addTitle: 'Magdagdag ng provider',
@@ -386,6 +435,8 @@ export const fil: MessageShape<typeof en> = {
       modelsHint:
         'Isa bawat linya, ayon sa pangalan sa provider. Ang una ang ginagamit para sa "auto".',
       fetchModels: 'Kunin ang mga model',
+      refreshModels: 'I-refresh ang mga model',
+      modelsRefreshed: 'Na-refresh ang mga model',
       fetched: '{count} model ang nakita',
       priority: 'Priyoridad',
       priorityHint:
@@ -401,6 +452,132 @@ export const fil: MessageShape<typeof en> = {
       removeDescription: 'Aalisin din ito sa bawat combo na gumagamit nito.',
       saved: 'Na-save ang provider',
       removed: 'Naalis ang provider'
+    },
+    gateway: {
+      providerType: 'Uri ng provider',
+      custom: 'Pasadya',
+      alias: 'Alias',
+      aliasHint: 'Opsyonal na maikling pangalan para sa mga request gaya ng alias/model.',
+      format: 'Format ng upstream',
+      chat: 'OpenAI Chat Completions',
+      messages: 'Anthropic Messages',
+      responses: 'OpenAI Responses',
+      authType: 'Pagpapatunay',
+      accessToken: 'Access token',
+      noAuth: 'Walang pagpapatunay',
+      invalid: 'Suriin ang mga kinakailangang field.'
+    },
+    oauth: {
+      connect: 'Ikonekta ang OAuth account',
+      saveConnect: 'I-save at ikonekta',
+      saveFirst: 'I-save ang provider, saka ikonekta ang account gamit ang OAuth.',
+      notConfigured:
+        'Hindi available ang OAuth para sa provider na ito. Hilinging i-enable ito sa administrator.',
+      failed: 'Hindi naikonekta ang account. Suriin ang setup ng provider at subukan ulit.',
+      connected: 'Nakonekta ang OAuth account.',
+      managed:
+        'Awtomatikong pinapamahalaan ang OAuth credential. Kumonekta ulit para palitan ang mga ito.'
+    },
+    test: {
+      assistant: 'Assistant ng koneksyon',
+      ready: 'Handa',
+      readyConnected: 'Nakakonekta',
+      thinking: 'Nag-iisip…',
+      failed: 'Nabigo',
+      latest: 'Pumunta sa pinakabagong mensahe',
+      usageHint: 'Ginagamit ng mga mensahe ang account na ito at kasama sa paggamit ng provider.',
+      button: 'Subukan ang koneksyon',
+      account: 'Subukan ang koneksyon {name}',
+      title: 'Subukan ang {name}',
+      description:
+        'Makipag-chat gamit ang account na ito sa {provider}. Ginagamit ng mga request ang napiling account at kasama sa paggamit ng provider.',
+      conversation: 'Usapan sa pagsubok',
+      you: 'Ikaw',
+      empty: 'Magsagawa ng mabilis na pagsubok o magpadala ng mensahe para suriin ang account.',
+      model: 'Model',
+      message: 'Mensahe',
+      placeholder: 'Magpadala ng mensahe para sa pagsubok…',
+      chooseModel: 'Pumili ng model.',
+      enterMessage: 'Maglagay ng mensahe.',
+      quick: 'Mabilis na pagsubok',
+      probe: 'Sumagot gamit lamang ang OK.',
+      send: 'Ipadala',
+      clear: 'Burahin ang chat',
+      connected: 'Nakakonekta · {model} · {time}s',
+      noText: 'Matagumpay na tumugon ang model nang walang text na sagot.',
+      truncated: 'Pinaikli ang sagot sa 8000 character para sa pagsubok na ito.',
+      noModels:
+        'Magdagdag ng mga model sa provider at payagan ang kahit isa para sa account bago subukan.',
+      unavailable:
+        'I-enable ang provider at account, o alisin ang cooldown ng account bago subukan.'
+    },
+    connections: {
+      title: 'Mga account ng provider',
+      addConnection: 'Magdagdag ng koneksyon',
+      chooseProvider: 'Pumili ng provider',
+      chooseHint:
+        'Bubuksan ng OAuth provider ang pahina para mag-sign in. Credential ang ginagamit ng ibang provider.',
+      description:
+        'Magdagdag ng maraming account sa bawat provider. May sariling priyoridad, access sa model at cooldown ang bawat account. Naka-encrypt ang mga credential at hindi ipinapakita.',
+      noProviders: 'Magdagdag muna ng provider bago magkonekta ng account.',
+      empty: 'Wala pang nakakonektang account.',
+      add: 'Magdagdag ng account',
+      edit: 'I-edit ang {name}',
+      remove: 'Alisin ang {name}?',
+      removeHint:
+        'Hindi na magsisilbi ng request ang account na ito. Magagamit pa rin ang ibang account.',
+      forProvider:
+        'Account para sa {name}. Iwanang blangko ang credential para panatilihin ang naka-save.',
+      active: 'Aktibo',
+      activeName: 'I-enable ang account na {name}',
+      expired: 'Nag-expire',
+      noCredential: 'Walang credential',
+      allowedModels: 'Mga pinapayagang model',
+      modelsHint:
+        'Isang model ID bawat linya. Iwanang blangko para payagan ang lahat ng model ng provider.',
+      allModels: 'Pinapayagan ang lahat ng model ng provider',
+      allowedList: 'Pinapayagan: {models}',
+      cooldown: 'Nagpapahinga hanggang {time}',
+      expires: 'Mag-e-expire sa {time}',
+      priorityHint: 'Mauunang subukan ang mas mababang numero sa mga account ng provider na ito.',
+      secretHint: 'Ilagay ang API key o access token ng account na ito.',
+      saved: 'Na-save ang account'
+    },
+    settings: {
+      title: 'Mga setting ng router',
+      description:
+        'Piliin ang default na model at kontrolin ang malalaking resulta ng tool bago ipadala sa provider.',
+      defaultModel: 'Default na model',
+      defaultHint:
+        'Fallback kapag walang provider para sa hiniling na model. Ilagay ang auto, combo o provider/model; iwanang blangko para tanggihan ang di-kilalang pangalan.',
+      compress: 'Paikliin ang output ng tool',
+      compressHint:
+        'Paikliin ang malalaking text ng resulta ng tool habang pinapanatili ang tool ID at estruktura ng request.',
+      limit: 'Pinakamaraming character sa output ng tool',
+      limitHint: 'Paikliin ang text na lampas dito kapag naka-enable ang compression.',
+      saved: 'Na-save ang mga setting ng router'
+    },
+    presets: {
+      opencodeFree:
+        'Mga libreng OpenCode Chat model. Hindi kailangan ng provider key; OpenCode ang nagtatakda ng availability at mga limitasyon.',
+      opencodeZen:
+        'Gumamit ng key mula sa OpenCode Zen account mo. Kunin ang mga model o ilagay nang mano-mano.',
+      openrouter:
+        'Gumamit ng key mula sa OpenRouter account mo. Kunin ang mga model o ilagay nang mano-mano.',
+      groq: 'Gumamit ng key mula sa Groq account mo. Kunin ang mga model o ilagay nang mano-mano.',
+      gemini: 'Gumamit ng key mula sa Google AI Studio at OpenAI-compatible na endpoint.',
+      cerebras:
+        'Gumamit ng key mula sa Cerebras account mo. Kunin ang mga model o ilagay nang mano-mano.',
+      mistral:
+        'Gumamit ng key mula sa Mistral account mo. Kunin ang mga model o ilagay nang mano-mano.',
+      deepseek:
+        'Gumamit ng key mula sa DeepSeek account mo. Kunin ang mga model o ilagay nang mano-mano.',
+      ollama: 'Gamitin ang address ng lokal na model server na naaabot ng DevOne server.',
+      custom: 'Mag-set up ng API na sumusuporta sa isa sa mga available na format ng upstream.',
+      openai: 'Gumamit ng OpenAI API key. Kunin ang mga model o ilagay nang mano-mano.',
+      anthropic: 'Gumamit ng Anthropic API key at Messages na format.',
+      oauth:
+        'Kumonekta gamit ang OAuth application na pinagana ng administrator. Ilagay nang mano-mano ang mga model kung walang discovery.'
     },
     combos: {
       title: 'Mga combo',
@@ -425,20 +602,6 @@ export const fil: MessageShape<typeof en> = {
       saved: 'Na-save ang combo',
       removed: 'Naalis ang combo'
     },
-    settings: {
-      title: 'Mga setting',
-      description:
-        'Kung paano tinatrato ng router ang mga request mula sa mga tool tulad ng Claude Code.',
-      defaultModel: 'Default na model',
-      defaultModelHint:
-        'Ginagamit kapag walang nag-aalok ng model na hinihingi ng tool, halimbawa kapag humihingi ang Claude Code ng "claude-sonnet-…". Maglagay ng pangalan ng combo, "auto" o isang model.',
-      compress: 'Paliitin ang output ng tool bago ipadala',
-      maxChars: 'Pinakamahabang output ng tool (mga character)',
-      compressHint:
-        'Nililinis ang mga log ng command, listahan at diff, at ang mas mahaba ay nananatili ang simula at dulo. Magpadala ng "x-devone-token-saver: off" para laktawan ito sa isang request.',
-      save: 'I-save ang mga setting',
-      saved: 'Nai-save ang mga setting'
-    },
     usage: {
       title: 'Paggamit',
       description: 'Mga request sa nakaraang 24 na oras, at ang pinakabagong 50.',
@@ -453,6 +616,7 @@ export const fil: MessageShape<typeof en> = {
       model: 'Model',
       tries: 'Mga subok',
       status: 'Katayuan',
+      savedChars: 'Mga natipid na character',
       noProvider: 'Walang sumagot'
     },
     keys: {
