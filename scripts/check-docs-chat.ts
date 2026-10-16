@@ -166,3 +166,48 @@ const empty = doc('task', 'New task', '');
 assert.ok(containsWholePage(selectContext('write it', [empty, ...docs], { currentDocId: 'task' }), empty));
 
 console.log('Docs chat checks passed');
+
+// Code skill: a branch's files are chosen from what the question names.
+import {
+  formatCodeContext,
+  isSafeBranchName,
+  pathsMentioned,
+  pickEntries
+} from '../src/lib/docs-chat/code';
+
+assert.ok(isSafeBranchName('feature/login-v2'));
+assert.ok(!isSafeBranchName('../etc'));
+assert.ok(!isSafeBranchName('a b'));
+assert.deepEqual(pathsMentioned('What does src/lib/auth.ts do? Also package.json.'), [
+  'src/lib/auth.ts',
+  'package.json'
+]);
+const rootEntries = [
+  { name: 'src', path: 'src', type: 'dir' as const },
+  { name: 'README.md', path: 'README.md', type: 'file' as const },
+  { name: 'package.json', path: 'package.json', type: 'file' as const },
+  { name: 'LICENSE', path: 'LICENSE', type: 'file' as const }
+];
+assert.deepEqual(
+  pickEntries('what scripts are in package.json and what is in src', rootEntries).map(
+    (entry) => entry.path
+  ),
+  ['package.json', 'src', 'README.md']
+);
+const codeContext = formatCodeContext({
+  repository: 'acme/app',
+  branch: 'main',
+  commits: [{ sha: 'abcdef123', message: 'Fix login\n\nbody', authorName: 'Sam' }],
+  root: rootEntries,
+  folders: [],
+  files: [{ path: 'package.json', text: '{"name":"app"}', truncated: false }]
+});
+assert.match(codeContext, /## Code: acme\/app @ main/);
+assert.match(codeContext, /abcdef1 Fix login \(Sam\)/);
+assert.match(codeContext, /\[dir\] src/);
+assert.match(codeContext, /### File: package\.json/);
+assert.match(
+  buildChatMessages('Demo', [], [{ role: 'user', content: 'hi' }], { code: codeContext })[0].content,
+  /## Code: acme\/app @ main/
+);
+console.log('Docs chat code checks passed');

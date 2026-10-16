@@ -3,6 +3,11 @@
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import {
+  NativeSelect,
+  NativeSelectOptGroup,
+  NativeSelectOption
+} from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { ModelSelect } from '@/features/docs-chat/components/model-select';
 import { useDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
@@ -33,6 +38,13 @@ interface Message {
   docId?: string;
   applied?: Applied;
   showProposal?: boolean;
+}
+
+interface ChatRepository {
+  id: string;
+  name: string;
+  defaultBranch: string;
+  branches: string[];
 }
 
 const PAGE_SUGGESTIONS = [
@@ -108,6 +120,9 @@ export function DocsChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [repositories, setRepositories] = useState<ChatRepository[]>([]);
+  /** `repositoryId\n branch` of the branch whose code the chat may read; empty for none. */
+  const [branch, setBranch] = useState('');
   const abort = useRef<AbortController | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -115,6 +130,17 @@ export function DocsChat({
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [messages]);
   useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    fetch(`/api/projects/${projectId}/docs/chat/branches`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { repositories?: ChatRepository[] } | null) =>
+        setRepositories(body?.repositories ?? [])
+      )
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [open, projectId]);
 
   if (!open) return null;
 
@@ -145,6 +171,9 @@ export function DocsChat({
           messages: history.map(({ role, content }) => ({ role, content })),
           ...(task ? { taskTitle: currentTitle ?? '' } : { currentSlug }),
           model,
+          ...(branch
+            ? { code: { repositoryId: branch.split('\n')[0], branch: branch.split('\n')[1] } }
+            : {}),
           currentBody: bridge?.getMarkdown(),
           focus: hovered && hovered.docId === bridge?.docId ? hovered.text : undefined
         }),
@@ -237,6 +266,29 @@ export function DocsChat({
                 : 'Answers come from this project’s pages'}
           </p>
           <ModelSelect className='mt-2' />
+          {repositories.length > 0 && (
+            <label className='mt-2 flex items-center gap-2 text-xs'>
+              <Icons.gitBranch className='text-muted-foreground size-3.5 shrink-0' />
+              <NativeSelect
+                value={branch}
+                onChange={(event) => setBranch(event.target.value)}
+                aria-label='Branch to read code from'
+                className='h-8 min-w-0 flex-1 text-xs'
+              >
+                <NativeSelectOption value=''>No code</NativeSelectOption>
+                {repositories.map((repository) => (
+                  <NativeSelectOptGroup key={repository.id} label={repository.name}>
+                    {repository.branches.map((name) => (
+                      <NativeSelectOption key={name} value={`${repository.id}\n${name}`}>
+                        {name}
+                        {name === repository.defaultBranch ? ' (default)' : ''}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelectOptGroup>
+                ))}
+              </NativeSelect>
+            </label>
+          )}
         </div>
         <div className='flex shrink-0 items-center gap-1'>
           {messages.length > 0 && !busy && (

@@ -1,5 +1,9 @@
 import { handleChatCompletion } from '@/features/ai-router/request';
-import { DocsChatAccessError, loadProjectDocs } from '@/features/docs-chat/service';
+import {
+  DocsChatAccessError,
+  loadCodeContext,
+  loadProjectDocs
+} from '@/features/docs-chat/service';
 import { routerError } from '@/lib/ai-router/forward';
 import { getCurrentUser } from '@/lib/auth/session';
 import { DEMO_DISABLED_MESSAGE, isDemoMode } from '@/lib/demo';
@@ -32,7 +36,11 @@ const bodySchema = z.object({
   /** The passage the person is pointing at in the page, if any. */
   focus: z.string().max(2_000).optional(),
   /** A router model name; "auto" unless the person picked one. */
-  model: z.string().trim().min(1).max(200).default('auto')
+  model: z.string().trim().min(1).max(200).default('auto'),
+  /** A linked repository's branch to read code from, when the person picked one. */
+  code: z
+    .object({ repositoryId: z.string().min(1).max(100), branch: z.string().min(1).max(200) })
+    .optional()
 });
 
 /**
@@ -58,7 +66,7 @@ export async function POST(
       'invalid_request'
     );
   }
-  const { messages, currentSlug, currentBody, taskTitle, focus, model } = parsed.data;
+  const { messages, currentSlug, currentBody, taskTitle, focus, model, code } = parsed.data;
   const task = taskTitle !== undefined;
   const last = messages.at(-1);
   if (last?.role !== 'user') return routerError(400, 'End with a question', 'invalid_request');
@@ -99,6 +107,18 @@ export async function POST(
   // A rewrite is only safe when the model saw the whole page: it replaces the text.
   const editable = !!current && containsWholePage(excerpts, current);
 
+  let codeContext: string | null = null;
+  if (code) {
+    try {
+      codeContext = await loadCodeContext(user.id, projectId, code, search);
+    } catch {
+      // A provider outage should not stop the docs from answering.
+    }
+    if (codeContext === null) {
+      return routerError(404, 'That branch is not available any more', 'not_found');
+    }
+  }
+
   const headers = new Headers(request.headers);
   headers.set('content-type', 'application/json');
   headers.delete('content-length');
@@ -112,7 +132,8 @@ export async function POST(
         messages: buildChatMessages(project.projectName, excerpts, messages, {
           editablePage: editable ? current?.title : undefined,
           focus,
-          kind: task ? 'task' : 'page'
+          kind: task ? 'task' : 'page',
+          code: codeContext ?? undefined
         })
       }),
       signal: request.signal
