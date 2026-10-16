@@ -1,4 +1,10 @@
-import { shouldFallBack, usageFromJson, type RouteTarget, type TokenUsage } from './routing';
+import {
+  explainProviderError,
+  shouldFallBack,
+  usageFromJson,
+  type RouteTarget,
+  type TokenUsage
+} from './routing';
 import type { ProviderCredential, ProviderFormat } from './types';
 import { executeTarget, type UpstreamExecution } from './executors';
 import {
@@ -369,7 +375,7 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
   const message = options.signal?.aborted
     ? 'Client disconnected'
     : last
-      ? `Every provider failed. Last error: ${last.error}`
+      ? `Every provider failed. Last error: ${explainProviderError(last.error)}`
       : 'The request was cancelled';
   await finish(null, status, NO_USAGE, message);
   return routerError(status, message, 'all_providers_failed');

@@ -1854,6 +1854,7 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
   const {
     AUTO_MODEL,
     cooldownMs,
+    explainProviderError,
     listModelIds,
     normalizeBaseUrl,
     parseModelList,
@@ -1928,6 +1929,13 @@ assert.equal(droppedFolderPath('Design', 'Designs'), 'Designs/Design');
   }
 
   const at = now.getTime();
+  assert.match(
+    explainProviderError(
+      "OpenCode's free tier can only be used from within OpenCode. Download it at https://opencode.ai and keep building."
+    ),
+    /OpenCode Zen with your own key/
+  );
+  assert.equal(explainProviderError('Rate limited'), 'Rate limited', 'other errors pass through');
   assert.equal(cooldownMs(429, '30', at), 30_000);
   assert.equal(cooldownMs(429, new Date(at + 90_000).toUTCString(), at), 90_000);
   assert.equal(cooldownMs(429, '999999', at), 60 * 60_000);

@@ -142,6 +142,18 @@ export function cooldownMs(status: number, retryAfter: string | null, now = Date
   return 0;
 }
 
+/**
+ * A provider's own refusal, said so a person knows what to do. OpenCode's free
+ * tier answers anything outside its app with a download pitch; that is a rule
+ * of theirs, not an outage, so DevOne points at the providers that do work.
+ */
+export function explainProviderError(message: string): string {
+  if (/only be used from within opencode/i.test(message)) {
+    return "OpenCode's free tier only works inside the OpenCode app, so DevOne cannot use it. In Admin → AI router add OpenCode Zen with your own key, or another provider (OpenRouter free models, Groq, Gemini, Cerebras or a local Ollama), and turn OpenCode Free off.";
+  }
+  return message;
+}
+
 function parseRetryAfter(value: string | null, now: number): number | null {
   if (!value) return null;
   const trimmed = value.trim();
