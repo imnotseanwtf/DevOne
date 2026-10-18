@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { getPrisma } from '@/lib/db/prisma';
 import { getAppUrl } from '@/lib/auth/oauth';
 import { encryptSecret, decryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
-import { getProviderDefinition } from '@/lib/ai-router/registry';
+import { CLAUDE_DEFAULT_CLIENT_ID, getProviderDefinition } from '@/lib/ai-router/registry';
 import {
   generatePkce,
   buildProviderAuthorizeUrl,
@@ -75,7 +75,12 @@ export async function startProviderOAuth(userId: string, providerId: string): Pr
   }
   await Promise.all([assertGatewayUrl(config.authorizeUrl), assertGatewayUrl(config.tokenUrl)]);
   const providerCallback = `/api/ai/oauth/${encodeURIComponent(providerId)}/callback`;
-  const redirectUri = config.redirectUri ?? `${appUrl}${providerCallback}`;
+  // 9Router's native Claude flow uses /callback on the running server's port.
+  const callbackPath =
+    provider.providerType === 'claude' && config.clientId === CLAUDE_DEFAULT_CLIENT_ID
+      ? '/callback'
+      : providerCallback;
+  const redirectUri = config.redirectUri ?? `${appUrl}${callbackPath}`;
   const redirect = new URL(redirectUri);
   const codexLoopback = provider.providerType === 'codex' && redirectUri === CODEX_LOOPBACK_URI;
   if (codexLoopback && !['localhost', '127.0.0.1'].includes(publicUrl.hostname))

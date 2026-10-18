@@ -53,7 +53,21 @@ assert.deepEqual(registry.getProviderDefinition('custom', {})?.authTypes, [
   'access_token',
   'none'
 ]);
-assert.equal(registry.getProviderDefinition('claude', {})?.oauth, undefined);
+const nativeClaude = registry.getProviderDefinition('claude', {})!.oauth!;
+const nativeCodex = registry.getProviderDefinition('codex', {})!.oauth!;
+assert.equal(nativeClaude?.clientId, '9d1c250a-e61b-44d9-88ed-5944d1962f5e');
+assert.equal(nativeClaude.authorizeUrl, 'https://claude.ai/oauth/authorize');
+assert.equal(nativeClaude.tokenUrl, 'https://api.anthropic.com/v1/oauth/token');
+assert.equal(nativeCodex?.clientId, 'app_EMoamEEZ73f0CkXaXp7hrann');
+assert.equal(nativeCodex.redirectUri, 'http://localhost:1455/auth/callback');
+assert.equal(registry.getProviderDefinition('custom', {})?.oauth, undefined);
+assert.equal(registry.getProviderDefinition('openai', {})?.oauth, undefined);
+assert.equal(registry.getProviderDefinition('claude', { DEVONE_AI_CLAUDE_CLIENT_ID: '  ' })?.oauth?.clientId, nativeClaude.clientId);
+assert.equal(registry.getProviderDefinition('codex', { DEVONE_AI_CODEX_CLIENT_ID: '' })?.oauth?.redirectUri, nativeCodex.redirectUri);
+const customCodex = registry.getProviderDefinition('codex', { DEVONE_AI_CODEX_CLIENT_ID: 'own-client' })!.oauth!;
+assert.equal(customCodex.clientId, 'own-client');
+assert.equal(customCodex.redirectUri, undefined, 'a separate client keeps the installation callback');
+assert.equal(registry.getProviderDefinition('codex', { DEVONE_AI_CODEX_REDIRECT_URI: 'https://devone.example/callback' })?.oauth?.redirectUri, 'https://devone.example/callback');
 assert.equal(registry.getProviderDefinition('missing', {}), null);
 const isolated = registry.getProviderDefinition('anthropic', {})!;
 isolated.transport.headers!['anthropic-version'] = 'mutated';

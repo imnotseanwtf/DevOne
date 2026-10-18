@@ -22,7 +22,8 @@ the model catalog is documented in [OpenCode Zen](https://opencode.ai/docs/zen/)
 1. For Claude OAuth, choose **Providers → Claude**, then **Add account** if the provider already
    exists. An unconfigured Claude card starts sign-in immediately and creates its provider.
    Approve access on the provider's page; the callback saves an encrypted account and returns
-   to Router. A configured OAuth client is required. Codex follows the same flow.
+   to Router. Claude and Codex include 9Router's public OAuth client defaults; no provider
+   client ID or redirect environment variables are required for built-in sign-in.
 2. For API providers, choose a provider card to start from its preset. For custom endpoints,
    choose **Add OpenAI Compatible** or **Add Anthropic Compatible**. Choose authentication,
    enter a credential and use **Fetch models**, or enter model IDs one per line. Discovery is
@@ -49,10 +50,10 @@ Old `/admin?tab=ai` and `/account?tab=ai` bookmarks redirect to Router.
 
 ### Local Codex sign-in
 
-Set `DEVONE_AI_CODEX_CLIENT_ID=app_EMoamEEZ73f0CkXaXp7hrann` and
-`DEVONE_AI_CODEX_REDIRECT_URI=http://localhost:1455/auth/callback`, then restart DevOne.
-These are the public client identity and loopback callback used by
+DevOne bundles the public client identity `app_EMoamEEZ73f0CkXaXp7hrann` and loopback callback
+`http://localhost:1455/auth/callback` used by
 [9Router's Codex provider](https://github.com/decolua/9router/blob/master/open-sse/providers/registry/codex.js).
+Leave `DEVONE_AI_CODEX_CLIENT_ID` and `DEVONE_AI_CODEX_REDIRECT_URI` unset or empty to use them.
 Choose **Providers → Codex** to sign in with your ChatGPT account. DevOne opens its local
 callback listener before authorization, validates the saved OAuth state, and relays the code
 to the authenticated callback for encrypted account storage. Port 1455 must be free, and
@@ -109,24 +110,27 @@ are outside this rollout. Test the request shapes your client uses before relyin
 Presets include OpenAI-compatible services, Anthropic API-key Messages, Ollama, Claude OAuth
 and Codex OAuth. Model catalogs and account entitlements come from your upstream; the presets
 do not promise availability of a particular model or subscription. Select the upstream format
-that your configured endpoint supports. No third-party application's client ID or first-party
-client identity is built into the OAuth flow.
+that your configured endpoint supports. Claude and Codex use the public client identities
+from 9Router by default, with environment overrides for separately registered applications.
 
 ## OAuth installation configuration
 
-Set `DEVONE_APP_URL` to the public HTTPS address of DevOne. Register the exact callback URL
-`https://your-devone/api/ai/oauth/<provider-record-id>/callback` with your OAuth application;
-the ID belongs to the saved provider record, not the preset name. Use an OAuth application and
-scopes that the upstream supports for your installation.
+Set `DEVONE_APP_URL` to the address you use to open DevOne: HTTPS for a public installation,
+or an HTTP localhost address for development. The provider client IDs, endpoints and scopes
+are bundled from 9Router's registry; DevOne does not fetch configuration from 9Router at runtime.
 
-For a client registered with a loopback `/callback` address, set
-`DEVONE_AI_CLAUDE_REDIRECT_URI=http://localhost:3000/callback` (adjust to your app address).
-The override must have the same origin as `DEVONE_APP_URL` and use `/callback` or the provider's
-normal callback path. Start sign-in from that same app address so its session cookie is present
-when authorization returns. The shared callback resolves the provider from the saved state;
-the browser does not choose which account receives the authorization code.
+| Provider | Public client ID | Default callback |
+| --- | --- | --- |
+| [Claude](https://github.com/decolua/9router/blob/master/open-sse/providers/registry/claude.js) | `9d1c250a-e61b-44d9-88ed-5944d1962f5e` | `<DEVONE_APP_URL>/callback` |
+| [Codex](https://github.com/decolua/9router/blob/master/open-sse/providers/registry/codex.js) | `app_EMoamEEZ73f0CkXaXp7hrann` | `http://localhost:1455/auth/callback` |
 
-Claude and Codex configuration use these prefixes:
+Claude follows [9Router's `/callback` convention](https://github.com/decolua/9router/blob/master/src/lib/oauth/services/oauth.js)
+using the configured DevOne address and port. Start sign-in from that same address so its
+session cookie is present when authorization returns. The shared callback resolves the provider
+from the saved state; the browser does not choose which account receives the authorization code.
+Codex's built-in callback requires a local installation as described above.
+
+For a separately registered application, override the client ID with these optional variables:
 
 ```dotenv
 DEVONE_AI_CLAUDE_CLIENT_ID=your-registered-client-id
@@ -135,10 +139,13 @@ DEVONE_AI_CODEX_CLIENT_ID=your-registered-client-id
 DEVONE_AI_CODEX_CLIENT_SECRET=
 ```
 
-Each prefix accepts `AUTHORIZE_URL`, `TOKEN_URL`, `SCOPE`, `TOKEN_ENCODING` (`form` or `json`)
-and `REFRESH_LEAD_MS`. Claude and Codex have default authorization/token endpoints and scopes;
-override them to match your registered application. An OAuth client ID is required. Configure
-`CLIENT_SECRET` only when your application requires it.
+Each prefix accepts `AUTHORIZE_URL`, `TOKEN_URL`, `SCOPE`, `TOKEN_ENCODING` (`form` or `json`),
+`REDIRECT_URI` and `REFRESH_LEAD_MS`. Empty values use the built-in defaults. Configure
+`CLIENT_SECRET` only when your application requires it. A different client ID uses
+`<DEVONE_APP_URL>/api/ai/oauth/<provider-record-id>/callback` unless `REDIRECT_URI` is set;
+the ID belongs to the saved provider record, not the preset name. Register that exact callback
+with your application. Callback overrides must match the app origin and use `/callback` or
+the provider's normal callback path, except for Codex's fixed local callback.
 
 For a custom OAuth provider, set all required endpoint configuration:
 
@@ -158,8 +165,8 @@ installation variables.
 
 Authorization uses PKCE S256. State is bound to the signed-in administrator and provider,
 expires, and can only be consumed once. Refresh tokens are rotated under a per-account lock
-and saved encrypted. A missing installation configuration is shown in the UI as OAuth being
-unavailable.
+and saved encrypted. Custom OAuth providers without client configuration are shown in the UI
+as OAuth being unavailable.
 
 ## Local and custom endpoints
 

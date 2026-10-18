@@ -1,6 +1,7 @@
 import type { ProviderDefinition, ProviderFormat, ProviderOAuthConfig } from './types';
 
 export const CODEX_CLIENT_VERSION = '0.159.0';
+export const CLAUDE_DEFAULT_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 
 // Bootstrap catalog; model discovery refreshes the saved list from the account's API.
 const claudeModels: ProviderDefinition['models'] = [
@@ -134,8 +135,11 @@ const definitions: ProviderDefinition[] = [
   }
 ];
 
-const oauthDefaults: Record<string, Omit<ProviderOAuthConfig, 'clientId'>> = {
+// Public client identities and OAuth settings from 9Router's provider registry:
+// https://github.com/decolua/9router/tree/master/open-sse/providers/registry
+const oauthDefaults: Record<string, ProviderOAuthConfig> = {
   claude: {
+    clientId: CLAUDE_DEFAULT_CLIENT_ID,
     authorizeUrl: 'https://claude.ai/oauth/authorize',
     tokenUrl: 'https://api.anthropic.com/v1/oauth/token',
     scope: 'org:create_api_key user:profile user:inference',
@@ -145,6 +149,8 @@ const oauthDefaults: Record<string, Omit<ProviderOAuthConfig, 'clientId'>> = {
     refreshLeadMs: 14_400_000
   },
   codex: {
+    clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
+    redirectUri: 'http://localhost:1455/auth/callback',
     authorizeUrl: 'https://auth.openai.com/oauth/authorize',
     tokenUrl: 'https://auth.openai.com/oauth/token',
     scope: 'openid profile email offline_access',
@@ -193,9 +199,9 @@ export function getProviderDefinition(
     },
     models: definition.models.map((model) => ({ ...model }))
   };
-  const clientId = read('CLIENT_ID');
-  if (!clientId) return result;
   const defaults = oauthDefaults[definition.id];
+  const clientId = read('CLIENT_ID') ?? defaults?.clientId;
+  if (!clientId) return result;
   const authorizeUrl = read('AUTHORIZE_URL') ?? defaults?.authorizeUrl;
   const tokenUrl = read('TOKEN_URL') ?? defaults?.tokenUrl;
   if (!authorizeUrl || !tokenUrl)
@@ -213,7 +219,8 @@ export function getProviderDefinition(
     scope: read('SCOPE') ?? defaults?.scope ?? '',
     encoding,
     refreshLeadMs,
-    redirectUri: read('REDIRECT_URI'),
+    redirectUri:
+      read('REDIRECT_URI') ?? (clientId === defaults?.clientId ? defaults?.redirectUri : undefined),
     authorizeParams: defaults?.authorizeParams ? { ...defaults.authorizeParams } : undefined,
     includeStateInToken: defaults?.includeStateInToken
   };
