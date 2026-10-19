@@ -352,7 +352,8 @@ the pages it used shown as links under each answer.
 - **Who may ask.** The server picks the excerpts, so only members of a project can ask about it.
   Requests count against the same per-person rate limit as the router and show up in
   Admin → AI router → Usage.
-- **Which model.** A **Model** picker sits in the chat panel's header, under "Ask the docs". It lists
+- **Which model.** A searchable model picker sits in the chat panel's header, under "Ask the docs". It shows
+  friendly names, a loading indicator while fetching, and a retry button if loading fails. It lists
   whatever the router offers: `auto`, your combos, plain model names and `Provider/model`
   entries, so adding a provider or combo under Admin → AI router adds it here too. The default is
   `auto` (the router's usual provider order and fallback). That one choice is used by the chat
@@ -361,8 +362,16 @@ the pages it used shown as links under each answer.
   has to add at least one provider first.
 - **Off in the public demo** (`DEVONE_DEMO_MODE`), like the rest of the router.
 
-Answers are shown as plain text, not rendered Markdown, so a model can never inject HTML into the
-page. A proposed edit is Markdown for the editor, which renders it as it renders anything you type.
+Answers render Markdown through the same HTML sanitizer as the editor's preview, with headings,
+lists, tables and code blocks. Copy or regenerate a reply, or stop it while it is streaming. Scrolling
+up pauses automatic scrolling; the down arrow returns to the latest message. A proposed edit still
+requires **Apply to page**, and **Undo** restores the previous text.
+
+`bun run test:docs:chat-ui` checks model loading/search/retry, exact routing IDs, Markdown,
+copy/regenerate, streamed errors, cancellation, scrolling, edit approval/undo and mobile layout.
+It requires a local Next dev server and Playwright (set `DEVONE_PLAYWRIGHT_PATH` if installed
+outside the project). It creates a temporary preview route and removes it on completion, uses
+fixture AI responses, and does not require a database or provider account.
 
 ### AI in task descriptions
 

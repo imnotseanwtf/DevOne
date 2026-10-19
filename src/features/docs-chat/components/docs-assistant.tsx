@@ -1,7 +1,17 @@
 'use client';
 
-import { DEFAULT_MODEL, MODEL_STORAGE_KEY, parseModelIds, pickModel } from '@/lib/docs-chat/models';
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { chatModelQueryOptions } from '@/features/docs-chat/api/queries';
+import { DEFAULT_MODEL, MODEL_STORAGE_KEY, pickModel } from '@/lib/docs-chat/models';
+import { useQuery } from '@tanstack/react-query';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 
 /** What the assistant can do to the page open in the editor. */
 export interface DocBridge {
@@ -24,6 +34,9 @@ interface AssistantContext {
   setModel(model: string): void;
   /** What the router offers, once loaded; null until then or when it can't be listed. */
   models: string[] | null;
+  modelsLoading: boolean;
+  modelsError: boolean;
+  retryModels(): void;
   /** Fetches the router's models the first time it is called. */
   loadModels(): void;
   hovered: Hovered | null;
@@ -40,7 +53,15 @@ const Context = createContext<AssistantContext | null>(null);
 export function DocsAssistantProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<Hovered | null>(null);
-  const [models, setModels] = useState<string[] | null>(null);
+  const [modelsEnabled, setModelsEnabled] = useState(false);
+  const modelsQuery = useQuery({ ...chatModelQueryOptions, enabled: modelsEnabled });
+  const models = modelsQuery.data ?? null;
+  const modelsLoading = modelsEnabled && modelsQuery.isFetching;
+  const modelsError = modelsQuery.isError;
+  const { refetch } = modelsQuery;
+  const retryModels = useCallback(() => {
+    void refetch();
+  }, [refetch]);
   const [model, setModelState] = useState(() => {
     try {
       return pickModel(window.localStorage.getItem(MODEL_STORAGE_KEY), null);
@@ -48,7 +69,6 @@ export function DocsAssistantProvider({ children }: { children: React.ReactNode 
       return DEFAULT_MODEL;
     }
   });
-  const loading = useRef(false);
   const bridge = useRef<DocBridge | null>(null);
   const register = useCallback((next: DocBridge | null) => {
     bridge.current = next;
@@ -62,22 +82,10 @@ export function DocsAssistantProvider({ children }: { children: React.ReactNode 
       // Private windows can refuse storage; the choice then lasts until reload.
     }
   }, []);
-  const loadModels = useCallback(() => {
-    if (loading.current) return;
-    loading.current = true;
-    fetch('/api/ai/v1/models')
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        const ids = parseModelIds(body);
-        setModels(ids);
-        // A model that was removed since last time falls back to auto.
-        setModelState((current) => pickModel(current, ids));
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        loading.current = false;
-      });
-  }, []);
+  const loadModels = useCallback(() => setModelsEnabled(true), []);
+  useEffect(() => {
+    if (models) setModelState((current) => pickModel(current, models));
+  }, [models]);
   const value = useMemo(
     () => ({
       open,
@@ -87,11 +95,26 @@ export function DocsAssistantProvider({ children }: { children: React.ReactNode 
       model,
       setModel,
       models,
+      modelsLoading,
+      modelsError,
+      retryModels,
       loadModels,
       register,
       getBridge
     }),
-    [open, hovered, model, setModel, models, loadModels, register, getBridge]
+    [
+      open,
+      hovered,
+      model,
+      setModel,
+      models,
+      modelsLoading,
+      modelsError,
+      retryModels,
+      loadModels,
+      register,
+      getBridge
+    ]
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

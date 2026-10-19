@@ -29,6 +29,7 @@
     "test:ai:db": "bun scripts/check-ai-postgres.ts",
     "test:ai:ui": "bun scripts/check-ai-router-ui.cjs",
     "test:ai:chat-ui": "bun scripts/check-ai-connection-chat-ui.cjs",
+    "test:docs:chat-ui": "bun scripts/check-docs-chat-ui.cjs",
     "test:ai:codex-ui": "bun scripts/check-ai-codex-ui.cjs",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",

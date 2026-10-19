@@ -1,6 +1,16 @@
 'use client';
 
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Icons } from '@/components/icons';
+import { Button } from '@/components/ui/button';
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger
+} from '@/components/ui/combobox';
 import { useOptionalDocsAssistant } from '@/features/docs-chat/components/docs-assistant';
 import { DEFAULT_MODEL, modelLabel } from '@/lib/docs-chat/models';
 import { cn } from '@/lib/utils';
@@ -13,25 +23,77 @@ export function ModelSelect({ className }: { className?: string }) {
   useEffect(() => loadModels?.(), [loadModels]);
   if (!assistant) return null;
 
-  const { model, setModel, models } = assistant;
+  const { model, setModel, models, modelsLoading, modelsError, retryModels } = assistant;
   // The list isn't known yet (or the router can't list): offer only what is selected.
   const options = models ?? [...new Set([DEFAULT_MODEL, model])];
 
   return (
-    <label className={cn('flex items-center gap-2 text-xs', className)}>
-      <span className='text-muted-foreground hidden shrink-0 sm:inline'>Model</span>
-      <NativeSelect
+    <div className={cn('min-w-0', className)}>
+      <Combobox
+        items={options}
         value={model}
-        onChange={(event) => setModel(event.target.value)}
-        aria-label='AI model'
-        className='h-8 min-w-0 flex-1 text-xs'
+        onValueChange={(value) => {
+          if (value) setModel(value);
+        }}
+        itemToStringLabel={(id) => modelLabel(id, true)}
       >
-        {options.map((id) => (
-          <NativeSelectOption key={id} value={id}>
-            {modelLabel(id, true)}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-    </label>
+        <ComboboxTrigger
+          render={
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              className='max-w-full justify-start'
+              aria-label='AI model'
+              aria-busy={modelsLoading}
+            />
+          }
+        >
+          {modelsLoading && (
+            <Icons.spinner
+              className='size-3.5 animate-spin motion-reduce:animate-none'
+              aria-hidden='true'
+            />
+          )}
+          <span className='truncate'>
+            {modelsLoading && !models ? 'Loading models…' : modelLabel(model, true)}
+          </span>
+        </ComboboxTrigger>
+        <ComboboxContent className='w-80 max-w-[calc(100vw-2rem)]'>
+          <ComboboxInput
+            placeholder='Search models…'
+            aria-label='Search models'
+            showTrigger={false}
+          />
+          {modelsLoading && (
+            <p
+              role='status'
+              className='text-muted-foreground flex items-center gap-2 px-3 py-2 text-xs'
+            >
+              <Icons.spinner className='size-3.5 animate-spin motion-reduce:animate-none' />
+              Loading models…
+            </p>
+          )}
+          {modelsError && !modelsLoading && (
+            <div role='alert' className='flex items-center justify-between gap-2 px-3 py-2 text-xs'>
+              <span>Could not load models.</span>
+              <Button type='button' variant='outline' size='xs' onClick={retryModels}>
+                Retry
+              </Button>
+            </div>
+          )}
+          <ComboboxEmpty>
+            {!modelsLoading && !modelsError ? 'No models found.' : null}
+          </ComboboxEmpty>
+          <ComboboxList>
+            {(id: string) => (
+              <ComboboxItem key={id} value={id}>
+                {modelLabel(id, true)}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    </div>
   );
 }

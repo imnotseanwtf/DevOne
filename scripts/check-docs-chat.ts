@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { DEFAULT_MODEL, modelLabel, parseModelIds, pickModel } from '../src/lib/docs-chat/models';
+import { readChatStream } from '../src/lib/docs-chat/stream';
 import { cleanBlockAnswer, replaceBlock, splitBlocks } from '../src/lib/docs-chat/blocks';
 import { splitAnswer, summarizeChange } from '../src/lib/docs-chat/proposal';
 import {
@@ -179,4 +180,20 @@ assert.doesNotMatch(taskPrompt, /documentation of the project/);
 const empty = doc('task', 'New task', '');
 assert.ok(containsWholePage(selectContext('write it', [empty, ...docs], { currentDocId: 'task' }), empty));
 
+// Streamed answers may split UTF-8, end without a newline, or fail after partial text.
+const streamBytes = new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello 🌍"}}]}\r\n\r\ndata: {"choices":[{"delta":{"content":"!"}}]}');
+const received: string[] = [];
+await readChatStream(new Response(new ReadableStream({ start(controller) {
+  for (const byte of streamBytes) controller.enqueue(new Uint8Array([byte]));
+  controller.close();
+} })), (text) => received.push(text));
+assert.equal(received.join(''), 'Hello 🌍!');
+let cancelled = false;
+const partial: string[] = [];
+await assert.rejects(readChatStream(new Response(new ReadableStream({ start(controller) {
+  controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Partial"}}]}\n\ndata: {"error":{"message":"Provider interrupted"}}\n\n'));
+}, cancel() { cancelled = true; } })), (text) => partial.push(text)), /Provider interrupted/);
+assert.deepEqual(partial, ['Partial']);
+assert.equal(cancelled, true, 'a failed response releases and cancels the stream');
+await assert.rejects(readChatStream(new Response(null), () => {}), /empty response/);
 console.log('Docs chat checks passed');
