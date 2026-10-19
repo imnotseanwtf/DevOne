@@ -1,8 +1,8 @@
 import { providerUrl, type RouteTarget } from './routing';
 import { translateRequest, ProtocolError, object, type JsonObject } from './translation';
 import type { ProviderCredential, ProviderFormat } from './types';
-import { prepareOpenCodeRequest } from './opencode-free';
 import { getProviderDefinition } from './registry';
+import { openCodeRuntimeCompletion } from './opencode-runtime';
 
 // Matches 9Router's CLAUDE_SYSTEM_PROMPT for its Claude Code OAuth transport.
 const CLAUDE_OAUTH_SYSTEM_PROMPT = "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -49,15 +49,13 @@ export async function executeTarget(
       ? system
       : [{ type: 'text', text: CLAUDE_OAUTH_SYSTEM_PROMPT }, ...system];
   }
-  let openCode: ReturnType<typeof prepareOpenCodeRequest> | undefined;
+  const useOpenCodeRuntime = provider.providerType === 'opencode';
   const codexDefinition = provider.providerType === 'codex' ? getProviderDefinition('codex') : null;
   const codexLite =
     codexDefinition?.models.some((model) => model.id === target.model && model.responsesLite) ??
     false;
   if (provider.providerType === 'opencode') {
     if (format !== 'openai') throw new ProtocolError('OpenCode Free requires the Chat format', 503);
-    openCode = prepareOpenCodeRequest(body, target.connectionId ?? provider.id);
-    body = openCode.body;
   }
   if (provider.providerType === 'codex') {
     if (format !== 'openai-responses')
@@ -162,7 +160,6 @@ export async function executeTarget(
     'content-type': 'application/json',
     accept: body.stream ? 'text/event-stream' : 'application/json'
   });
-  for (const [name, value] of Object.entries(openCode?.headers ?? {})) headers.set(name, value);
   if (format === 'claude' && !headers.has('anthropic-version'))
     headers.set('anthropic-version', '2023-06-01');
   if (
@@ -221,6 +218,7 @@ export async function executeTarget(
   const controller = new AbortController(),
     timeoutMs = options.timeoutMs ?? 60_000;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let runtimeRequest: Promise<Response> | undefined;
   let timer: ReturnType<typeof setTimeout>;
   let timedOut = false,
     closed = false;
@@ -257,14 +255,16 @@ export async function executeTarget(
   startTimer();
   if (options.signal?.aborted) abort();
   try {
+    if (useOpenCodeRuntime) runtimeRequest = openCodeRuntimeCompletion(body, controller.signal);
     const response = await Promise.race([
-      (options.fetchImpl ?? fetch)(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-        redirect: 'error'
-      }),
+      runtimeRequest ??
+        (options.fetchImpl ?? fetch)(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+          redirect: 'error'
+        }),
       aborted
     ]);
     reader = response.body?.getReader();
@@ -278,8 +278,6 @@ export async function executeTarget(
       response,
       format,
       streamed,
-      restore: openCode?.restore,
-      finishRestore: openCode?.finishRestore,
       async read() {
         if (!reader) {
           close();
@@ -303,6 +301,8 @@ export async function executeTarget(
   } catch (error) {
     abort();
     close();
+    // A serverless invocation must not finish while its child is still exiting or removing state.
+    await runtimeRequest?.catch(() => undefined);
     throw error;
   }
 }

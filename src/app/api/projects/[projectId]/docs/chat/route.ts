@@ -14,6 +14,7 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
 
 const bodySchema = z.object({
   messages: z

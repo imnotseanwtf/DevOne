@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
 
 const bodySchema = z.object({
   instruction: z.string().trim().min(1, 'Say what to change').max(1_000),

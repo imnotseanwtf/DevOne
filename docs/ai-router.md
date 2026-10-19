@@ -48,6 +48,36 @@ the model catalog is documented in [OpenCode Zen](https://opencode.ai/docs/zen/)
 
 Old `/admin?tab=ai` and `/account?tab=ai` bookmarks redirect to Router.
 
+### OpenCode runtime on Vercel
+
+The **OpenCode Free** provider always runs the pinned Linux OpenCode executable inside
+the existing Node function. Deploy these changes to enable it; no environment toggle or
+separate server is required. The binary is included through Next's file tracing; keep optional
+dependencies enabled during installation. Do not set `DEVONE_AI_OPENCODE_BIN` on Vercel.
+
+After deployment, open **Router → Providers → OpenCode Free → Test connection** and
+run a quick test with `big-pickle`. This is the live check from Vercel's network.
+Native OpenCode returned a real reply in the local probe, but that does not establish
+access from every hosting network. Upstream restrictions, availability and quotas still apply.
+
+Runtime mode currently supports text chat. It sends the conversation as a JSON transcript
+to a fresh OpenCode session and returns its completed text through the gateway's normal
+JSON/SSE translation. It does not stream individual tokens. Caller tools, tool results,
+images and unsupported generation options return an explicit error. Output limits from
+1 to 8192 tokens are accepted (2048 by default). This mode uses the executable's bundled
+model catalog. Native agent overhead also counts toward the usage recorded by the gateway.
+
+Each process uses a fresh directory under `/tmp`, receives no DevOne credentials, has
+external plugins/config discovery disabled, and is killed on cancellation or after at most
+60 seconds. The CLI retains its native tool declarations, but all tool permission requests
+are automatically rejected by non-interactive `run` without `--auto`. Temporary sessions
+are removed after the process exits. The existing 30-second connection-test deadline also applies.
+
+For local testing on another platform, set `DEVONE_AI_OPENCODE_BIN` to an absolute path to
+a compatible OpenCode executable. `bun run test:ai:runtime:live` sends one fixed prompt through
+the installed executable; it needs network access and consumes free-tier usage. The normal
+test suite uses a local child-process fixture and makes no model requests.
+
 ### Local Codex sign-in
 
 DevOne bundles the public client identity `app_EMoamEEZ73f0CkXaXp7hrann` and loopback callback

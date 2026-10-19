@@ -2,6 +2,7 @@ import { handleChatCompletion } from '@/features/ai-router/request';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
 
 /** An administrator's diagnostic chat is pinned to one account, without fallback. */
 export async function POST(

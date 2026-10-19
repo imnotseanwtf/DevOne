@@ -2,6 +2,7 @@ import { handleChatCompletion } from '@/features/ai-router/request';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120;
 
 /** OpenAI-compatible chat completions, routed across the configured providers with fallback. */
 export function POST(request: Request) {
