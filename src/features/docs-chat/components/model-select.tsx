@@ -28,7 +28,7 @@ export function ModelSelect({ className }: { className?: string }) {
       >
         {options.map((id) => (
           <NativeSelectOption key={id} value={id}>
-            {modelLabel(id)}
+            {modelLabel(id, true)}
           </NativeSelectOption>
         ))}
       </NativeSelect>

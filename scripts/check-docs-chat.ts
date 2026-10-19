@@ -155,6 +155,20 @@ assert.equal(pickModel(null, ['auto']), DEFAULT_MODEL);
 assert.equal(pickModel('saved', null), 'saved', 'kept until the list says otherwise');
 assert.equal(modelLabel('auto'), 'Auto (first available)');
 assert.equal(modelLabel('Beta/shared'), 'Beta/shared');
+assert.equal(modelLabel('claude-sonnet-5-5'), 'Claude Sonnet 5.5');
+assert.equal(modelLabel('cc/claude-sonnet-5-5'), 'Claude Sonnet 5.5');
+assert.equal(modelLabel('Claude/claude-opus-5-5'), 'Claude Opus 5.5');
+assert.equal(modelLabel('claude-3-5-sonnet-20241022'), 'Claude Sonnet 3.5 (20241022)');
+assert.equal(modelLabel('claude-haiku-4-5-20251001'), 'Claude Haiku 4.5 (20251001)');
+assert.equal(modelLabel('cc/claude-sonnet-4-20250514'), 'Claude Sonnet 4 (20250514)');
+assert.equal(modelLabel('an/claude-3-opus-20240229'), 'Claude Opus 3 (20240229)');
+assert.equal(modelLabel('claude-sonnet-5-5', true), 'Claude Sonnet 5.5');
+assert.equal(modelLabel('cc/claude-sonnet-5-5', true), 'Claude Sonnet 5.5 (via Claude Code)');
+assert.equal(modelLabel('Claude/claude-sonnet-5-5', true), 'Claude Sonnet 5.5 (via Claude)');
+assert.equal(modelLabel('custom/claude-sonnet-5-5', true), 'Claude Sonnet 5.5 (via custom)');
+assert.equal(modelLabel('cx/gpt-6.1-sol', true), 'GPT 6.1 Sol (via Codex)');
+assert.equal(modelLabel('gpt-4o-mini'), 'GPT 4o Mini');
+assert.equal(modelLabel('claude-unrecognized'), 'claude-unrecognized');
 
 // A task's description gets task wording, and an empty one can still be written from scratch.
 const taskPrompt = buildChatMessages('Demo', whole, [], { editablePage: 'Fix login', kind: 'task' })[0].content;
