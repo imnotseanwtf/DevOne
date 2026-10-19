@@ -2,6 +2,8 @@ import type { ProviderDefinition, ProviderFormat, ProviderOAuthConfig } from './
 
 export const CODEX_CLIENT_VERSION = '0.159.0';
 export const CLAUDE_DEFAULT_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
+export const CLAUDE_CODE_REDIRECT_URI = 'https://platform.claude.com/oauth/code/callback';
+export const CODEX_DEFAULT_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 
 // Bootstrap catalog; model discovery refreshes the saved list from the account's API.
 const claudeModels: ProviderDefinition['models'] = [
@@ -135,13 +137,14 @@ const definitions: ProviderDefinition[] = [
   }
 ];
 
-// Public client identities and OAuth settings from 9Router's provider registry:
-// https://github.com/decolua/9router/tree/master/open-sse/providers/registry
+// Public native-client identities. Claude's endpoints and manual callback match the installed CLI;
+// hosted Codex follows https://github.com/openai/codex/blob/main/codex-rs/login/src/device_code_auth.rs.
 const oauthDefaults: Record<string, ProviderOAuthConfig> = {
   claude: {
     clientId: CLAUDE_DEFAULT_CLIENT_ID,
-    authorizeUrl: 'https://claude.ai/oauth/authorize',
-    tokenUrl: 'https://api.anthropic.com/v1/oauth/token',
+    redirectUri: CLAUDE_CODE_REDIRECT_URI,
+    authorizeUrl: 'https://claude.com/cai/oauth/authorize',
+    tokenUrl: 'https://platform.claude.com/v1/oauth/token',
     scope: 'org:create_api_key user:profile user:inference',
     encoding: 'json',
     authorizeParams: { code: 'true' },
@@ -149,7 +152,7 @@ const oauthDefaults: Record<string, ProviderOAuthConfig> = {
     refreshLeadMs: 14_400_000
   },
   codex: {
-    clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
+    clientId: CODEX_DEFAULT_CLIENT_ID,
     redirectUri: 'http://localhost:1455/auth/callback',
     authorizeUrl: 'https://auth.openai.com/oauth/authorize',
     tokenUrl: 'https://auth.openai.com/oauth/token',

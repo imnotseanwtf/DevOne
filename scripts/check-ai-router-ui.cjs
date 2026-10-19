@@ -164,19 +164,31 @@ let browser, page, createdFreeProvider;
  assert.equal(await memberPage.getByRole('button',{name:'Add account',exact:true}).count(),0);
  await member.close();
  console.log('PASS mobile widths and member isolation from shared provider/account data');
- if(env.DEVONE_AI_CLAUDE_CLIENT_ID) {
+ const claudeConfig = repo('./src/lib/ai-router/registry.ts').getProviderDefinition('claude', env).oauth;
+ if(claudeConfig) {
    const oauthId=id+'-oauth';
    await db.query('INSERT INTO "AiProvider" (id,name,"providerType",format,"authType","baseUrl",models,enabled,"updatedAt") VALUES ($1,$1,\'claude\',\'claude\',\'oauth\',\'https://api.anthropic.com/v1\',ARRAY[\'claude-sonnet-4-5\'],false,now())',[oauthId]);
-   await ctx.route('https://claude.ai/oauth/authorize**',route=>route.fulfill({status:200,contentType:'text/html',body:'<h1>Controlled consent</h1>'}));
+   await ctx.route(claudeConfig.authorizeUrl+'**',route=>route.fulfill({status:200,contentType:'text/html',body:'<h1>Controlled consent</h1>'}));
    await page.goto(env.DEVONE_APP_URL+'/router?tab=providers&provider='+oauthId,{waitUntil:'networkidle'});
-   await Promise.all([page.waitForURL('https://claude.ai/oauth/authorize**'),page.getByRole('button',{name:'Add account',exact:true}).click()]);
-   const oauthUrl=new URL(page.url());
+   const manual=claudeConfig.clientId==='9d1c250a-e61b-44d9-88ed-5944d1962f5e' && claudeConfig.redirectUri==='https://platform.claude.com/oauth/code/callback';
+   await Promise.all([page.waitForURL(manual?env.DEVONE_APP_URL+'/router/connect**':claudeConfig.authorizeUrl+'**'),page.getByRole('button',{name:'Add account',exact:true}).click()]);
+   let oauthUrl=new URL(page.url());
+   if(manual) {
+     const [consent]=await Promise.all([page.waitForEvent('popup'),page.getByRole('link',{name:'Open sign-in',exact:true}).click()]);
+     await consent.waitForURL(claudeConfig.authorizeUrl+'**');
+     oauthUrl=new URL(consent.url());
+     assert.equal(oauthUrl.searchParams.get('redirect_uri'),claudeConfig.redirectUri);
+     await consent.close();
+     await page.getByLabel('Authorization code').fill('invalid#wrong-state');
+     await page.getByRole('button',{name:'Finish connection',exact:true}).click();
+     await page.getByRole('alert').filter({hasText:'Invalid authorization code or state'}).waitFor();
+   }
    assert.equal(oauthUrl.searchParams.get('code_challenge_method'),'S256');
    const state=oauthUrl.searchParams.get('state');
-   await page.goto((env.DEVONE_AI_CLAUDE_REDIRECT_URI || env.DEVONE_APP_URL+'/api/ai/oauth/'+oauthId+'/callback')+'?error=access_denied&state='+encodeURIComponent(state),{waitUntil:'networkidle'});
+   await page.goto(env.DEVONE_APP_URL+'/api/ai/oauth/'+oauthId+'/callback?error=access_denied&state='+encodeURIComponent(state),{waitUntil:'networkidle'});
    assert.equal(new URL(page.url()).pathname,'/router');
    assert.equal(new URL(page.url()).searchParams.get('aiOAuth'),'error');
-   console.log('PASS Claude Add account goes straight to OAuth; cancellation returns to Router');
+   console.log('PASS Claude Add account uses its registered callback, validates pasted state, and supports cancellation');
  }
  assert.deepEqual(errors,[]);
  console.log('ALL ROUTER BROWSER CHECKS PASSED');

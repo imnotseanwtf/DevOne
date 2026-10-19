@@ -446,6 +446,19 @@ export const en = {
       invalid: 'Check the required fields.'
     },
     oauth: {
+      signIn: 'Sign in to {name}',
+      completionHint: 'Finish sign-in securely, then return to your providers.',
+      deviceHint:
+        'Open sign-in and enter the one-time code below. This page will finish connecting automatically.',
+      codeHint: 'Open sign-in, approve access, then paste the authorization code shown by Claude.',
+      openSignIn: 'Open sign-in',
+      authorizationCode: 'Authorization code',
+      pasteHint: 'Paste the full code (including #state) or the complete callback URL.',
+      enterCode: 'Enter the authorization code',
+      finish: 'Finish connection',
+      waiting: 'Waiting for you to approve sign-in…',
+      deviceSettingsHint:
+        'If prompted, enable device code authorization in your ChatGPT security settings. Only approve a code you started here.',
       connect: 'Connect OAuth account',
       saveConnect: 'Save and connect',
       saveFirst: 'Save this provider, then connect an account through OAuth.',

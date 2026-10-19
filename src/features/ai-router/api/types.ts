@@ -93,3 +93,11 @@ export interface AiGatewayEndpointData {
   endpoint: string;
   models: string[];
 }
+export interface AiOAuthConnection {
+  providerId: string;
+  providerName: string;
+  flow: 'code' | 'device';
+  url: string;
+  userCode?: string;
+  intervalMs?: number;
+}

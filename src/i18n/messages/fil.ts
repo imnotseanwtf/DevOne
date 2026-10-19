@@ -468,6 +468,20 @@ export const fil: MessageShape<typeof en> = {
       invalid: 'Suriin ang mga kinakailangang field.'
     },
     oauth: {
+      signIn: 'Mag-sign in sa {name}',
+      completionHint: 'Tapusin ang pag-sign in nang ligtas, saka bumalik sa mga provider.',
+      deviceHint:
+        'Buksan ang sign-in at ilagay ang minsanang code sa ibaba. Awtomatikong matatapos dito ang koneksyon.',
+      codeHint:
+        'Buksan ang sign-in, aprubahan ang access, saka i-paste ang authorization code na ipinakita ni Claude.',
+      openSignIn: 'Buksan ang sign-in',
+      authorizationCode: 'Authorization code',
+      pasteHint: 'I-paste ang buong code (kasama ang #state) o ang buong callback URL.',
+      enterCode: 'Ilagay ang authorization code',
+      finish: 'Tapusin ang koneksyon',
+      waiting: 'Hinihintay ang iyong pag-apruba sa sign-in…',
+      deviceSettingsHint:
+        'Kung hihilingin, i-enable ang device code authorization sa ChatGPT security settings. Aprubahan lamang ang code na sinimulan mo rito.',
       connect: 'Ikonekta ang OAuth account',
       saveConnect: 'I-save at ikonekta',
       saveFirst: 'I-save ang provider, saka ikonekta ang account gamit ang OAuth.',

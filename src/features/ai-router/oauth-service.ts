@@ -2,11 +2,25 @@ import { createHash } from 'node:crypto';
 import { getPrisma } from '@/lib/db/prisma';
 import { getAppUrl } from '@/lib/auth/oauth';
 import { encryptSecret, decryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
-import { CLAUDE_DEFAULT_CLIENT_ID, getProviderDefinition } from '@/lib/ai-router/registry';
+import {
+  CLAUDE_CODE_REDIRECT_URI,
+  CLAUDE_DEFAULT_CLIENT_ID,
+  CODEX_DEFAULT_CLIENT_ID,
+  getProviderDefinition
+} from '@/lib/ai-router/registry';
+import {
+  requestCodexDeviceCode,
+  pollCodexDeviceCode,
+  type CodexDeviceCode
+} from '@/lib/ai-router/device-auth';
+import type { AiProvider } from '@/generated/prisma/client';
+import type { AiOAuthConnection } from './api/types';
 import {
   generatePkce,
   buildProviderAuthorizeUrl,
-  exchangeProviderCode
+  exchangeProviderCode,
+  parseOAuthCode,
+  type ProviderTokens
 } from '@/lib/ai-router/oauth';
 import {
   assertGatewayUrl,
@@ -75,18 +89,48 @@ export async function startProviderOAuth(userId: string, providerId: string): Pr
   }
   await Promise.all([assertGatewayUrl(config.authorizeUrl), assertGatewayUrl(config.tokenUrl)]);
   const providerCallback = `/api/ai/oauth/${encodeURIComponent(providerId)}/callback`;
-  // 9Router's native Claude flow uses /callback on the running server's port.
-  const callbackPath =
-    provider.providerType === 'claude' && config.clientId === CLAUDE_DEFAULT_CLIENT_ID
-      ? '/callback'
-      : providerCallback;
-  const redirectUri = config.redirectUri ?? `${appUrl}${callbackPath}`;
+  const local =
+    ['localhost', '127.0.0.1'].includes(publicUrl.hostname) && process.env.VERCEL !== '1';
+  if (
+    provider.providerType === 'codex' &&
+    config.clientId === CODEX_DEFAULT_CLIENT_ID &&
+    config.redirectUri !== CODEX_LOOPBACK_URI
+  )
+    throw new AiRouterError(
+      'The bundled Codex client uses its registered callback. Remove DEVONE_AI_CODEX_REDIRECT_URI and connect again.'
+    );
+  const codexDevice =
+    provider.providerType === 'codex' &&
+    config.clientId === CODEX_DEFAULT_CLIENT_ID &&
+    config.redirectUri === CODEX_LOOPBACK_URI &&
+    !local;
+  const device = codexDevice
+    ? await requestCodexDeviceCode(config, gatewayFetch).catch(() => {
+        throw new AiRouterError('Could not start Codex device sign-in. Try again.');
+      })
+    : null;
+  const redirectUri = device?.redirectUri ?? config.redirectUri ?? `${appUrl}${providerCallback}`;
   const redirect = new URL(redirectUri);
+  const claudeCode =
+    provider.providerType === 'claude' &&
+    config.clientId === CLAUDE_DEFAULT_CLIENT_ID &&
+    redirectUri === CLAUDE_CODE_REDIRECT_URI;
+  if (
+    provider.providerType === 'claude' &&
+    config.clientId === CLAUDE_DEFAULT_CLIENT_ID &&
+    !local &&
+    !claudeCode
+  )
+    throw new AiRouterError(
+      'Claude requires its registered code callback. Remove DEVONE_AI_CLAUDE_REDIRECT_URI and connect again.'
+    );
   const codexLoopback = provider.providerType === 'codex' && redirectUri === CODEX_LOOPBACK_URI;
-  if (codexLoopback && !['localhost', '127.0.0.1'].includes(publicUrl.hostname))
-    throw new AiRouterError('Codex loopback sign-in requires DevOne running locally');
+  if (codexLoopback && !local)
+    throw new AiRouterError('Use the built-in Codex client for hosted device sign-in');
   if (
     !codexLoopback &&
+    !claudeCode &&
+    !device &&
     (redirect.origin !== publicUrl.origin ||
       redirect.username ||
       redirect.password ||
@@ -115,12 +159,119 @@ export async function startProviderOAuth(userId: string, providerId: string): Pr
       userId,
       stateHash: stateHash(pkce.state),
       configHash: oauthConfigFingerprint(provider.providerType, config),
-      encryptedCodeVerifier: encryptSecret(pkce.codeVerifier, getEncryptionKey()),
+      // Device sessions keep their polling credential encrypted in the existing grant slot.
+      encryptedCodeVerifier: encryptSecret(
+        device ? JSON.stringify(device) : pkce.codeVerifier,
+        getEncryptionKey()
+      ),
       redirectUri,
-      expiresAt: new Date(now.getTime() + 10 * 60_000)
+      expiresAt: new Date(now.getTime() + (device ? 15 : 10) * 60_000)
     }
   });
-  return buildProviderAuthorizeUrl(config, redirectUri, pkce.state, pkce.codeChallenge);
+  return device || claudeCode
+    ? `${appUrl}/router/connect?state=${encodeURIComponent(pkce.state)}`
+    : buildProviderAuthorizeUrl(config, redirectUri, pkce.state, pkce.codeChallenge);
+}
+
+async function pendingOAuth(userId: string, state: string) {
+  await requireAiAdmin(userId);
+  if (typeof state !== 'string' || !state || state.length > 256)
+    throw new AiRouterError('Invalid connection link');
+  const session = await getPrisma().aiOAuthSession.findUnique({
+    where: { stateHash: stateHash(state) }
+  });
+  if (!session || !validOAuthSession(session, session.providerId, userId, stateHash(state)))
+    throw new AiRouterError('That connection link expired. Try again.');
+  const provider = await getPrisma().aiProvider.findUnique({ where: { id: session.providerId } });
+  const config = provider ? getProviderDefinition(provider.providerType)?.oauth : undefined;
+  if (
+    !provider ||
+    !config ||
+    session.configHash !== oauthConfigFingerprint(provider.providerType, config)
+  )
+    throw new AiRouterError('Provider configuration changed. Connect again.');
+  const device =
+    provider.providerType === 'codex' &&
+    config.clientId === CODEX_DEFAULT_CLIENT_ID &&
+    session.redirectUri === `${new URL(config.authorizeUrl).origin}/deviceauth/callback`;
+  const code =
+    provider.providerType === 'claude' &&
+    config.clientId === CLAUDE_DEFAULT_CLIENT_ID &&
+    session.redirectUri === CLAUDE_CODE_REDIRECT_URI;
+  if (!device && !code) throw new AiRouterError('Finish this connection through its callback');
+  return { session, provider, config, device };
+}
+
+export async function getPendingOAuthConnection(
+  userId: string,
+  state: string
+): Promise<AiOAuthConnection> {
+  const { session, provider, config, device } = await pendingOAuth(userId, state);
+  const verifier = decryptSecret(session.encryptedCodeVerifier, getEncryptionKey());
+  const details = { providerId: provider.id, providerName: provider.name };
+  if (device) {
+    const data = JSON.parse(verifier) as CodexDeviceCode;
+    return {
+      ...details,
+      flow: 'device',
+      url: data.verificationUrl,
+      userCode: data.userCode,
+      intervalMs: data.intervalMs
+    };
+  }
+  return {
+    ...details,
+    flow: 'code',
+    url: buildProviderAuthorizeUrl(
+      config,
+      session.redirectUri,
+      state,
+      createHash('sha256').update(verifier).digest('base64url')
+    )
+  };
+}
+
+export async function completeHostedOAuth(
+  userId: string,
+  state: string,
+  input = ''
+): Promise<boolean> {
+  const { session, provider, config, device } = await pendingOAuth(userId, state);
+  if (!device) {
+    let code: string;
+    try {
+      code = parseOAuthCode(input, session.redirectUri, state);
+    } catch {
+      throw new AiRouterError(
+        'Invalid authorization code or state. Copy the full code and try again.'
+      );
+    }
+    await finishProviderOAuth(userId, provider.id, state, code);
+    return true;
+  }
+  const data = JSON.parse(
+    decryptSecret(session.encryptedCodeVerifier, getEncryptionKey())
+  ) as CodexDeviceCode;
+  const grant = await pollCodexDeviceCode(config, data, gatewayFetch).catch(() => {
+    throw new AiRouterError(
+      'Could not complete Codex device sign-in. Start a new connection and try again.'
+    );
+  });
+  if (!grant) return false;
+  const claimed = await getPrisma().aiOAuthSession.deleteMany({
+    where: { id: session.id, userId, providerId: provider.id, expiresAt: { gt: new Date() } }
+  });
+  if (claimed.count !== 1)
+    throw new AiRouterError('That connection link expired or was already used');
+  const tokens = await exchangeProviderCode(
+    config,
+    grant.code,
+    session.redirectUri,
+    grant.verifier,
+    gatewayFetch
+  );
+  await saveOAuthConnection(userId, provider, session.configHash, tokens);
+  return true;
 }
 
 export async function finishProviderOAuth(
@@ -143,6 +294,8 @@ export async function finishProviderOAuth(
   if (!provider || !config) throw new AiRouterError('OAuth is not configured for this provider');
   if (session.configHash !== oauthConfigFingerprint(provider.providerType, config))
     throw new AiRouterError('Provider configuration changed. Connect again.');
+  if (provider.providerType === 'codex' && session.redirectUri.endsWith('/deviceauth/callback'))
+    throw new AiRouterError('Finish this connection using device sign-in');
   // Conditional deletion claims the authorization exactly once across concurrent callbacks.
   const claimed = await prisma.aiOAuthSession.deleteMany({
     where: { id: session.id, userId, providerId, expiresAt: { gt: new Date() } }
@@ -156,8 +309,17 @@ export async function finishProviderOAuth(
     gatewayFetch,
     state
   );
+  await saveOAuthConnection(userId, provider, session.configHash, tokens);
+}
+
+async function saveOAuthConnection(
+  userId: string,
+  provider: AiProvider,
+  configHash: string,
+  tokens: ProviderTokens
+): Promise<void> {
   const metadata: Record<string, string> = {
-    oauthConfigHash: session.configHash,
+    oauthConfigHash: configHash,
     upstreamBaseUrl: provider.baseUrl
   };
   if (tokens.idToken) {
@@ -178,19 +340,20 @@ export async function finishProviderOAuth(
       /* Missing ID-token metadata does not invalidate a granted access token. */
     }
   }
-  const currentProvider = await prisma.aiProvider.findUnique({ where: { id: providerId } });
+  const prisma = getPrisma();
+  const currentProvider = await prisma.aiProvider.findUnique({ where: { id: provider.id } });
   const currentConfig = currentProvider
     ? getProviderDefinition(currentProvider.providerType)?.oauth
     : undefined;
   if (
     !currentProvider ||
     !currentConfig ||
-    session.configHash !== oauthConfigFingerprint(currentProvider.providerType, currentConfig)
+    configHash !== oauthConfigFingerprint(currentProvider.providerType, currentConfig)
   )
     throw new AiRouterError('Provider configuration changed. Connect again.');
   await prisma.aiConnection.create({
     data: {
-      providerId,
+      providerId: provider.id,
       name: metadata.email ?? `${provider.name} account`,
       authType: 'oauth',
       encryptedAccessToken: encrypt(tokens.accessToken),

@@ -21,8 +21,9 @@ the model catalog is documented in [OpenCode Zen](https://opencode.ai/docs/zen/)
 
 1. For Claude OAuth, choose **Providers → Claude**, then **Add account** if the provider already
    exists. An unconfigured Claude card starts sign-in immediately and creates its provider.
-   Approve access on the provider's page; the callback saves an encrypted account and returns
-   to Router. Claude and Codex include 9Router's public OAuth client defaults; no provider
+   Open sign-in, approve access on the provider's page and paste Claude's displayed authorization
+   code into DevOne. The grant is exchanged and encrypted before returning to Router.
+   Claude and Codex include their public native-client identities; no provider
    client ID or redirect environment variables are required for built-in sign-in.
 2. For API providers, choose a provider card to start from its preset. For custom endpoints,
    choose **Add OpenAI Compatible** or **Add Anthropic Compatible**. Choose authentication,
@@ -77,6 +78,36 @@ For local testing on another platform, set `DEVONE_AI_OPENCODE_BIN` to an absolu
 a compatible OpenCode executable. `bun run test:ai:runtime:live` sends one fixed prompt through
 the installed executable; it needs network access and consumes free-tier usage. The normal
 test suite uses a local child-process fixture and makes no model requests.
+
+### Hosted OAuth callbacks
+
+Set `DEVONE_APP_URL` to your public origin, for example `https://dev-one.bantaybenta.store`.
+The bundled native clients cannot register arbitrary deployment domains as OAuth redirects.
+Leave `DEVONE_AI_CLAUDE_REDIRECT_URI` and `DEVONE_AI_CODEX_REDIRECT_URI` unset for built-in sign-in.
+
+- **Claude:** DevOne opens the native client's registered code page at
+  `https://platform.claude.com/oauth/code/callback`. Paste the complete authorization code
+  (including `#state`, when present) or the full callback URL into the DevOne completion page.
+  The original encrypted PKCE verifier, administrator and state are checked before exchange.
+- **Codex on Vercel or another hosted origin:** DevOne uses the
+  [official Codex device-code flow](https://github.com/openai/codex/blob/main/codex-rs/login/src/device_code_auth.rs).
+  Open sign-in and enter the displayed one-time code. Enable device-code authorization in
+  ChatGPT security settings if prompted. DevOne polls for approval and stores the resulting
+  account without binding a localhost port. The polling credential stays encrypted on the server.
+- **Separately registered/custom clients:** register the exact configured redirect with the
+  provider. Without an override, this is `<DEVONE_APP_URL>/api/ai/oauth/<saved-provider-id>/callback`.
+  An explicit same-origin `/callback` is also supported and resolves the provider from saved state.
+
+GitHub/GitLab application login uses your own OAuth applications. Register these exact URLs in
+their application settings (substitute your domain):
+
+| Provider | Registered callback |
+| --- | --- |
+| GitHub | `https://dev-one.bantaybenta.store/api/auth/github/callback` |
+| GitLab | `https://dev-one.bantaybenta.store/api/auth/gitlab/callback` |
+
+The provider's allow-list must match; adding a route in DevOne does not change that registration.
+After deploying callback changes, start a new sign-in instead of reusing an old authorization URL.
 
 ### Local Codex sign-in
 

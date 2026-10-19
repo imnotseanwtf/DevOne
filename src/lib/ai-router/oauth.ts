@@ -30,6 +30,38 @@ export function generatePkce(): { state: string; codeVerifier: string; codeChall
   };
 }
 
+/** Pasted grants stay bound to the original redirect and this administrator's PKCE state. */
+export function parseOAuthCode(input: string, redirectUri: string, state: string): string {
+  input = input.trim();
+  if (!input || input.length > 10000) throw new Error('Invalid authorization code');
+  if (input.includes('://')) {
+    const url = new URL(input);
+    const expected = new URL(redirectUri);
+    if (
+      url.origin !== expected.origin ||
+      url.pathname !== expected.pathname ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      url.searchParams.getAll('code').length !== 1 ||
+      url.searchParams.getAll('state').length !== 1 ||
+      url.searchParams.get('state') !== state ||
+      url.searchParams.has('error')
+    )
+      throw new Error('Invalid callback URL or state');
+    input = url.searchParams.get('code') ?? '';
+  }
+  const [code, returnedState, extra] = input.split('#');
+  if (
+    !code ||
+    /\s/.test(code) ||
+    (returnedState !== undefined && returnedState !== state) ||
+    extra !== undefined
+  )
+    throw new Error('Invalid authorization code or state');
+  return code;
+}
+
 function oauthUrl(value: string): URL {
   let url: URL;
   try {

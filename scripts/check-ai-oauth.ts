@@ -56,8 +56,9 @@ assert.deepEqual(registry.getProviderDefinition('custom', {})?.authTypes, [
 const nativeClaude = registry.getProviderDefinition('claude', {})!.oauth!;
 const nativeCodex = registry.getProviderDefinition('codex', {})!.oauth!;
 assert.equal(nativeClaude?.clientId, '9d1c250a-e61b-44d9-88ed-5944d1962f5e');
-assert.equal(nativeClaude.authorizeUrl, 'https://claude.ai/oauth/authorize');
-assert.equal(nativeClaude.tokenUrl, 'https://api.anthropic.com/v1/oauth/token');
+assert.equal(nativeClaude.authorizeUrl, 'https://claude.com/cai/oauth/authorize');
+assert.equal(nativeClaude.tokenUrl, 'https://platform.claude.com/v1/oauth/token');
+assert.equal(nativeClaude.redirectUri, 'https://platform.claude.com/oauth/code/callback');
 assert.equal(nativeCodex?.clientId, 'app_EMoamEEZ73f0CkXaXp7hrann');
 assert.equal(nativeCodex.redirectUri, 'http://localhost:1455/auth/callback');
 assert.equal(registry.getProviderDefinition('custom', {})?.oauth, undefined);
