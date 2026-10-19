@@ -129,8 +129,10 @@ account access; a preset/model-list entry alone does not.
 
 Each provider account has **Test connection**. Choose one of its allowed models, run **Quick test**
 or send a message in the test chat. The dialog shows the reply, upstream errors and elapsed time.
-Its layout adapts the starter's [AI Chat design](https://github.com/Kiranism/next-shadcn-dashboard-starter/blob/main/src/features/ai-chat/components/ai-chat-demo.tsx):
-assistant header, status badge, avatars, anchored messages, thinking indicator and bottom composer.
+The searchable picker shows friendly model names and indicates router catalog refreshes. Replies
+render sanitized Markdown with copy and regenerate actions. Enter sends, Shift + Enter adds a line,
+and **Stop response** cancels a pending request. Quick tests preserve drafts; a new draft typed
+while waiting also survives the reply. Regeneration replaces the last answer without repeating its question.
 Tests use the exact selected account with its normal credential refresh and usage tracking;
 enable the provider/account and clear any cooldown first. Closing the dialog cancels the request.
 Chat stays in the browser for the open dialog. Tests have a 30-second deadline and a 512-token
@@ -151,6 +153,11 @@ answer text or forwarded to other protocols.
 follow-up history, long replies, errors, cancellation, mobile layout and member authorization.
 It uses temporary database records and a local upstream on `127.0.0.1:18081`; that host must be
 in `DEVONE_AI_ALLOWED_HOSTS`. Set `DEVONE_PLAYWRIGHT_PATH` when Playwright is outside the repository.
+
+`bun run test:ai:chat-preview` checks the dialog in isolation, including model search/loading,
+restrictions, exact account/model IDs, Markdown, copy/regenerate, cancellation/retry, draft preservation,
+model switches and mobile layout. It needs a local Next dev server and Playwright, creates and removes
+a temporary preview route, and uses fixture responses without a database or live provider accounts.
 
 Gateway keys authenticate clients to DevOne. Provider credentials authenticate DevOne to the
 upstream; these are separate. A signed-in browser on the same site can use its DevOne session.

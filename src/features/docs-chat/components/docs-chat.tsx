@@ -18,7 +18,7 @@ import { readChatStream } from '@/lib/docs-chat/stream';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { CopyResponse } from '@/features/ai-router/components/copy-response';
 
 interface Source {
   slug: string;
@@ -57,29 +57,6 @@ const TASK_SUGGESTIONS = [
   'Add acceptance criteria',
   'Make this clearer and shorter'
 ];
-
-function CopyResponse({ content }: { content: string }) {
-  const [copied, setCopied] = useState('');
-  return (
-    <Button
-      type='button'
-      variant='ghost'
-      size='icon-xs'
-      aria-label={copied === content ? 'Response copied' : 'Copy response'}
-      title={copied === content ? 'Copied' : 'Copy response'}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(content);
-          setCopied(content);
-        } catch {
-          toast.error('Could not copy the response.');
-        }
-      }}
-    >
-      {copied === content ? <Icons.check /> : <Icons.copy />}
-    </Button>
-  );
-}
 
 async function readError(response: Response): Promise<string> {
   const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;

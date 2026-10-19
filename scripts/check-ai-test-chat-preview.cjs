@@ -1,0 +1,120 @@
+// Isolated UI checks: a local Next dev server, temporary route, no database or provider calls.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const http = require('node:http');
+const { chromium } = require(process.env.DEVONE_PLAYWRIGHT_PATH || 'playwright');
+const env = { ...require('dotenv').parse(fs.readFileSync('.env')), ...process.env };
+assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(new URL(env.DEVONE_APP_URL).hostname));
+const fixturePath = 'src/app/devone-router-chat-fixture';
+assert.ok(!fs.existsSync(fixturePath), 'Preview route must not already exist');
+const provider = { id: 'preview-provider', name: 'Claude', providerType: 'claude', alias: 'cc', format: 'claude', authType: 'oauth', baseUrl: 'https://example.com/v1', models: ['claude-sonnet-5-5', 'claude-opus-5-5', 'custom-model'], priority: 0, enabled: true, cooldownUntil: null, lastError: null, hasApiKey: false, oauthConfigured: true };
+const connection = { id: 'preview-account-b', providerId: provider.id, name: 'Test account B', authType: 'oauth', priority: 10, isActive: true, allowedModels: ['claude-sonnet-5-5', 'custom-model'], expiresAt: null, rateLimitedUntil: null, lastError: null, hasApiKey: false, hasAccessToken: true, hasRefreshToken: true };
+let browser, page, createdFixture = false, releaseModels, slowAborted = false;
+const requests = [];
+const accountIds = [];
+const upstream = http.createServer(async (req, res) => {
+  let raw = ''; for await (const bytes of req) raw += bytes;
+  const body = JSON.parse(raw); requests.push(body);
+  const question = body.messages.at(-1).content;
+  if (question === 'close' || (question === 'slow' && requests.filter(value => value.messages.at(-1).content === 'slow').length === 1)) {
+    slowAborted = false; res.writeHead(200, { 'content-type': 'application/json' }); res.flushHeaders();
+    res.on('close', () => { slowAborted = true; }); return;
+  }
+  if (question === 'force failure') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'Fixture account rejected' } })); return; }
+  res.writeHead(200, { 'content-type': 'application/json', 'x-devone-model': body.model });
+  const content = question === 'long reply' ? 'x'.repeat(8001) : '## Connected\n\nReply from **test account B**.\n\n- Exact account\n- No fallback\n\n```sh\nbun run dev\n```\n<script>window.__unsafe = true</script>';
+  res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+});
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function until(check, label) { for (let i = 0; i < 80; i++) { if (await check()) return; await pause(100); } throw new Error(label); }
+const modelGate = new Promise(resolve => releaseModels = resolve);
+(async () => {
+  await new Promise((resolve, reject) => { upstream.once('error', reject); upstream.listen(18083, '127.0.0.1', resolve); });
+  fs.mkdirSync(fixturePath); createdFixture = true;
+  fs.writeFileSync(fixturePath + '/page.tsx', `
+'use client';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ConnectionTestDialog } from '@/features/ai-router/components/connection-test-dialog';
+const initialProvider = ${JSON.stringify(provider)};
+const connection = ${JSON.stringify(connection)};
+export default function Page() {
+  const [open, setOpen] = useState(false);
+  const [ready, setReady] = useState(false);
+  const client = useQueryClient();
+  useEffect(() => setReady(true), []);
+  const query = useQuery({ queryKey: ['ai-gateway', 'admin', 'fixture'], queryFn: async () => { const response = await fetch('/fixture-admin'); return await response.json() as typeof initialProvider; }, initialData: initialProvider, staleTime: 0, refetchOnWindowFocus: false });
+  return <main data-ready={ready} className='p-6'><button type='button' onClick={() => setOpen(true)}>Open test</button><button type='button' onClick={() => client.setQueryData(['ai-gateway', 'admin', 'fixture'], { ...initialProvider, models: [] })}>Remove fixture models</button>{open && <ConnectionTestDialog provider={query.data} connection={connection} onClose={() => setOpen(false)} />}</main>;
+}
+`);
+  browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, permissions: ['clipboard-read', 'clipboard-write'] });
+  page = await context.newPage(); page.setDefaultTimeout(10000);
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/fixture-admin', async route => { await modelGate; await route.fulfill({ json: provider }).catch(() => {}); });
+  await page.route('**/api/ai/connections/*/test', async route => { accountIds.push(new URL(route.request().url()).pathname.split('/').at(-2)); await route.continue({ url: 'http://127.0.0.1:18083/test' }); });
+  await page.goto(env.DEVONE_APP_URL + '/devone-router-chat-fixture', { waitUntil: 'domcontentloaded' });
+  await page.locator('main[data-ready="true"]').waitFor();
+  await page.getByRole('button', { name: 'Open test', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const picker = dialog.getByLabel('Model', { exact: true });
+  await until(async () => await picker.getAttribute('aria-busy') === 'true', 'model refresh is not shown as loading');
+  await picker.click();
+  const search = page.getByRole('combobox', { name: 'Search models', exact: true });
+  await search.waitFor();
+  await page.getByRole('status').filter({ hasText: 'Loading models…' }).waitFor();
+  releaseModels();
+  await until(async () => await picker.getAttribute('aria-busy') === 'false', 'model refresh did not finish');
+  await search.fill('opus'); await page.getByText('No models found.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('option', { name: 'Claude Opus 5.5', exact: true }).count(), 0, 'restricted models must not be offered');
+  await search.fill('sonnet 5.5'); await page.getByRole('option', { name: 'Claude Sonnet 5.5', exact: true }).click(); await search.waitFor({ state: 'hidden' });
+  const composer = dialog.getByRole('textbox', { name: /^Message/ });
+  const log = dialog.getByRole('log');
+  await composer.fill('force failure'); await composer.press('Enter'); await dialog.getByRole('alert').filter({ hasText: 'Fixture account rejected' }).waitFor();
+  assert.equal(await dialog.getByRole('button', { name: 'Clear chat', exact: true }).isEnabled(), true, 'a failed first turn must be clearable');
+  await dialog.getByRole('button', { name: 'Clear chat', exact: true }).click(); assert.equal(await log.locator('[data-slot="bubble-content"]').count(), 0);
+  requests.length = 0;
+  await composer.fill('Unsent draft'); await dialog.getByRole('button', { name: 'Quick test', exact: true }).click();
+  await log.getByRole('heading', { name: 'Connected', exact: true }).waitFor();
+  assert.equal(await composer.inputValue(), 'Unsent draft', 'quick test must preserve drafts');
+  assert.equal(requests[0].model, 'claude-sonnet-5-5');
+  assert.equal(await log.locator('strong').innerText(), 'test account B');
+  assert.equal(await page.evaluate(() => window.__unsafe), undefined, 'Markdown must be sanitized');
+  await log.getByRole('button', { name: 'Copy response', exact: true }).click(); assert.match(await page.evaluate(() => navigator.clipboard.readText()), /## Connected/);
+  await composer.fill('Follow up'); await composer.press('Shift+Enter'); assert.equal(await composer.inputValue(), 'Follow up\n'); await composer.press('Enter');
+  await until(async () => await log.locator('[data-slot="bubble-content"]').count() === 4, 'follow-up did not complete');
+  assert.equal(requests.at(-1).messages.length, 3);
+  await log.getByRole('button', { name: 'Regenerate', exact: true }).click();
+  await until(() => requests.length === 3, 'regeneration did not send');
+  await until(async () => await log.locator('[data-slot="bubble-content"]').count() === 4, 'regeneration did not replace the last answer');
+  assert.equal(requests.at(-1).messages.length, 3, 'regeneration must not duplicate the last question');
+  assert.equal(requests.at(-1).messages.at(-1).content, 'Follow up');
+  await page.screenshot({ path: '/tmp/devone-router-chat-preview-desktop.png', fullPage: true });
+  await dialog.getByRole('button', { name: 'Clear chat', exact: true }).click();
+  await composer.fill('long reply'); await composer.press('Enter'); await dialog.getByText('Reply shortened to 8000 characters for this test.', { exact: true }).waitFor();
+  await composer.fill('After long reply'); await composer.press('Enter'); await until(async () => await log.locator('[data-slot="bubble-content"]').count() === 4, 'long reply follow-up did not complete');
+  assert.equal(requests.at(-1).messages[1].content.length, 8000);
+  await composer.fill('slow'); await composer.press('Enter'); await log.getByRole('status').filter({ hasText: 'Thinking…' }).waitFor();
+  await composer.fill('Draft written while thinking'); await dialog.getByRole('button', { name: 'Stop response', exact: true }).click();
+  await until(() => slowAborted, 'Stop must cancel the HTTP request'); await dialog.getByText('Response stopped', { exact: true }).last().waitFor();
+  await dialog.getByRole('button', { name: 'Retry', exact: true }).click(); await until(async () => await log.locator('[data-slot="bubble-content"]').count() === 6, 'retry did not complete');
+  assert.equal(await composer.inputValue(), 'Draft written while thinking', 'completion must preserve a new draft');
+  const beforeFailure = requests.length;
+  await composer.fill('force failure'); await composer.press('Enter'); await dialog.getByRole('alert').filter({ hasText: 'Fixture account rejected' }).waitFor();
+  assert.equal(requests.length, beforeFailure + 1, 'failed tests must not automatically retry or fall back');
+  await page.setViewportSize({ width: 390, height: 844 }); await page.emulateMedia({ colorScheme: 'dark' });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.screenshot({ path: '/tmp/devone-router-chat-preview-mobile.png', fullPage: true });
+  await dialog.getByRole('button', { name: 'Clear chat', exact: true }).click(); await picker.click(); await search.fill('custom'); await page.getByRole('option', { name: 'custom-model', exact: true }).click(); await search.waitFor({ state: 'hidden' });
+  await composer.fill('Different model'); await composer.press('Enter'); await log.getByRole('heading', { name: 'Connected', exact: true }).waitFor();
+  assert.equal(requests.at(-1).model, 'custom-model'); assert.equal(requests.at(-1).messages.length, 1, 'model switch must start fresh history');
+  await composer.fill('close'); await composer.press('Enter'); await log.getByRole('status').filter({ hasText: 'Thinking…' }).waitFor(); await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await until(() => slowAborted, 'closing must cancel the request');
+  await page.getByRole('button', { name: 'Remove fixture models', exact: true }).click(); await page.getByRole('button', { name: 'Open test', exact: true }).click();
+  await dialog.getByRole('alert').filter({ hasText: 'Add provider models' }).waitFor(); assert.equal(await composer.isDisabled(), true);
+  assert.ok(accountIds.every(value => value === connection.id), 'all sends, retries and regenerations must use the selected account');
+  assert.deepEqual(errors, []);
+  console.log('Router chat preview checks passed: model loading/search/restrictions, exact IDs/account, Markdown/copy, follow-ups/regenerate, draft preservation, stop/retry/close, model switches and mobile layout');
+})().catch(async error => { console.error(error); if (page) await page.screenshot({ path: '/tmp/devone-router-chat-preview-failure.png', fullPage: true }).catch(() => {}); process.exitCode = 1; }).finally(async () => {
+  releaseModels(); if (browser) await browser.close(); upstream.closeAllConnections(); await new Promise(resolve => upstream.close(resolve));
+  if (createdFixture) fs.rmSync(fixturePath, { recursive: true });
+});
