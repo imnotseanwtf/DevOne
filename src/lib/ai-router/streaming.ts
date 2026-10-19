@@ -232,6 +232,19 @@ export class ChatStreamTranslator {
             })
           ];
         }
+        if (block.type === 'thinking') {
+          if (
+            typeof block.thinking !== 'string' ||
+            (block.signature !== undefined && typeof block.signature !== 'string')
+          )
+            throw new ProtocolError('Invalid thinking block', 502);
+          return block.thinking ? [this.chunk({ reasoning_content: block.thinking })] : [];
+        }
+        if (block.type === 'redacted_thinking') {
+          if (typeof block.data !== 'string')
+            throw new ProtocolError('Invalid redacted thinking block', 502);
+          return [];
+        }
         if (block.type !== 'text')
           throw new ProtocolError(`Unsupported streamed content: ${String(block.type)}`, 502);
         return block.text ? [this.chunk({ content: block.text })] : [];
@@ -239,6 +252,16 @@ export class ChatStreamTranslator {
       if (type === 'content_block_delta') {
         const delta = object(body.delta);
         if (delta.type === 'text_delta') return [this.chunk({ content: delta.text })];
+        if (delta.type === 'thinking_delta') {
+          if (typeof delta.thinking !== 'string')
+            throw new ProtocolError('Invalid thinking delta', 502);
+          return [this.chunk({ reasoning_content: delta.thinking })];
+        }
+        if (delta.type === 'signature_delta') {
+          if (typeof delta.signature !== 'string')
+            throw new ProtocolError('Invalid thinking signature delta', 502);
+          return [];
+        }
         if (delta.type === 'input_json_delta') {
           const tool = this.tools.get(Number(body.index));
           if (!tool) throw new ProtocolError('Tool delta without tool start', 502);
@@ -391,8 +414,96 @@ export function hasOutput(value: JsonObject | 'DONE'): boolean {
   return value.choices.some((raw) => {
     const choice = object(raw),
       delta = choice.delta ? object(choice.delta) : {};
-    return Boolean(delta.content || delta.refusal || delta.tool_calls || choice.finish_reason);
+    return Boolean(
+      delta.content ||
+      delta.reasoning_content ||
+      delta.refusal ||
+      delta.tool_calls ||
+      choice.finish_reason
+    );
   });
+}
+
+/** Buffer native Claude SSE without losing signed thinking, redacted data or block order. */
+export class ClaudeAccumulator {
+  private message: JsonObject | undefined;
+  private blocks = new Map<number, JsonObject>();
+  private inputs = new Map<number, string>();
+  private size = 0;
+
+  accept(chunk: JsonObject): void {
+    try {
+      this.append(chunk);
+    } catch (error) {
+      if (error instanceof SyntaxError || (error instanceof ProtocolError && error.status === 400))
+        throw new ProtocolError('Malformed upstream Claude stream', 502);
+      throw error;
+    }
+  }
+
+  private append(chunk: JsonObject): void {
+    const frame = chunk.$native as SseEvent;
+    this.size += frame.data.length;
+    if (this.size > 16 * 1024 * 1024) throw new ProtocolError('Upstream answer too large', 502);
+    const body = object(JSON.parse(frame.data));
+    const type = body.type ?? frame.event;
+    if (type === 'message_start') {
+      this.message = structuredClone(object(body.message));
+    } else if (type === 'content_block_start') {
+      const index = Number(body.index);
+      if (!Number.isSafeInteger(index) || index < 0 || this.blocks.has(index))
+        throw new ProtocolError('Invalid Claude content block index', 502);
+      this.blocks.set(index, structuredClone(object(body.content_block)));
+    } else if (type === 'content_block_delta') {
+      const index = Number(body.index),
+        block = this.blocks.get(index),
+        delta = object(body.delta);
+      if (!block) throw new ProtocolError('Content delta without block start', 502);
+      const field =
+        delta.type === 'text_delta'
+          ? 'text'
+          : delta.type === 'thinking_delta'
+            ? 'thinking'
+            : delta.type === 'signature_delta'
+              ? 'signature'
+              : null;
+      if (field && typeof delta[field] === 'string')
+        block[field] = String(block[field] ?? '') + delta[field];
+      else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string')
+        this.inputs.set(index, (this.inputs.get(index) ?? '') + delta.partial_json);
+      else if (delta.type === 'citations_delta' && delta.citation)
+        block.citations = [
+          ...(Array.isArray(block.citations) ? block.citations : []),
+          delta.citation
+        ];
+      else throw new ProtocolError('Unsupported Claude content delta', 502);
+    } else if (type === 'message_delta') {
+      if (!this.message) throw new ProtocolError('Claude stream missing message start', 502);
+      this.message = {
+        ...this.message,
+        ...object(body.delta),
+        usage: { ...object(this.message.usage ?? {}), ...object(body.usage ?? {}) }
+      };
+    }
+  }
+
+  answer(): JsonObject {
+    if (!this.message) throw new ProtocolError('Claude stream missing message start', 502);
+    const content = [...this.blocks]
+      .toSorted(([left], [right]) => left - right)
+      .map(([index, block]) => {
+        const input = this.inputs.get(index);
+        if (input !== undefined) {
+          try {
+            block.input = object(JSON.parse(input));
+          } catch {
+            throw new ProtocolError('Invalid Claude tool input', 502);
+          }
+        }
+        return block;
+      });
+    return { ...this.message, content };
+  }
 }
 /** Builds a JSON completion when a provider requires streaming for a nonstream client. */
 export class ChatAccumulator {

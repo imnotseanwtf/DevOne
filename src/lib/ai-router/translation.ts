@@ -494,12 +494,17 @@ function responseToChat(body: JsonObject, source: ProviderFormat): JsonObject {
       const part = object(raw);
       if (part.type === 'text') {
         keys(part, ['type', 'text', 'citations']);
-        if (
-          part.citations !== undefined &&
-          (!Array.isArray(part.citations) || part.citations.length)
-        )
+        if (part.citations != null && (!Array.isArray(part.citations) || part.citations.length))
           throw new ProtocolError('Unsupported response citations', 502);
         text += string(part.text, 'text');
+      } else if (part.type === 'thinking') {
+        keys(part, ['type', 'thinking', 'signature']);
+        reasoning += string(part.thinking, 'thinking text');
+        if (part.signature !== undefined) string(part.signature, 'thinking signature');
+      } else if (part.type === 'redacted_thinking') {
+        keys(part, ['type', 'data']);
+        string(part.data, 'redacted thinking data');
+        // Opaque redacted data has no Chat equivalent; native Claude relay retains it.
       } else if (part.type === 'tool_use')
         calls.push({
           id: part.id,

@@ -13,6 +13,7 @@ import {
   ChatStreamTranslator,
   ClientStreamTranslator,
   ChatAccumulator,
+  ClaudeAccumulator,
   upstreamError,
   hasOutput
 } from './streaming';
@@ -223,7 +224,9 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
         });
       }
       const nativePassthrough =
-        options.body.stream === true && execution.format === source && source !== 'openai';
+        (options.body.stream === true || source === 'claude') &&
+        execution.format === source &&
+        source !== 'openai';
       const iterator = new SseReader(execution).events()[Symbol.asyncIterator](),
         normalizer = new ChatStreamTranslator(execution.format, nativePassthrough);
       const pending: (JsonObject | 'DONE')[] = [];
@@ -248,7 +251,8 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
         }
       }
       if (options.body.stream !== true) {
-        const accumulated = new ChatAccumulator();
+        const nativeClaude = nativePassthrough && source === 'claude';
+        const accumulated = nativeClaude ? new ClaudeAccumulator() : new ChatAccumulator();
         for (const value of pending) if (value !== 'DONE') accumulated.accept(value);
         while (!ended) {
           const frame = await iterator.next();
@@ -263,7 +267,9 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
           }
         }
         execution.cancel();
-        const answer = translateResponse(accumulated.answer(), 'openai', source);
+        const answer = nativeClaude
+          ? accumulated.answer()
+          : translateResponse(accumulated.answer(), 'openai', source);
         await finish(target, 200, usageOf(normalizer.usage), null);
         return Response.json(answer, { headers: headersFor(target, attempts, false) });
       }

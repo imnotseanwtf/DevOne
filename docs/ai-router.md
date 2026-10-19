@@ -142,6 +142,11 @@ Claude OAuth requests include the Claude Code system block used by
 The caller's existing instructions, messages and tools are preserved. This preparation is shared
 by gateway requests and connection tests; API-key and custom transports keep their own payloads.
 
+Claude thinking is returned separately as `reasoning_content` to Chat clients and reasoning items
+to Responses clients. Native Messages clients retain signed thinking and redacted blocks, including
+when an upstream stream is buffered into JSON. Opaque signatures/redacted data are not exposed as
+answer text or forwarded to other protocols.
+
 `bun run test:ai:chat-ui` checks exact-account selection, allowed models, quick tests, drafts,
 follow-up history, long replies, errors, cancellation, mobile layout and member authorization.
 It uses temporary database records and a local upstream on `127.0.0.1:18081`; that host must be
