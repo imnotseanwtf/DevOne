@@ -463,6 +463,15 @@ for (const order of [['tool', 'text'], ['text', 'tool'], ['tool', 'reasoning', '
   }
 }
 
+// "temperature and top_p cannot both be specified": one retry keeping only temperature.
+{
+  const sent: Record<string, unknown>[] = [];
+  const response = await forwardChatCompletion({ body: { ...chatBody, temperature: 0, top_p: 0.9 }, targets: [target('a')], apiKeyFor: () => null,
+    fetchImpl: (async (_url, init) => { const body = JSON.parse(String(init?.body)); sent.push(body); return 'top_p' in body ? Response.json({ error: { message: '`temperature` and `top_p` cannot both be specified for this model. Please use only one.' } }, { status: 400 }) : Response.json({ choices: [{ message: { role: 'assistant', content: 'OK' } }] }); }) as typeof fetch });
+  assert.equal(response.status, 200); assert.equal(sent.length, 2);
+  assert.equal(sent[1].temperature, 0); assert.ok(!('top_p' in sent[1]));
+}
+
 // Reasoning that exhausts max_tokens leaves "" (not null) content and keeps finish_reason "length".
 {
   const claudeLength = { id: 'msg', model: 'm', content: [], stop_reason: 'max_tokens', usage: { input_tokens: 1, output_tokens: 40 } };

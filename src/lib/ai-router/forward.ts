@@ -185,10 +185,16 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
             if (!/\b(temperature|top_p|top_k)\b/i.test(rejected.message)) throw rejected;
             samplingRetried.add(account);
             console.warn(
-              `[ai-router] ${target.provider.name}/${target.model} rejected ${present.join(', ')}; retrying once without`
+              `[ai-router] ${target.provider.name}/${target.model} rejected ${present.join(', ')}; retrying once with fewer sampling fields`
             );
+            // "temperature and top_p cannot both be specified": keep temperature, drop only top_p.
+            const exclusive =
+              /\btemperature\b/i.test(rejected.message) &&
+              /\btop_p\b/i.test(rejected.message) &&
+              /\bboth\b|\btogether\b/i.test(rejected.message) &&
+              sent.body.temperature !== undefined;
             const stripped = { ...sent.body };
-            for (const key of SAMPLING_FIELDS) delete stripped[key];
+            for (const key of exclusive ? ['top_p'] : SAMPLING_FIELDS) delete stripped[key];
             sent = { ...sent, body: stripped };
             attempts++;
             execution = await executeTarget(sent, target, credential);
