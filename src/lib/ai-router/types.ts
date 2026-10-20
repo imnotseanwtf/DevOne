@@ -40,7 +40,14 @@ export interface ProviderDefinition {
     headers?: Record<string, string>;
     auth: { header: string; scheme: 'raw' | 'bearer' };
   };
-  models: { id: string; name: string; upstreamModelId?: string; responsesLite?: boolean }[];
+  models: {
+    id: string;
+    name: string;
+    upstreamModelId?: string;
+    responsesLite?: boolean;
+    /** The model answers 400 when temperature, top_p or top_k is sent. */
+    rejectsSampling?: boolean;
+  }[];
   oauth?: ProviderOAuthConfig;
 }
 

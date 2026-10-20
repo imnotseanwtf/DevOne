@@ -1,7 +1,7 @@
 import { providerUrl, type RouteTarget } from './routing';
 import { translateRequest, ProtocolError, object, type JsonObject } from './translation';
 import type { ProviderCredential, ProviderFormat } from './types';
-import { getProviderDefinition } from './registry';
+import { getProviderDefinition, modelRejectsSampling, SAMPLING_FIELDS } from './registry';
 import { openCodeRuntimeCompletion } from './opencode-runtime';
 
 // Matches 9Router's CLAUDE_SYSTEM_PROMPT for its Claude Code OAuth transport.
@@ -49,6 +49,8 @@ export async function executeTarget(
       ? system
       : [{ type: 'text', text: CLAUDE_OAUTH_SYSTEM_PROMPT }, ...system];
   }
+  if (modelRejectsSampling(target.model))
+    for (const key of SAMPLING_FIELDS) delete body[key];
   const useOpenCodeRuntime = provider.providerType === 'opencode';
   const codexDefinition = provider.providerType === 'codex' ? getProviderDefinition('codex') : null;
   const codexLite =

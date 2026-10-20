@@ -1,6 +1,7 @@
 import { shouldFallBack, usageFromJson, type RouteTarget, type TokenUsage } from './routing';
 import type { ProviderCredential, ProviderFormat } from './types';
 import { executeTarget, type UpstreamExecution } from './executors';
+import { SAMPLING_FIELDS } from './registry';
 import {
   ProtocolError,
   translateResponse,
@@ -134,7 +135,8 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
   let last: { status: number; error: string } | null = null;
   const tried = new Set<string>(),
     refreshedAccounts = new Set<string>(),
-    failedAccounts = new Set<string>();
+    failedAccounts = new Set<string>(),
+    samplingRetried = new Set<string>();
   const overrides = new Map<string, ProviderCredential>();
   const candidates = [...options.targets];
   for (let targetIndex = 0; targetIndex < candidates.length; targetIndex++) {
@@ -145,7 +147,8 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
     if (failedAccounts.has(accountId)) continue;
     if (tried.has(account)) continue;
     tried.add(account);
-    let credential: ProviderCredential | null = null,
+    let sent: ForwardOptions = options,
+      credential: ProviderCredential | null = null,
       execution: UpstreamExecution | undefined,
       retryAfter: string | null = null;
     try {
@@ -171,8 +174,27 @@ export async function forwardChatCompletion(options: ForwardOptions): Promise<Re
           ])
             if (key) secrets.push(key);
         attempts++;
-        execution = await executeTarget(options, target, credential);
+        execution = await executeTarget(sent, target, credential);
         retryAfter = execution.response.headers.get('retry-after');
+        // Safety net for models that reject sampling fields the registry does not know about: one retry, never a loop.
+        if (execution.response.status === 400 && !samplingRetried.has(account)) {
+          const present = SAMPLING_FIELDS.filter((key) => sent.body[key] !== undefined);
+          if (present.length) {
+            const rejected = httpError(await readText(execution), 400);
+            execution.cancel();
+            if (!/\b(temperature|top_p|top_k)\b/i.test(rejected.message)) throw rejected;
+            samplingRetried.add(account);
+            console.warn(
+              `[ai-router] ${target.provider.name}/${target.model} rejected ${present.join(', ')}; retrying once without`
+            );
+            const stripped = { ...sent.body };
+            for (const key of SAMPLING_FIELDS) delete stripped[key];
+            sent = { ...sent, body: stripped };
+            attempts++;
+            execution = await executeTarget(sent, target, credential);
+            retryAfter = execution.response.headers.get('retry-after');
+          }
+        }
         if (
           (execution.response.status === 401 || execution.response.status === 403) &&
           retry === 0 &&

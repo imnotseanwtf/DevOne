@@ -563,7 +563,7 @@ export class ChatAccumulator {
           index: 0,
           message: {
             role: 'assistant',
-            content: this.text || null,
+            content: this.text || (this.calls.size ? null : ''),
             ...(this.reasoning ? { reasoning_content: this.reasoning } : {}),
             ...(this.calls.size ? { tool_calls: [...this.calls.values()] } : {})
           },

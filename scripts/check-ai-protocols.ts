@@ -415,4 +415,67 @@ for (const order of [['tool', 'text'], ['text', 'tool'], ['tool', 'reasoning', '
   assert.deepEqual(terminal.output, done.map((frame) => frame.item));
 }
 
+// Models that reject sampling fields never receive them; other models keep them in every format.
+{
+  const ok = () => Response.json({ id: 'msg', model: 'm', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } });
+  const sampling = { temperature: 0, top_p: 0.9 };
+  for (const model of ['claude-sonnet-5-5', 'claude-sonnet-5', 'cc/claude-sonnet-5-5', 'Claude/claude-sonnet-5']) {
+    for (const [sourceFormat, format, body] of [
+      ['openai', 'claude', { ...chatBody, ...sampling }],
+      ['openai', 'openai', { ...chatBody, ...sampling, top_k: 5 }],
+      ['openai', 'openai-responses', { ...chatBody, ...sampling }],
+      ['claude', 'claude', { model: 'm', max_tokens: 8, messages: [{ role: 'user', content: 'Hello' }], ...sampling, top_k: 5 }]
+    ] as const) {
+      let sent: Record<string, unknown> | undefined;
+      const response = await forwardChatCompletion({ body, sourceFormat, targets: [{ ...target('s', { format }), model }], apiKeyFor: () => null,
+        fetchImpl: (async (_url, init) => { sent = JSON.parse(String(init?.body)); return format === 'claude' ? ok() : Response.json({ choices: [], output: [] }); }) as typeof fetch });
+      assert.ok(sent, `${model} ${sourceFormat}->${format} must reach upstream (${response.status})`);
+      for (const key of ['temperature', 'top_p', 'top_k']) assert.ok(!(key in sent!), `${model} ${sourceFormat}->${format} must drop ${key}`);
+    }
+  }
+  for (const model of ['claude-sonnet-4-6', 'claude-sonnet-4-5-20250929']) {
+    let sent: Record<string, unknown> | undefined;
+    await forwardChatCompletion({ body: { ...chatBody, ...sampling }, targets: [{ ...target('s', { format: 'claude' }), model }], apiKeyFor: () => null,
+      fetchImpl: (async (_url, init) => { sent = JSON.parse(String(init?.body)); return ok(); }) as typeof fetch });
+    assert.equal(sent?.temperature, 0, `${model} keeps temperature`); assert.equal(sent?.top_p, 0.9);
+  }
+}
+
+// An upstream 400 about sampling gets exactly one retry without those fields; other 400s get none.
+{
+  const sent: Record<string, unknown>[] = [];
+  const response = await forwardChatCompletion({ body: { ...chatBody, temperature: 0, top_p: 0.5 }, targets: [target('a')], apiKeyFor: () => null,
+    fetchImpl: (async (_url, init) => { const body = JSON.parse(String(init?.body)); sent.push(body); return 'temperature' in body || 'top_p' in body ? Response.json({ error: { message: '`temperature` is deprecated for this model.' } }, { status: 400 }) : Response.json({ choices: [{ message: { role: 'assistant', content: 'OK' } }] }); }) as typeof fetch });
+  assert.equal(response.status, 200); assert.equal(sent.length, 2);
+  assert.equal(sent[0].temperature, 0); assert.ok(!('temperature' in sent[1]) && !('top_p' in sent[1]));
+  assert.equal(response.headers.get('x-devone-attempts'), '2');
+  // A second rejection is returned, never retried again.
+  let requests = 0;
+  const failed = await forwardChatCompletion({ body: { ...chatBody, temperature: 0 }, targets: [target('a')], apiKeyFor: () => null,
+    fetchImpl: (async () => { requests++; return Response.json({ error: { message: 'temperature is deprecated' } }, { status: 400 }); }) as typeof fetch });
+  assert.equal(failed.status, 400); assert.equal(requests, 2);
+  // Not about sampling: no retry. No sampling fields sent: no retry.
+  for (const [message, extra] of [['Invalid input', { temperature: 0 }], ['temperature is deprecated', {}]] as const) {
+    let count = 0;
+    const res = await forwardChatCompletion({ body: { ...chatBody, ...extra }, targets: [target('a')], apiKeyFor: () => null,
+      fetchImpl: (async () => { count++; return Response.json({ error: { message } }, { status: 400 }); }) as typeof fetch });
+    assert.equal(res.status, 400); assert.equal(count, 1, message);
+  }
+}
+
+// Reasoning that exhausts max_tokens leaves "" (not null) content and keeps finish_reason "length".
+{
+  const claudeLength = { id: 'msg', model: 'm', content: [], stop_reason: 'max_tokens', usage: { input_tokens: 1, output_tokens: 40 } };
+  const nonStream = await (await forwardChatCompletion({ body: { ...chatBody, max_tokens: 40 }, targets: [target('a', { format: 'claude' })], apiKeyFor: () => null, fetchImpl: (async () => Response.json(claudeLength)) as typeof fetch })).json();
+  assert.equal(nonStream.choices[0].message.content, ''); assert.equal(nonStream.choices[0].finish_reason, 'length');
+  const events = [
+    { type: 'message_start', message: { id: 'msg', model: 'm', usage: { input_tokens: 1, output_tokens: 0 } } },
+    { type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage: { output_tokens: 40 } },
+    { type: 'message_stop' }
+  ];
+  const accumulated = await (await forwardChatCompletion({ body: { ...chatBody, max_tokens: 40 }, targets: [target('a', { format: 'claude', forceStream: true })], apiKeyFor: () => null,
+    fetchImpl: (async () => sse(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''))) as typeof fetch })).json();
+  assert.equal(accumulated.choices[0].message.content, ''); assert.equal(accumulated.choices[0].finish_reason, 'length');
+}
+
 console.log('AI protocol checks passed');

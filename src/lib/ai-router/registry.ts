@@ -7,12 +7,12 @@ export const CODEX_DEFAULT_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 
 // Bootstrap catalog; model discovery refreshes the saved list from the account's API.
 const claudeModels: ProviderDefinition['models'] = [
-  { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' },
+  { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', rejectsSampling: true },
   { id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
   { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5' },
   { id: 'claude-fable-5-1', name: 'Claude Fable 5.1' },
   { id: 'claude-opus-5', name: 'Claude Opus 5' },
-  { id: 'claude-sonnet-5', name: 'Claude Sonnet 5' },
+  { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', rejectsSampling: true },
   { id: 'claude-fable-5', name: 'Claude Fable 5' },
   { id: 'claude-opus-4-8', name: 'Claude Opus 4.8' },
   { id: 'claude-opus-4-7', name: 'Claude Opus 4.7' },
@@ -22,6 +22,14 @@ const claudeModels: ProviderDefinition['models'] = [
   { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
   { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' }
 ];
+
+export const SAMPLING_FIELDS = ['temperature', 'top_p', 'top_k'] as const;
+
+/** Matches the plain, `cc/` alias and `Claude/` provider-prefixed forms of a model id. */
+export function modelRejectsSampling(model: string): boolean {
+  const id = model.slice(model.lastIndexOf('/') + 1).toLowerCase();
+  return claudeModels.some((entry) => entry.rejectsSampling && entry.id === id);
+}
 
 const definitions: ProviderDefinition[] = [
   {

@@ -566,7 +566,7 @@ function responseToChat(body: JsonObject, source: ProviderFormat): JsonObject {
         index: 0,
         message: {
           role: 'assistant',
-          content: text || null,
+          content: text || (calls.length ? null : ''),
           ...(reasoning ? { reasoning_content: reasoning } : {}),
           ...(calls.length ? { tool_calls: calls } : {})
         },
