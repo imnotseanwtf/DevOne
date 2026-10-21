@@ -51,7 +51,7 @@ export const en = {
   devops: {
     title: 'DevOps',
     description: 'Track deployments, services, logs, and environment health.',
-    tabs: { pipelines: 'Pipelines', terminal: 'Terminal' },
+    tabs: { pipelines: 'Pipelines', terminal: 'Terminal', containers: 'Containers' },
     databases: 'Databases',
     noDatabases: 'No databases connected.',
     readOnly: 'Read-only',
@@ -83,6 +83,22 @@ export const en = {
       publishedLater: 'The log is published when the job finishes.',
       noLog: 'This job has no log.',
       noOutput: 'No output yet.'
+    },
+    containers: {
+      local: 'This machine',
+      localHint: 'Containers on the machine DevOne runs on (project owners only).',
+      servers: 'Servers',
+      noServers: 'Save a server in the Terminal tab to list its containers here.',
+      refresh: 'Refresh',
+      loading: 'Loading containers…',
+      empty: 'No containers on {source}.',
+      count: '{running} running · {total} total',
+      name: 'Name',
+      image: 'Image',
+      state: 'State',
+      status: 'Status',
+      ports: 'Ports',
+      selectSource: 'Pick a server to see its containers.'
     },
     terminal: {
       savedServers: 'Saved servers',

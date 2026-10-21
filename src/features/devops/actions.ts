@@ -6,7 +6,14 @@ import {
   getPipelineJobs,
   RepositoryAccessError
 } from '@/features/git/service';
-import { deleteSshHost, SshHostAccessError } from '@/features/devops/ssh-service';
+import {
+  deleteSshHost,
+  listContainers,
+  SshHostAccessError,
+  TerminalPolicyError
+} from '@/features/devops/ssh-service';
+import { DockerError, type ContainerInfo } from '@/lib/docker/containers';
+import { SshConnectError } from '@/lib/ssh/connection';
 import { requireUser } from '@/lib/auth/session';
 import {
   ProviderAuthenticationError,
@@ -98,5 +105,38 @@ export async function deleteSshHostAction(
   } catch (error) {
     if (error instanceof SshHostAccessError) return { ok: false, error: 'Saved host not found' };
     return { ok: false, error: 'Could not remove the saved host' };
+  }
+}
+
+const containersSchema = z.object({
+  projectId: z.string().min(1),
+  // "local" is the machine DevOne runs on; anything else is a saved host's id.
+  source: z.string().min(1)
+});
+
+export async function listContainersAction(
+  input: unknown
+): Promise<Result<{ containers: ContainerInfo[] }>> {
+  const user = await requireUser();
+  const parsed = containersSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Select a server' };
+  const { projectId, source } = parsed.data;
+  try {
+    const containers = await listContainers(
+      user.id,
+      projectId,
+      source === 'local' ? { kind: 'local' } : { kind: 'host', hostId: source }
+    );
+    return { ok: true, containers };
+  } catch (error) {
+    if (
+      error instanceof DockerError ||
+      error instanceof SshConnectError ||
+      error instanceof TerminalPolicyError
+    ) {
+      return { ok: false, error: error.message };
+    }
+    if (error instanceof SshHostAccessError) return { ok: false, error: 'Saved host not found' };
+    return { ok: false, error: 'Could not load the containers' };
   }
 }

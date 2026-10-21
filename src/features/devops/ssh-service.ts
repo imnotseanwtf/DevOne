@@ -5,7 +5,16 @@ import { recordAudit } from '@/lib/audit/record';
 import { getPrisma } from '@/lib/db/prisma';
 import { matchesAnyGlob } from '@/lib/glob';
 import { decryptSecret, encryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
-import { openShell, SshConnectError, type SshCredentials } from '@/lib/ssh/connection';
+import { openShell, runCommand, SshConnectError, type SshCredentials } from '@/lib/ssh/connection';
+import {
+  type ContainerInfo,
+  DockerError,
+  dockerFailure,
+  LIST_CONTAINERS_COMMAND,
+  listLocalContainers,
+  parseContainers
+} from '@/lib/docker/containers';
+import { isDemoMode } from '@/lib/demo';
 import {
   countSshSessions,
   createSshSession,
@@ -269,6 +278,26 @@ async function saveHost(
   }
 }
 
+type SavedHostRow = NonNullable<Awaited<ReturnType<typeof findSavedHost>>>;
+
+function findSavedHost(userId: string, projectId: string, hostId: string) {
+  return getPrisma().sshHost.findFirst({ where: { id: hostId, projectId, ownerId: userId } });
+}
+
+function savedCredentials(host: SavedHostRow): SshCredentials {
+  const key = getEncryptionKey();
+  const secret = decryptSecret(host.encryptedSecret, key);
+  return host.authMethod === SshAuthMethod.PASSWORD
+    ? { method: 'password', password: secret }
+    : {
+        privateKey: secret,
+        method: 'privateKey',
+        passphrase: host.encryptedPassphrase
+          ? decryptSecret(host.encryptedPassphrase, key)
+          : undefined
+      };
+}
+
 /** Connects to a saved host without asking for anything. */
 export async function connectSavedSsh(
   userId: string,
@@ -276,25 +305,12 @@ export async function connectSavedSsh(
   hostId: string,
   size: Size
 ): Promise<ConnectedSession> {
-  const host = await getPrisma().sshHost.findFirst({
-    where: { id: hostId, projectId, ownerId: userId }
-  });
+  const host = await findSavedHost(userId, projectId, hostId);
   if (!host) throw new SshHostAccessError();
   await requireTerminalAccess(userId, projectId, host.host);
   assertSessionCapacity(userId);
 
-  const key = getEncryptionKey();
-  const secret = decryptSecret(host.encryptedSecret, key);
-  const credentials: SshCredentials =
-    host.authMethod === SshAuthMethod.PASSWORD
-      ? { method: 'password', password: secret }
-      : {
-          method: 'privateKey',
-          privateKey: secret,
-          passphrase: host.encryptedPassphrase
-            ? decryptSecret(host.encryptedPassphrase, key)
-            : undefined
-        };
+  const credentials = savedCredentials(host);
 
   const shell = await openShell(
     {
@@ -326,4 +342,55 @@ export async function connectSavedSsh(
     details: { saved: true, name: host.name }
   });
   return { session, fingerprint: shell.fingerprint, hostId: host.id };
+}
+
+export type ContainerSource = { kind: 'local' } | { kind: 'host'; hostId: string };
+
+/**
+ * Containers on this machine or on one of the caller's saved servers.
+ * Both need the same terminal permission: they run commands on the machine.
+ * The local machine is DevOne's own host, so it is for project owners only.
+ */
+export async function listContainers(
+  userId: string,
+  projectId: string,
+  source: ContainerSource
+): Promise<ContainerInfo[]> {
+  if (isDemoMode()) throw new DockerError('Containers are turned off in the public demo', 'failed');
+
+  if (source.kind === 'local') {
+    const policy = await getTerminalPolicy(userId, projectId).catch(() => {
+      throw new SshHostAccessError();
+    });
+    if (!policy.allowed) {
+      throw new TerminalPolicyError(policy.terminalAccess === 'DISABLED' ? 'disabled' : 'owners');
+    }
+    if (policy.role !== 'OWNER') throw new TerminalPolicyError('owners');
+    return listLocalContainers();
+  }
+
+  const host = await findSavedHost(userId, projectId, source.hostId);
+  if (!host) throw new SshHostAccessError();
+  await requireTerminalAccess(userId, projectId, host.host);
+
+  const result = await runCommand(
+    {
+      host: host.host,
+      port: host.port,
+      username: host.username,
+      credentials: savedCredentials(host),
+      expectedFingerprint: host.hostKeyFingerprint
+    },
+    LIST_CONTAINERS_COMMAND
+  );
+  if (!host.hostKeyFingerprint) {
+    await getPrisma()
+      .sshHost.update({
+        where: { id: host.id },
+        data: { hostKeyFingerprint: result.fingerprint }
+      })
+      .catch(() => undefined);
+  }
+  if (result.code !== 0) throw dockerFailure(result.stderr, result.code);
+  return parseContainers(result.stdout);
 }

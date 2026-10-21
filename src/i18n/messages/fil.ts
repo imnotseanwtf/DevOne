@@ -55,7 +55,7 @@ export const fil: MessageShape<typeof en> = {
   devops: {
     title: 'DevOps',
     description: 'Subaybayan ang mga deployment, serbisyo, log, at kalagayan ng mga environment.',
-    tabs: { pipelines: 'Mga Pipeline', terminal: 'Terminal' },
+    tabs: { pipelines: 'Mga Pipeline', terminal: 'Terminal', containers: 'Mga Container' },
     databases: 'Mga Database',
     noDatabases: 'Walang nakakonektang database.',
     readOnly: 'Pagbasa lang',
@@ -87,6 +87,22 @@ export const fil: MessageShape<typeof en> = {
       publishedLater: 'Lalabas ang log kapag natapos ang job.',
       noLog: 'Walang log ang job na ito.',
       noOutput: 'Wala pang output.'
+    },
+    containers: {
+      local: 'Ang makinang ito',
+      localHint: 'Mga container sa makinang pinagtatakbuhan ng DevOne (mga project owner lang).',
+      servers: 'Mga server',
+      noServers: 'Mag-save ng server sa Terminal tab para makita rito ang mga container nito.',
+      refresh: 'I-refresh',
+      loading: 'Nilo-load ang mga container…',
+      empty: 'Walang container sa {source}.',
+      count: '{running} tumatakbo · {total} lahat',
+      name: 'Pangalan',
+      image: 'Image',
+      state: 'State',
+      status: 'Status',
+      ports: 'Mga port',
+      selectSource: 'Pumili ng server para makita ang mga container nito.'
     },
     terminal: {
       savedServers: 'Mga naka-save na server',

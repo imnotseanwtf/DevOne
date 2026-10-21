@@ -4,12 +4,13 @@ import { cn } from '@/lib/utils';
 
 interface DevOpsTabsProps {
   projectId: string;
-  active: 'pipelines' | 'terminal';
+  active: 'pipelines' | 'terminal' | 'containers';
 }
 
 const tabs = [
   { id: 'pipelines' as const, path: 'devops' },
-  { id: 'terminal' as const, path: 'devops/terminal' }
+  { id: 'terminal' as const, path: 'devops/terminal' },
+  { id: 'containers' as const, path: 'devops/containers' }
 ];
 
 export async function DevOpsTabs({ projectId, active }: DevOpsTabsProps) {

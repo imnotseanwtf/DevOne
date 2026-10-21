@@ -52,14 +52,8 @@ function describe(error: Error & { level?: string; code?: string }): SshConnectE
   return new SshConnectError(`Could not connect: ${error.message}`, 'unreachable');
 }
 
-/**
- * Connects and opens an interactive shell with a pseudo-terminal. Resolves once
- * the shell is ready, so a failed login never leaves a half-open session.
- */
-export function openShell(
-  target: SshTarget,
-  size: { cols: number; rows: number }
-): Promise<OpenShell> {
+/** Connects and authenticates, pinning nothing: the caller decides what to do with the fingerprint. */
+function connectClient(target: SshTarget): Promise<{ client: Client; fingerprint: string }> {
   if (isDemoMode())
     return Promise.reject(new SshConnectError(DEMO_DISABLED_MESSAGE, 'unreachable'));
   return new Promise((resolve, reject) => {
@@ -116,17 +110,9 @@ export function openShell(
     });
 
     client.on('ready', () => {
-      client.shell(
-        { term: 'xterm-256color', cols: size.cols, rows: size.rows },
-        (error, channel) => {
-          if (error) {
-            fail(new SshConnectError('The server refused to open a shell', 'shell'));
-            return;
-          }
-          settled = true;
-          resolve({ client, channel, fingerprint });
-        }
-      );
+      if (settled) return;
+      settled = true;
+      resolve({ client, fingerprint });
     });
 
     try {
@@ -135,5 +121,72 @@ export function openShell(
       // ssh2 throws synchronously for a key it cannot parse.
       fail(describe(error as Error));
     }
+  });
+}
+
+/**
+ * Connects and opens an interactive shell with a pseudo-terminal. Resolves once
+ * the shell is ready, so a failed login never leaves a half-open session.
+ */
+export async function openShell(
+  target: SshTarget,
+  size: { cols: number; rows: number }
+): Promise<OpenShell> {
+  const { client, fingerprint } = await connectClient(target);
+  return new Promise((resolve, reject) => {
+    client.shell({ term: 'xterm-256color', cols: size.cols, rows: size.rows }, (error, channel) => {
+      if (error) {
+        client.end();
+        reject(new SshConnectError('The server refused to open a shell', 'shell'));
+        return;
+      }
+      resolve({ client, channel, fingerprint });
+    });
+  });
+}
+
+export interface CommandResult {
+  stdout: string;
+  stderr: string;
+  /** Null when the command was killed by a signal. */
+  code: number | null;
+  fingerprint: string;
+}
+
+const COMMAND_TIMEOUT_MS = 20_000;
+const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+
+/** Runs one command on the server over its own connection and closes it afterwards. */
+export async function runCommand(target: SshTarget, command: string): Promise<CommandResult> {
+  const { client, fingerprint } = await connectClient(target);
+  return new Promise((resolve, reject) => {
+    const finish = (action: () => void) => {
+      clearTimeout(timer);
+      client.end();
+      action();
+    };
+    const timer = setTimeout(
+      () => finish(() => reject(new SshConnectError('The command took too long', 'timeout'))),
+      COMMAND_TIMEOUT_MS
+    );
+    client.on('error', (error) => finish(() => reject(describe(error))));
+
+    client.exec(command, (error, channel) => {
+      if (error) {
+        finish(() => reject(new SshConnectError('The server refused to run the command', 'shell')));
+        return;
+      }
+      let stdout = '';
+      let stderr = '';
+      channel.on('data', (data: Buffer) => {
+        if (stdout.length < MAX_OUTPUT_BYTES) stdout += data.toString('utf8');
+      });
+      channel.stderr.on('data', (data: Buffer) => {
+        if (stderr.length < MAX_OUTPUT_BYTES) stderr += data.toString('utf8');
+      });
+      channel.on('close', (code: number | null) =>
+        finish(() => resolve({ stdout, stderr, code, fingerprint }))
+      );
+    });
   });
 }
