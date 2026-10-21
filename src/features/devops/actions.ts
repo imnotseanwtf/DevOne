@@ -8,11 +8,14 @@ import {
 } from '@/features/git/service';
 import {
   deleteSshHost,
+  execInContainer,
   listContainers,
+  readContainerLogs,
+  type ContainerExecResult,
   SshHostAccessError,
   TerminalPolicyError
 } from '@/features/devops/ssh-service';
-import { DockerError, type ContainerInfo } from '@/lib/docker/containers';
+import { CONTAINER_ID, DockerError, type ContainerInfo } from '@/lib/docker/containers';
 import { SshConnectError } from '@/lib/ssh/connection';
 import { requireUser } from '@/lib/auth/session';
 import {
@@ -114,29 +117,76 @@ const containersSchema = z.object({
   source: z.string().min(1)
 });
 
+const containerSchema = containersSchema.extend({ containerId: z.string().regex(CONTAINER_ID) });
+
+const execSchema = containerSchema.extend({ command: z.string().trim().min(1).max(4000) });
+
+function containerFailure(error: unknown, fallback: string): { ok: false; error: string } {
+  if (
+    error instanceof DockerError ||
+    error instanceof SshConnectError ||
+    error instanceof TerminalPolicyError
+  ) {
+    return { ok: false, error: error.message };
+  }
+  if (error instanceof SshHostAccessError) return { ok: false, error: 'Saved host not found' };
+  return { ok: false, error: fallback };
+}
+
+const sourceOf = (source: string) =>
+  source === 'local' ? ({ kind: 'local' } as const) : ({ kind: 'host', hostId: source } as const);
+
 export async function listContainersAction(
   input: unknown
 ): Promise<Result<{ containers: ContainerInfo[] }>> {
   const user = await requireUser();
   const parsed = containersSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'Select a server' };
-  const { projectId, source } = parsed.data;
   try {
     const containers = await listContainers(
       user.id,
-      projectId,
-      source === 'local' ? { kind: 'local' } : { kind: 'host', hostId: source }
+      parsed.data.projectId,
+      sourceOf(parsed.data.source)
     );
     return { ok: true, containers };
   } catch (error) {
-    if (
-      error instanceof DockerError ||
-      error instanceof SshConnectError ||
-      error instanceof TerminalPolicyError
-    ) {
-      return { ok: false, error: error.message };
-    }
-    if (error instanceof SshHostAccessError) return { ok: false, error: 'Saved host not found' };
-    return { ok: false, error: 'Could not load the containers' };
+    return containerFailure(error, 'Could not load the containers');
+  }
+}
+
+export async function containerLogsAction(input: unknown): Promise<Result<{ logs: string }>> {
+  const user = await requireUser();
+  const parsed = containerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Select a container' };
+  try {
+    const logs = await readContainerLogs(
+      user.id,
+      parsed.data.projectId,
+      sourceOf(parsed.data.source),
+      parsed.data.containerId
+    );
+    return { ok: true, logs };
+  } catch (error) {
+    return containerFailure(error, 'Could not load the logs');
+  }
+}
+
+export async function containerExecAction(
+  input: unknown
+): Promise<Result<{ result: ContainerExecResult }>> {
+  const user = await requireUser();
+  const parsed = execSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Enter a command' };
+  try {
+    const result = await execInContainer(
+      user.id,
+      parsed.data.projectId,
+      sourceOf(parsed.data.source),
+      parsed.data.containerId,
+      parsed.data.command
+    );
+    return { ok: true, result };
+  } catch (error) {
+    return containerFailure(error, 'Could not run the command');
   }
 }

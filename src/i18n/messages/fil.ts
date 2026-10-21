@@ -102,7 +102,22 @@ export const fil: MessageShape<typeof en> = {
       state: 'State',
       status: 'Status',
       ports: 'Mga port',
-      selectSource: 'Pumili ng server para makita ang mga container nito.'
+      selectSource: 'Pumili ng server para makita ang mga container nito.',
+      open: 'Buksan',
+      logs: 'Mga log',
+      run: 'Magpatakbo ng command',
+      follow: 'Sundan',
+      noLogs: 'Walang output.',
+      loadingLogs: 'Nilo-load ang mga log…',
+      commandPlaceholder: 'ls -la /app',
+      runButton: 'Patakbuhin',
+      running: 'Tumatakbo…',
+      exit: 'exit {code}',
+      execHint:
+        'Isang beses tatakbo gamit ang sh -c sa loob ng container. Walang TTY, kaya hindi gagana ang mga interactive na program tulad ng top o vi.',
+      noOutput: '(walang output)',
+      logHint: 'Huling {lines} linya, pinakabago sa ibaba.',
+      close: 'Isara'
     },
     terminal: {
       savedServers: 'Mga naka-save na server',
@@ -361,6 +376,7 @@ export const fil: MessageShape<typeof en> = {
     terminal_connect: 'nagbukas ng terminal',
     terminal_host_save: 'nag-save ng server',
     terminal_host_delete: 'nag-alis ng naka-save na server',
+    container_exec: 'nagpatakbo ng command sa container',
     terminal_host_reset_key: 'nag-reset ng host key ng server',
     account_connection_add: 'nagkonekta ng account',
     account_connection_token: 'pinalitan ang token ng account',

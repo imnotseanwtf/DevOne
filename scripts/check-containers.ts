@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { dockerFailure, parseContainers } from '@/lib/docker/containers';
+import { dockerFailure, execArgs, parseContainers, remoteDockerCommand, shellQuote } from '@/lib/docker/containers';
 
 const output = [
   'WARNING: something on stdout',
@@ -24,5 +24,13 @@ assert.equal(
   'daemon'
 );
 assert.equal(dockerFailure('boom', 1).code, 'failed');
+
+assert.equal(dockerFailure('Error: No such container: abc', 1).message, 'That container no longer exists');
+
+assert.equal(shellQuote("it's"), `'it'\\''s'`);
+assert.equal(
+  remoteDockerCommand(execArgs('abc123abc123', "echo 'hi'; ls")),
+  `docker 'exec' 'abc123abc123' 'sh' '-c' 'echo '\\''hi'\\''; ls'`
+);
 
 console.log('containers: ok');

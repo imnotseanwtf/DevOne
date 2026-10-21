@@ -98,7 +98,22 @@ export const en = {
       state: 'State',
       status: 'Status',
       ports: 'Ports',
-      selectSource: 'Pick a server to see its containers.'
+      selectSource: 'Pick a server to see its containers.',
+      open: 'Open',
+      logs: 'Logs',
+      run: 'Run command',
+      follow: 'Follow',
+      noLogs: 'No output.',
+      loadingLogs: 'Loading logs…',
+      commandPlaceholder: 'ls -la /app',
+      runButton: 'Run',
+      running: 'Running…',
+      exit: 'exit {code}',
+      execHint:
+        'Runs once with sh -c inside the container. No TTY, so interactive programs like top or vi won’t work.',
+      noOutput: '(no output)',
+      logHint: 'Last {lines} lines, newest at the bottom.',
+      close: 'Close'
     },
     terminal: {
       savedServers: 'Saved servers',
@@ -345,6 +360,7 @@ export const en = {
     terminal_connect: 'opened a terminal',
     terminal_host_save: 'saved a server',
     terminal_host_delete: 'removed a saved server',
+    container_exec: 'ran a command in a container',
     terminal_host_reset_key: 'reset a server’s host key',
     account_connection_add: 'connected an account',
     account_connection_token: 'replaced an account token',

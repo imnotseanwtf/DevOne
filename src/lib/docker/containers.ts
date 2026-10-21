@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { LOG_TAIL_LINES } from '@/lib/docker/limits';
 
 export interface ContainerInfo {
   id: string;
@@ -78,29 +79,69 @@ export function dockerFailure(stderr: string, code: number | null): DockerError 
   if (/cannot connect to the docker daemon|is the docker daemon running/i.test(stderr)) {
     return new DockerError("Docker is installed but isn't running", 'daemon');
   }
-  return new DockerError('Docker could not list the containers', 'failed');
+  if (/no such container/i.test(stderr)) {
+    return new DockerError('That container no longer exists', 'failed');
+  }
+  return new DockerError('Docker returned an error', 'failed');
 }
 
-/** Containers on the machine DevOne itself runs on. */
-export function listLocalContainers(): Promise<ContainerInfo[]> {
+export interface DockerResult {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+}
+
+/** Runs `docker <args>` on the machine DevOne itself runs on. */
+export function runLocalDocker(args: string[], timeoutMs = 20_000): Promise<DockerResult> {
   return new Promise((resolve, reject) => {
     execFile(
       'docker',
-      [...LIST_CONTAINERS_ARGS],
-      { timeout: 15_000, maxBuffer: 4 * 1024 * 1024 },
+      args,
+      { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 },
       (error, stdout, stderr) => {
-        if (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code === 'ENOENT') {
-            reject(dockerFailure('command not found', 127));
-            return;
-          }
-          const exit = typeof code === 'number' ? code : 1;
-          reject(dockerFailure(stderr, exit));
+        if (!error) {
+          resolve({ stdout, stderr, code: 0 });
           return;
         }
-        resolve(parseContainers(stdout));
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') {
+          reject(dockerFailure('command not found', 127));
+          return;
+        }
+        if (error.killed) {
+          reject(new DockerError('The command took too long', 'failed'));
+          return;
+        }
+        resolve({ stdout, stderr, code: typeof code === 'number' ? code : 1 });
       }
     );
   });
+}
+
+/** Containers on the machine DevOne itself runs on. */
+export async function listLocalContainers(): Promise<ContainerInfo[]> {
+  const result = await runLocalDocker([...LIST_CONTAINERS_ARGS], 15_000);
+  if (result.code !== 0) throw dockerFailure(result.stderr, result.code);
+  return parseContainers(result.stdout);
+}
+
+/** Full ids are 64 hex characters; `docker ps` prints them whole with --no-trunc. */
+export const CONTAINER_ID = /^[a-f0-9]{12,64}$/;
+
+/** Quotes one argument for a POSIX shell, for commands sent over SSH. */
+export function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+export function logsArgs(containerId: string, tail = LOG_TAIL_LINES): string[] {
+  return ['logs', '--tail', String(tail), '--timestamps', containerId];
+}
+
+export function execArgs(containerId: string, command: string): string[] {
+  return ['exec', containerId, 'sh', '-c', command];
+}
+
+/** `docker` plus quoted arguments, as one line for the remote shell. */
+export function remoteDockerCommand(args: string[]): string {
+  return ['docker', ...args.map(shellQuote)].join(' ');
 }

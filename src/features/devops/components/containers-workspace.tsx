@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
 import { listContainersAction } from '@/features/devops/actions';
+import { ContainerDialog } from '@/features/devops/components/container-dialog';
 import { useT } from '@/i18n/client';
+import type { ContainerInfo } from '@/lib/docker/containers';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -37,6 +39,7 @@ function stateVariant(state: string) {
 
 export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWorkspaceProps) {
   const t = useT();
+  const [selected, setSelected] = useState<ContainerInfo | null>(null);
   const [source, setSource] = useState<string>(policy.isOwner ? LOCAL : (hosts[0]?.id ?? ''));
 
   const sourceName =
@@ -172,7 +175,10 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
                     <th className='py-2 pr-4 font-medium'>{t('devops.containers.image')}</th>
                     <th className='py-2 pr-4 font-medium'>{t('devops.containers.state')}</th>
                     <th className='py-2 pr-4 font-medium'>{t('devops.containers.status')}</th>
-                    <th className='py-2 font-medium'>{t('devops.containers.ports')}</th>
+                    <th className='py-2 pr-4 font-medium'>{t('devops.containers.ports')}</th>
+                    <th className='py-2'>
+                      <span className='sr-only'>{t('devops.containers.open')}</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className='divide-border divide-y'>
@@ -189,8 +195,13 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
                         <Badge variant={stateVariant(container.state)}>{container.state}</Badge>
                       </td>
                       <td className='py-2 pr-4 whitespace-nowrap'>{container.status}</td>
-                      <td className='text-muted-foreground py-2 font-mono text-xs break-all'>
+                      <td className='text-muted-foreground py-2 pr-4 font-mono text-xs break-all'>
                         {container.ports || '—'}
+                      </td>
+                      <td className='py-2 text-right'>
+                        <Button variant='outline' size='sm' onClick={() => setSelected(container)}>
+                          {t('devops.containers.open')}
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -200,6 +211,13 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
           )}
         </CardContent>
       </Card>
+
+      <ContainerDialog
+        projectId={projectId}
+        source={source}
+        container={selected}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }

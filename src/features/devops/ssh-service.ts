@@ -10,9 +10,13 @@ import {
   type ContainerInfo,
   DockerError,
   dockerFailure,
-  LIST_CONTAINERS_COMMAND,
-  listLocalContainers,
-  parseContainers
+  execArgs,
+  LIST_CONTAINERS_ARGS,
+  logsArgs,
+  parseContainers,
+  remoteDockerCommand,
+  runLocalDocker,
+  type DockerResult
 } from '@/lib/docker/containers';
 import { isDemoMode } from '@/lib/demo';
 import {
@@ -347,15 +351,16 @@ export async function connectSavedSsh(
 export type ContainerSource = { kind: 'local' } | { kind: 'host'; hostId: string };
 
 /**
- * Containers on this machine or on one of the caller's saved servers.
+ * Runs `docker <args>` on this machine or on one of the caller's saved servers.
  * Both need the same terminal permission: they run commands on the machine.
  * The local machine is DevOne's own host, so it is for project owners only.
  */
-export async function listContainers(
+async function runDocker(
   userId: string,
   projectId: string,
-  source: ContainerSource
-): Promise<ContainerInfo[]> {
+  source: ContainerSource,
+  args: string[]
+): Promise<DockerResult> {
   if (isDemoMode()) throw new DockerError('Containers are turned off in the public demo', 'failed');
 
   if (source.kind === 'local') {
@@ -366,7 +371,7 @@ export async function listContainers(
       throw new TerminalPolicyError(policy.terminalAccess === 'DISABLED' ? 'disabled' : 'owners');
     }
     if (policy.role !== 'OWNER') throw new TerminalPolicyError('owners');
-    return listLocalContainers();
+    return runLocalDocker(args);
   }
 
   const host = await findSavedHost(userId, projectId, source.hostId);
@@ -381,16 +386,58 @@ export async function listContainers(
       credentials: savedCredentials(host),
       expectedFingerprint: host.hostKeyFingerprint
     },
-    LIST_CONTAINERS_COMMAND
+    `${remoteDockerCommand(args)} 2>&1`
   );
   if (!host.hostKeyFingerprint) {
     await getPrisma()
-      .sshHost.update({
-        where: { id: host.id },
-        data: { hostKeyFingerprint: result.fingerprint }
-      })
+      .sshHost.update({ where: { id: host.id }, data: { hostKeyFingerprint: result.fingerprint } })
       .catch(() => undefined);
   }
-  if (result.code !== 0) throw dockerFailure(result.stderr, result.code);
+  return result;
+}
+
+export async function listContainers(
+  userId: string,
+  projectId: string,
+  source: ContainerSource
+): Promise<ContainerInfo[]> {
+  const result = await runDocker(userId, projectId, source, [...LIST_CONTAINERS_ARGS]);
+  if (result.code !== 0) throw dockerFailure(result.stdout + result.stderr, result.code);
   return parseContainers(result.stdout);
+}
+
+/** The container's last lines of output, stdout and stderr together. */
+export async function readContainerLogs(
+  userId: string,
+  projectId: string,
+  source: ContainerSource,
+  containerId: string
+): Promise<string> {
+  const result = await runDocker(userId, projectId, source, logsArgs(containerId));
+  if (result.code !== 0) throw dockerFailure(result.stdout + result.stderr, result.code);
+  return result.stdout + result.stderr;
+}
+
+export interface ContainerExecResult {
+  output: string;
+  exitCode: number | null;
+}
+
+/** Runs one command in the container with `sh -c`. There is no TTY, so interactive programs won't work. */
+export async function execInContainer(
+  userId: string,
+  projectId: string,
+  source: ContainerSource,
+  containerId: string,
+  command: string
+): Promise<ContainerExecResult> {
+  const result = await runDocker(userId, projectId, source, execArgs(containerId, command));
+  await recordAudit({
+    actorId: userId,
+    projectId,
+    action: 'container.exec',
+    target: containerId.slice(0, 12),
+    details: { command: command.slice(0, 200), exitCode: result.code }
+  });
+  return { output: result.stdout + result.stderr, exitCode: result.code };
 }
