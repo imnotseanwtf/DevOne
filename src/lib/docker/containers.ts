@@ -137,8 +137,163 @@ export function logsArgs(containerId: string, tail = LOG_TAIL_LINES): string[] {
   return ['logs', '--tail', String(tail), '--timestamps', containerId];
 }
 
-export function execArgs(containerId: string, command: string): string[] {
-  return ['exec', containerId, 'sh', '-c', command];
+export function inspectArgs(containerId: string): string[] {
+  return ['inspect', '--type', 'container', containerId];
+}
+
+export function statsArgs(containerId: string): string[] {
+  return ['stats', '--no-stream', '--format', '{{json .}}', containerId];
+}
+
+export const CONTAINER_ACTIONS = ['start', 'stop', 'restart', 'remove'] as const;
+export type ContainerAction = (typeof CONTAINER_ACTIONS)[number];
+
+export function controlArgs(action: ContainerAction, containerId: string): string[] {
+  return action === 'remove' ? ['rm', '-f', containerId] : [action, containerId];
+}
+
+export interface ContainerMount {
+  type: string;
+  source: string;
+  destination: string;
+  readWrite: boolean;
+}
+
+export interface ContainerDetails {
+  id: string;
+  name: string;
+  image: string;
+  imageId: string;
+  state: string;
+  health: string | null;
+  exitCode: number;
+  startedAt: string;
+  finishedAt: string;
+  createdAt: string;
+  command: string;
+  workingDir: string;
+  user: string;
+  restartPolicy: string;
+  env: { key: string; value: string }[];
+  labels: { key: string; value: string }[];
+  mounts: ContainerMount[];
+  ports: { container: string; host: string }[];
+  networks: { name: string; ip: string; gateway: string; mac: string }[];
+}
+
+interface InspectJson {
+  Id?: string;
+  Name?: string;
+  Created?: string;
+  Path?: string;
+  Args?: string[];
+  Image?: string;
+  State?: {
+    Status?: string;
+    ExitCode?: number;
+    StartedAt?: string;
+    FinishedAt?: string;
+    Health?: { Status?: string };
+  };
+  Config?: {
+    Image?: string;
+    Env?: string[] | null;
+    Labels?: Record<string, string> | null;
+    WorkingDir?: string;
+    User?: string;
+  };
+  HostConfig?: { RestartPolicy?: { Name?: string } };
+  Mounts?: { Type?: string; Source?: string; Destination?: string; RW?: boolean }[] | null;
+  NetworkSettings?: {
+    Ports?: Record<string, { HostIp?: string; HostPort?: string }[] | null> | null;
+    Networks?: Record<string, { IPAddress?: string; Gateway?: string; MacAddress?: string }> | null;
+  };
+}
+
+const NEVER = '0001-01-01T00:00:00Z';
+
+const pairs = (entries: [string, string][]) =>
+  entries.map(([key, value]) => ({ key, value })).toSorted((a, b) => a.key.localeCompare(b.key));
+
+export function parseInspect(output: string): ContainerDetails | null {
+  let row: InspectJson | undefined;
+  try {
+    row = (JSON.parse(output) as InspectJson[])[0];
+  } catch {
+    return null;
+  }
+  if (!row?.Id) return null;
+  const env = (row.Config?.Env ?? []).map((line): [string, string] => {
+    const at = line.indexOf('=');
+    return at < 0 ? [line, ''] : [line.slice(0, at), line.slice(at + 1)];
+  });
+  return {
+    id: row.Id,
+    name: (row.Name ?? '').replace(/^\//, '') || row.Id.slice(0, 12),
+    image: row.Config?.Image ?? '',
+    imageId: row.Image ?? '',
+    state: row.State?.Status ?? '',
+    health: row.State?.Health?.Status ?? null,
+    exitCode: row.State?.ExitCode ?? 0,
+    startedAt: row.State?.StartedAt && row.State.StartedAt !== NEVER ? row.State.StartedAt : '',
+    finishedAt: row.State?.FinishedAt && row.State.FinishedAt !== NEVER ? row.State.FinishedAt : '',
+    createdAt: row.Created ?? '',
+    command: [row.Path, ...(row.Args ?? [])].filter(Boolean).join(' '),
+    workingDir: row.Config?.WorkingDir ?? '',
+    user: row.Config?.User ?? '',
+    restartPolicy: row.HostConfig?.RestartPolicy?.Name || 'no',
+    env: pairs(env),
+    labels: pairs(Object.entries(row.Config?.Labels ?? {})),
+    mounts: (row.Mounts ?? []).map((mount) => ({
+      type: mount.Type ?? '',
+      source: mount.Source ?? '',
+      destination: mount.Destination ?? '',
+      readWrite: mount.RW ?? true
+    })),
+    ports: Object.entries(row.NetworkSettings?.Ports ?? {}).flatMap(([container, bindings]) =>
+      bindings && bindings.length > 0
+        ? bindings.map((binding) => ({
+            container,
+            host: `${binding.HostIp ?? ''}:${binding.HostPort ?? ''}`
+          }))
+        : [{ container, host: '' }]
+    ),
+    networks: Object.entries(row.NetworkSettings?.Networks ?? {}).map(([name, network]) => ({
+      name,
+      ip: network.IPAddress ?? '',
+      gateway: network.Gateway ?? '',
+      mac: network.MacAddress ?? ''
+    }))
+  };
+}
+
+export interface ContainerStats {
+  cpuPercent: number;
+  memoryPercent: number;
+  memoryUsage: string;
+  networkIo: string;
+  blockIo: string;
+  pids: number;
+}
+
+const percent = (value: string | undefined) => Number.parseFloat(value ?? '') || 0;
+
+export function parseStats(output: string): ContainerStats | null {
+  const line = output.split('\n').find((entry) => entry.trim().startsWith('{'));
+  if (!line) return null;
+  try {
+    const row = JSON.parse(line) as Record<string, string>;
+    return {
+      cpuPercent: percent(row.CPUPerc),
+      memoryPercent: percent(row.MemPerc),
+      memoryUsage: row.MemUsage ?? '',
+      networkIo: row.NetIO ?? '',
+      blockIo: row.BlockIO ?? '',
+      pids: Number.parseInt(row.PIDs ?? '', 10) || 0
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** `docker` plus quoted arguments, as one line for the remote shell. */

@@ -125,23 +125,35 @@ function connectClient(target: SshTarget): Promise<{ client: Client; fingerprint
 }
 
 /**
- * Connects and opens an interactive shell with a pseudo-terminal. Resolves once
- * the shell is ready, so a failed login never leaves a half-open session.
+ * Connects and opens an interactive shell with a pseudo-terminal, or runs
+ * `command` in one (the way `ssh -t host command` does). Resolves once it is
+ * ready, so a failed login never leaves a half-open session.
  */
 export async function openShell(
   target: SshTarget,
-  size: { cols: number; rows: number }
+  size: { cols: number; rows: number },
+  command?: string
 ): Promise<OpenShell> {
   const { client, fingerprint } = await connectClient(target);
   return new Promise((resolve, reject) => {
-    client.shell({ term: 'xterm-256color', cols: size.cols, rows: size.rows }, (error, channel) => {
+    const ready = (error: Error | undefined, channel: ClientChannel) => {
       if (error) {
         client.end();
-        reject(new SshConnectError('The server refused to open a shell', 'shell'));
+        reject(
+          new SshConnectError(
+            command
+              ? 'The server refused to run the command'
+              : 'The server refused to open a shell',
+            'shell'
+          )
+        );
         return;
       }
       resolve({ client, channel, fingerprint });
-    });
+    };
+    const pty = { term: 'xterm-256color', cols: size.cols, rows: size.rows };
+    if (command) client.exec(command, { pty }, ready);
+    else client.shell(pty, ready);
   });
 }
 

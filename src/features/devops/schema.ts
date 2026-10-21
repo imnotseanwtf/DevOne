@@ -55,6 +55,14 @@ export const connectRequestSchema = z.discriminatedUnion('mode', [
     ...size
   }),
   z.object({
+    mode: z.literal('container'),
+    projectId: z.string().min(1),
+    // "local" is the machine DevOne runs on; anything else is a saved host's id.
+    source: z.string().min(1),
+    containerId: z.string().regex(/^[a-f0-9]{12,64}$/),
+    ...size
+  }),
+  z.object({
     mode: z.literal('new'),
     projectId: z.string().min(1),
     connection: newSshConnectionSchema,

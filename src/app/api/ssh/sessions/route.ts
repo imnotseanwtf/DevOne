@@ -1,5 +1,6 @@
 import { connectRequestSchema } from '@/features/devops/schema';
 import {
+  connectContainerShell,
   connectNewSsh,
   connectSavedSsh,
   SshHostAccessError,
@@ -7,6 +8,7 @@ import {
 } from '@/features/devops/ssh-service';
 import { getCurrentUser } from '@/lib/auth/session';
 import { isSameOrigin } from '@/lib/http/same-origin';
+import { DockerError } from '@/lib/docker/containers';
 import { SshConnectError } from '@/lib/ssh/connection';
 import { NextResponse } from 'next/server';
 
@@ -30,7 +32,15 @@ export async function POST(request: Request) {
     const connected =
       input.mode === 'saved'
         ? await connectSavedSsh(user.id, input.projectId, input.hostId, size)
-        : await connectNewSsh(user.id, input.projectId, input.connection, size);
+        : input.mode === 'container'
+          ? await connectContainerShell(
+              user.id,
+              input.projectId,
+              input.source === 'local' ? { kind: 'local' } : { kind: 'host', hostId: input.source },
+              input.containerId,
+              size
+            )
+          : await connectNewSsh(user.id, input.projectId, input.connection, size);
     return NextResponse.json({
       sessionId: connected.session.id,
       label: connected.session.label,
@@ -38,7 +48,9 @@ export async function POST(request: Request) {
       hostId: connected.hostId
     });
   } catch (error) {
-    if (error instanceof SshConnectError) return fail(error.message, 502);
+    if (error instanceof SshConnectError || error instanceof DockerError) {
+      return fail(error.message, 502);
+    }
     if (error instanceof TerminalPolicyError) return fail(error.message, 403);
     if (error instanceof SshHostAccessError) return fail('Saved host not found', 404);
     return fail('Could not open the connection', 500);

@@ -8,14 +8,22 @@ import {
 } from '@/features/git/service';
 import {
   deleteSshHost,
-  execInContainer,
+  controlContainer,
+  inspectContainer,
   listContainers,
   readContainerLogs,
-  type ContainerExecResult,
+  readContainerStats,
   SshHostAccessError,
   TerminalPolicyError
 } from '@/features/devops/ssh-service';
-import { CONTAINER_ID, DockerError, type ContainerInfo } from '@/lib/docker/containers';
+import {
+  CONTAINER_ACTIONS,
+  CONTAINER_ID,
+  DockerError,
+  type ContainerDetails,
+  type ContainerInfo,
+  type ContainerStats
+} from '@/lib/docker/containers';
 import { SshConnectError } from '@/lib/ssh/connection';
 import { requireUser } from '@/lib/auth/session';
 import {
@@ -119,7 +127,7 @@ const containersSchema = z.object({
 
 const containerSchema = containersSchema.extend({ containerId: z.string().regex(CONTAINER_ID) });
 
-const execSchema = containerSchema.extend({ command: z.string().trim().min(1).max(4000) });
+const controlSchema = containerSchema.extend({ action: z.enum(CONTAINER_ACTIONS) });
 
 function containerFailure(error: unknown, fallback: string): { ok: false; error: string } {
   if (
@@ -171,22 +179,59 @@ export async function containerLogsAction(input: unknown): Promise<Result<{ logs
   }
 }
 
-export async function containerExecAction(
+export async function inspectContainerAction(
   input: unknown
-): Promise<Result<{ result: ContainerExecResult }>> {
+): Promise<Result<{ details: ContainerDetails }>> {
   const user = await requireUser();
-  const parsed = execSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: 'Enter a command' };
+  const parsed = containerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Select a container' };
   try {
-    const result = await execInContainer(
+    const details = await inspectContainer(
+      user.id,
+      parsed.data.projectId,
+      sourceOf(parsed.data.source),
+      parsed.data.containerId
+    );
+    return { ok: true, details };
+  } catch (error) {
+    return containerFailure(error, 'Could not load the container');
+  }
+}
+
+export async function containerStatsAction(
+  input: unknown
+): Promise<Result<{ stats: ContainerStats }>> {
+  const user = await requireUser();
+  const parsed = containerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Select a container' };
+  try {
+    const stats = await readContainerStats(
+      user.id,
+      parsed.data.projectId,
+      sourceOf(parsed.data.source),
+      parsed.data.containerId
+    );
+    return { ok: true, stats };
+  } catch (error) {
+    return containerFailure(error, 'Could not load the stats');
+  }
+}
+
+export async function controlContainerAction(input: unknown): Promise<Result<object>> {
+  const user = await requireUser();
+  const parsed = controlSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Select a container' };
+  try {
+    await controlContainer(
       user.id,
       parsed.data.projectId,
       sourceOf(parsed.data.source),
       parsed.data.containerId,
-      parsed.data.command
+      parsed.data.action
     );
-    return { ok: true, result };
+    revalidatePath(`/projects/${parsed.data.projectId}/devops/containers`);
+    return { ok: true };
   } catch (error) {
-    return containerFailure(error, 'Could not run the command');
+    return containerFailure(error, 'Could not complete that action');
   }
 }
