@@ -17,7 +17,10 @@ import {
   DockerError,
   dockerFailure,
   controlArgs,
+  captureArgs,
   followEventsArgs,
+  followLocalDockerBytes,
+  type ByteStream,
   followLocalDocker,
   followLogsArgs,
   followRawLogsArgs,
@@ -621,6 +624,70 @@ async function followContainerDocker(
       const done = (reason: string) => listener(closed ? null : reason);
       channel.on('close', () => done(endedReason));
       client.on('error', (error: Error) => done(error.message));
+    },
+    close() {
+      closed = true;
+      client.end();
+    }
+  };
+}
+
+async function requireOwner(userId: string, projectId: string) {
+  const policy = await getTerminalPolicy(userId, projectId).catch(() => {
+    throw new SshHostAccessError();
+  });
+  if (policy.role !== 'OWNER') throw new TerminalPolicyError('owners');
+}
+
+/**
+ * Records the container's TCP traffic on one port for a few seconds. It reads
+ * live requests and responses, so it is for project owners only, is written to
+ * the audit log with the port and length, and nothing is kept: the bytes go
+ * from the server's network card to the person's screen and nowhere else.
+ */
+export async function startCapture(
+  userId: string,
+  projectId: string,
+  source: ContainerSource,
+  containerId: string,
+  port: number,
+  seconds: number,
+  revealed: boolean
+): Promise<ByteStream> {
+  const host = await authorizeSource(userId, projectId, source);
+  await requireOwner(userId, projectId);
+  const args = captureArgs(containerId, port, seconds);
+
+  await recordAudit({
+    actorId: userId,
+    projectId,
+    action: 'container.capture',
+    target: containerId.slice(0, 12),
+    details: { port, seconds, secretsShown: revealed, server: host ? host.name : 'local' }
+  });
+
+  if (!host) return followLocalDockerBytes(args, 'Capture finished');
+
+  // No "2>&1": standard output is the capture itself, and mixing text into it would corrupt it.
+  const { channel, client, fingerprint } = await openExecStream(
+    sshTarget(host),
+    remoteDockerCommand(args)
+  );
+  if (!host.hostKeyFingerprint) {
+    await getPrisma()
+      .sshHost.update({ where: { id: host.id }, data: { hostKeyFingerprint: fingerprint } })
+      .catch(() => undefined);
+  }
+  let closed = false;
+  return {
+    onData: (listener) => void channel.on('data', (chunk: Buffer) => listener(chunk)),
+    onStatus: (listener) => {
+      channel.stderr.setEncoding('utf8');
+      channel.stderr.on('data', (text: string) => listener(text));
+    },
+    onEnd: (listener) => {
+      channel.on('close', () => listener(closed ? null : 'Capture finished'));
+      client.on('error', (error: Error) => listener(closed ? null : error.message));
     },
     close() {
       closed = true;

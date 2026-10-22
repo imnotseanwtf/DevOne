@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { LOG_TAIL_LINES } from '@/lib/docker/limits';
+import { CAPTURE_IMAGE, CAPTURE_SECONDS, LOG_TAIL_LINES } from '@/lib/docker/limits';
 
 export interface ContainerInfo {
   id: string;
@@ -370,4 +370,84 @@ export function followLocalDocker(args: string[], endedReason: string): LogStrea
       child.kill('SIGTERM');
     }
   };
+}
+
+/** A running Docker command whose output is binary (a packet capture), with its error output kept apart. */
+export interface ByteStream {
+  onData(listener: (chunk: Buffer) => void): void;
+  /** What the command writes to its error output: image download progress, tcpdump's notices, errors. */
+  onStatus(listener: (text: string) => void): void;
+  onEnd(listener: (reason: string | null) => void): void;
+  close(): void;
+}
+
+/** A long-running `docker <args>` on this machine whose standard output is bytes, not text. */
+export function followLocalDockerBytes(args: string[], endedReason: string): ByteStream {
+  const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const data: ((chunk: Buffer) => void)[] = [];
+  const status: ((text: string) => void)[] = [];
+  const ends: ((reason: string | null) => void)[] = [];
+  let closed = false;
+  let ended = false;
+  const end = (reason: string | null) => {
+    if (ended) return;
+    ended = true;
+    for (const listener of ends) listener(closed ? null : reason);
+  };
+  child.stdout.on('data', (chunk: Buffer) => {
+    for (const listener of data) listener(chunk);
+  });
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (text: string) => {
+    for (const listener of status) listener(text);
+  });
+  child.on('error', (error: NodeJS.ErrnoException) =>
+    end(error.code === 'ENOENT' ? "Docker isn't installed on this machine" : 'Docker failed')
+  );
+  child.on('close', () => end(endedReason));
+  return {
+    onData: (listener) => void data.push(listener),
+    onStatus: (listener) => void status.push(listener),
+    onEnd: (listener) => void ends.push(listener),
+    close() {
+      closed = true;
+      child.kill('SIGTERM');
+    }
+  };
+}
+
+export { CAPTURE_IMAGE, CAPTURE_SECONDS };
+
+/**
+ * A packet capture of one TCP port, written to standard output in pcap format.
+ * It runs in a throwaway container joined to the target's network namespace
+ * (`--net container:`), so the target itself is not touched or restarted, and
+ * `timeout` ends it on its own even if the connection that started it is lost.
+ */
+export function captureArgs(containerId: string, port: number, seconds: number): string[] {
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    throw new DockerError('Pick a port to capture', 'failed');
+  return [
+    'run',
+    '--rm',
+    '--net',
+    `container:${containerId}`,
+    '--cap-add',
+    'NET_RAW',
+    '--cap-add',
+    'NET_ADMIN',
+    CAPTURE_IMAGE,
+    'timeout',
+    String(seconds),
+    'tcpdump',
+    '-i',
+    'any',
+    '-n',
+    '-U',
+    '-s',
+    '0',
+    '-w',
+    '-',
+    `tcp port ${port}`
+  ];
 }

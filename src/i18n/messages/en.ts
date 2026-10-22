@@ -85,6 +85,38 @@ export const en = {
       noOutput: 'No output yet.'
     },
     containers: {
+      captureButton: 'Capture traffic',
+      captureTitle: 'Capture traffic',
+      captureIntro:
+        'Records the requests this container receives and the answers it sends, bodies included, for a few seconds.',
+      captureWarnData:
+        'Bodies can contain personal data. Passwords, tokens and cookies in headers, forms and JSON are hidden; anything else is shown as it is.',
+      captureWarnRun:
+        'This runs a short-lived capture container ({image}) on the server, and the first time it downloads that image. Your container is not touched or restarted.',
+      captureWarnKept:
+        'Nothing is stored. The capture is written to the audit log. Only plain HTTP between the proxy and the container can be read.',
+      capturePort: 'Port',
+      captureDuration: 'Length',
+      captureSeconds: '{count} seconds',
+      captureReveal: 'Show passwords, tokens and cookies too',
+      captureUnderstand: 'I understand this records live traffic',
+      captureStart: 'Start capture',
+      captureStop: 'Stop',
+      captureAgain: 'Capture again',
+      captureRunning: 'Capturing… {seconds}s left',
+      captureDone: 'Capture finished · {count} requests',
+      captureEmpty: 'No requests were captured. Is traffic reaching this container on that port?',
+      captureHidden: 'Secrets hidden',
+      captureShown: 'Secrets shown',
+      captureRequest: 'Request',
+      captureResponse: 'Response',
+      captureNoResponse: 'No response was captured',
+      captureNoBody: 'No body',
+      captureBinary: 'Binary data, {size} bytes',
+      captureCutOff: 'Cut off: showing the first 32,000 characters of {size} bytes',
+      captureWithheld: 'Withheld: too long to check for secrets ({size} bytes)',
+      captureUndecoded: 'Could not be decoded ({size} bytes)',
+      captureOwners: 'Only project owners can capture traffic.',
       tabRequests: 'Requests',
       tabEvents: 'Events',
       evCreate: 'Created',

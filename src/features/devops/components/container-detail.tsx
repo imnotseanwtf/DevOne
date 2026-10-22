@@ -23,6 +23,7 @@ import { ContainerExec } from '@/features/devops/components/container-exec';
 import { ContainerInspect, ContainerMounts } from '@/features/devops/components/container-inspect';
 import { ContainerStatsPanel } from '@/features/devops/components/container-stats';
 import { stateVariant } from '@/features/devops/components/container-state';
+import { candidatePorts } from '@/features/devops/container-format';
 import { useT } from '@/i18n/client';
 import type { ContainerAction } from '@/lib/docker/containers';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,8 @@ interface ContainerDetailProps {
   sourceName: string;
   containerId: string;
   allowed: boolean;
+  /** Project owners may capture a container's traffic. */
+  isOwner: boolean;
   fontSize: number;
 }
 
@@ -59,6 +62,7 @@ export function ContainerDetail({
   sourceName,
   containerId,
   allowed,
+  isOwner,
   fontSize
 }: ContainerDetailProps) {
   const t = useT();
@@ -203,6 +207,8 @@ export function ContainerDetail({
               projectId={projectId}
               source={source}
               containerId={containerId}
+              ports={candidatePorts(container)}
+              canCapture={isOwner}
               active={tab === 'requests'}
             />
           </div>

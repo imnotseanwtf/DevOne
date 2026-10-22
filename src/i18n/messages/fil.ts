@@ -89,6 +89,40 @@ export const fil: MessageShape<typeof en> = {
       noOutput: 'Wala pang output.'
     },
     containers: {
+      captureButton: 'I-capture ang traffic',
+      captureTitle: 'I-capture ang traffic',
+      captureIntro:
+        'Nire-record ang mga request na tinatanggap ng container na ito at ang mga sagot nito, kasama ang body, sa loob ng ilang segundo.',
+      captureWarnData:
+        'Maaaring may personal na data ang mga body. Nakatago ang mga password, token at cookie sa header, form at JSON; ang iba ay ipinapakita nang buo.',
+      captureWarnRun:
+        'Magpapatakbo ito ng pansamantalang capture container ({image}) sa server, at ida-download ang image sa unang beses. Hindi ginagalaw o ni-re-restart ang container mo.',
+      captureWarnKept:
+        'Walang iniimbak. Nakasulat ang capture sa audit log. Plain HTTP lang sa pagitan ng proxy at ng container ang mababasa.',
+      capturePort: 'Port',
+      captureDuration: 'Haba',
+      captureSeconds: '{count} segundo',
+      captureReveal: 'Ipakita rin ang mga password, token at cookie',
+      captureUnderstand: 'Naiintindihan kong nire-record nito ang live na traffic',
+      captureStart: 'Simulan ang capture',
+      captureStop: 'Ihinto',
+      captureAgain: 'Mag-capture ulit',
+      captureRunning: 'Nagca-capture… {seconds}s na lang',
+      captureDone: 'Tapos na ang capture · {count} request',
+      captureEmpty:
+        'Walang request na na-capture. Dumarating ba ang traffic sa container na ito sa port na iyon?',
+      captureHidden: 'Nakatago ang mga sikreto',
+      captureShown: 'Ipinapakita ang mga sikreto',
+      captureRequest: 'Request',
+      captureResponse: 'Response',
+      captureNoResponse: 'Walang response na na-capture',
+      captureNoBody: 'Walang body',
+      captureBinary: 'Binary na data, {size} byte',
+      captureCutOff: 'Pinutol: ipinapakita ang unang 32,000 character ng {size} byte',
+      captureWithheld:
+        'Hindi ipinakita: masyadong mahaba para suriin kung may sikreto ({size} byte)',
+      captureUndecoded: 'Hindi ma-decode ({size} byte)',
+      captureOwners: 'Mga project owner lang ang puwedeng mag-capture ng traffic.',
       tabRequests: 'Mga Request',
       tabEvents: 'Mga Event',
       evCreate: 'Ginawa',

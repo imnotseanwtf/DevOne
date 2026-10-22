@@ -47,6 +47,7 @@ export default async function ContainerPage({ params, searchParams }: ContainerP
           sourceName={host ? host.name : t('devops.containers.local')}
           containerId={containerId}
           allowed={policy.allowed && (source !== 'local' || policy.role === 'OWNER')}
+          isOwner={policy.role === 'OWNER'}
           fontSize={preferences.terminalFontSize}
         />
       </div>

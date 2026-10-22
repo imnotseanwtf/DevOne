@@ -143,4 +143,18 @@ assert.equal(parseStats('garbage'), null);
   assert.deepEqual(pageWindow(0, 1, 10), { page: 1, pageCount: 1, start: 0, end: 0 }, 'an empty list is one empty page');
 }
 
+{
+  const { candidatePorts } = await import('@/features/devops/container-format');
+  assert.deepEqual(
+    candidatePorts({
+      ports: [{ container: '8080/tcp' }, { container: '5353/udp' }, { container: '9000/tcp' }],
+      labels: [{ key: 'traefik.http.services.api.loadbalancer.server.port', value: '9000' }, { key: 'coolify.managed', value: 'true' }]
+    }),
+    [9000, 8080],
+    'the Traefik port first, no repeats, no UDP'
+  );
+  assert.deepEqual(candidatePorts({ ports: [], labels: [] }), []);
+  assert.deepEqual(candidatePorts({ ports: [{ container: 'nonsense' }], labels: [{ key: 'traefik.http.services.x.loadbalancer.server.port', value: 'abc' }] }), []);
+}
+
 console.log('containers: ok');

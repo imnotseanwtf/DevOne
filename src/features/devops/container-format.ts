@@ -59,3 +59,24 @@ export function pageWindow(total: number, page: number, size: number): PageWindo
   const start = (current - 1) * size;
   return { page: current, pageCount, start, end: Math.min(total, start + size) };
 }
+
+/**
+ * The ports a container's app is most likely listening on, best guess first:
+ * the one its Traefik service points at, then the TCP ports it declares.
+ */
+export function candidatePorts(details: {
+  ports: { container: string }[];
+  labels: { key: string; value: string }[];
+}): number[] {
+  const found: number[] = [];
+  for (const { key, value } of details.labels) {
+    if (/^traefik\.(?:http|tcp)\.services\.[^.]+\.loadbalancer\.server\.port$/.test(key)) {
+      found.push(Number(value));
+    }
+  }
+  for (const { container } of details.ports) {
+    const match = /^(\d+)\/tcp$/.exec(container);
+    if (match) found.push(Number(match[1]));
+  }
+  return [...new Set(found.filter((port) => Number.isInteger(port) && port >= 1 && port <= 65535))];
+}

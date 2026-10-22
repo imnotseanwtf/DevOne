@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Icons } from '@/components/icons';
+import { ContainerCapture } from '@/features/devops/components/container-capture';
 import { useEventStream } from '@/features/devops/components/use-event-stream';
 import { useT } from '@/i18n/client';
 import type { ProxyRequest } from '@/lib/docker/access-log';
@@ -14,6 +15,9 @@ interface ContainerRequestsProps {
   projectId: string;
   source: string;
   containerId: string;
+  /** Ports the app probably listens on, for the traffic capture. */
+  ports: number[];
+  canCapture: boolean;
   /** The stream is open only while this tab is showing. */
   active: boolean;
 }
@@ -54,6 +58,8 @@ export function ContainerRequests({
   projectId,
   source,
   containerId,
+  ports,
+  canCapture,
   active
 }: ContainerRequestsProps) {
   const t = useT();
@@ -121,6 +127,14 @@ export function ContainerRequests({
           </Button>
         </div>
       </div>
+
+      <ContainerCapture
+        projectId={projectId}
+        source={source}
+        containerId={containerId}
+        ports={ports}
+        canCapture={canCapture}
+      />
 
       {noAccessLog && items.length === 0 ? (
         <div className='bg-muted/50 space-y-2 rounded-md border p-4 text-sm'>
