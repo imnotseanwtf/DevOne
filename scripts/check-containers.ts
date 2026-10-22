@@ -95,4 +95,41 @@ assert.deepEqual(stats, {
 });
 assert.equal(parseStats('garbage'), null);
 
+
+{
+  const { compactPorts, shortImage } = await import('@/features/devops/container-format');
+  assert.equal(shortImage('postgres:15-alpine'), 'postgres:15-alpine');
+  assert.equal(
+    shortImage('sha256:6f30057d31f5861b66f3545d4821f987aacf1dd920765f0acadea0c58ff975b1'),
+    'sha256:6f30057d31f5…'
+  );
+  assert.equal(
+    shortImage('kwg4kcss00sc0cs84sogog04_api:7228ee1992d69fed4d1a130c0f91c5184700046e'),
+    'kwg4kcss00sc0cs84sogog04_api:7228ee1992d6…'
+  );
+  assert.equal(shortImage('ghcr.io/coollabsio/coolify:4.0.0-beta.462'), 'ghcr.io/coollabsio/coolify:4.0.0-beta.462');
+  assert.equal(shortImage('registry:5000/app'), 'registry:5000/app', 'a registry port is not a tag');
+
+  assert.deepEqual(compactPorts(''), []);
+  assert.deepEqual(compactPorts('8080/tcp'), [{ label: '8080', published: false }]);
+  assert.deepEqual(
+    compactPorts('8000/tcp, 8443/tcp, 9000/tcp, 0.0.0.0:8000->8080/tcp, [::]:8000->8080/tcp'),
+    [
+      { label: '8000', published: false },
+      { label: '8443', published: false },
+      { label: '9000', published: false },
+      { label: '8000:8080', published: true }
+    ],
+    'IPv4 and IPv6 bindings fold into one'
+  );
+  assert.deepEqual(
+    compactPorts('0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/udp, [::]:443->443/udp'),
+    [
+      { label: '80:80', published: true },
+      { label: '443:443/udp', published: true }
+    ]
+  );
+  assert.deepEqual(compactPorts('0.0.0.0:6001-6002->6001-6002/tcp'), [{ label: '6001-6002:6001-6002', published: true }]);
+}
+
 console.log('containers: ok');

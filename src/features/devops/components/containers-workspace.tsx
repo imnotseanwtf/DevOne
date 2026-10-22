@@ -1,11 +1,10 @@
 'use client';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
 import { listContainersAction } from '@/features/devops/actions';
-import { stateVariant } from '@/features/devops/components/container-state';
+import { ContainersTable } from '@/features/devops/components/containers-table';
 import { useT } from '@/i18n/client';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -156,44 +155,7 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
               {t('devops.containers.empty', { source: sourceName })}
             </p>
           ) : (
-            <div className='overflow-x-auto'>
-              <table className='w-full text-left text-sm'>
-                <thead className='text-muted-foreground text-xs'>
-                  <tr>
-                    <th className='py-2 pr-4 font-medium'>{t('devops.containers.name')}</th>
-                    <th className='py-2 pr-4 font-medium'>{t('devops.containers.image')}</th>
-                    <th className='py-2 pr-4 font-medium'>{t('devops.containers.state')}</th>
-                    <th className='py-2 pr-4 font-medium'>{t('devops.containers.status')}</th>
-                    <th className='py-2 font-medium'>{t('devops.containers.ports')}</th>
-                  </tr>
-                </thead>
-                <tbody className='divide-border divide-y'>
-                  {containers.data.map((container) => (
-                    <tr key={container.id}>
-                      <td className='py-2 pr-4 font-medium'>
-                        <Link
-                          href={`/projects/${projectId}/devops/containers/${container.id}?source=${source}`}
-                          className='hover:underline'
-                        >
-                          {container.name}
-                        </Link>
-                        <span className='text-muted-foreground block font-mono text-xs font-normal'>
-                          {container.id.slice(0, 12)}
-                        </span>
-                      </td>
-                      <td className='py-2 pr-4 break-all'>{container.image}</td>
-                      <td className='py-2 pr-4'>
-                        <Badge variant={stateVariant(container.state)}>{container.state}</Badge>
-                      </td>
-                      <td className='py-2 pr-4 whitespace-nowrap'>{container.status}</td>
-                      <td className='text-muted-foreground py-2 font-mono text-xs break-all'>
-                        {container.ports || '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ContainersTable projectId={projectId} source={source} containers={containers.data} />
           )}
         </CardContent>
       </Card>

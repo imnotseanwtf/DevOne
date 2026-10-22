@@ -18,11 +18,11 @@ function when(value: string) {
 
 function Rows({ rows }: { rows: [string, string][] }) {
   return (
-    <dl className='grid grid-cols-[10rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm'>
+    <dl className='grid grid-cols-[fit-content(24rem)_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm'>
       {rows.map(([label, value]) => (
         <div key={label} className='contents'>
-          <dt className='text-muted-foreground'>{label}</dt>
-          <dd className='font-mono text-xs break-all'>{value || '—'}</dd>
+          <dt className='text-muted-foreground min-w-0 leading-5 break-words'>{label}</dt>
+          <dd className='font-mono text-xs leading-5 break-all'>{value || '—'}</dd>
         </div>
       ))}
     </dl>
@@ -36,7 +36,7 @@ export function ContainerInspect({ container }: { container: ContainerDetails })
   const none = <p className='text-muted-foreground text-sm'>{c('none')}</p>;
 
   return (
-    <div className='grid gap-4'>
+    <div className='grid items-start gap-4 xl:grid-cols-2'>
       <Card>
         <CardHeader>
           <CardTitle className='text-base'>{c('overview')}</CardTitle>
@@ -58,42 +58,44 @@ export function ContainerInspect({ container }: { container: ContainerDetails })
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className='flex flex-row items-center justify-between'>
-          <CardTitle className='text-base'>{c('ports')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {container.ports.length === 0 ? (
-            none
-          ) : (
-            <Rows rows={container.ports.map((port) => [port.container, port.host])} />
-          )}
-        </CardContent>
-      </Card>
+      <div className='space-y-4'>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between'>
+            <CardTitle className='text-base'>{c('ports')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {container.ports.length === 0 ? (
+              none
+            ) : (
+              <Rows rows={container.ports.map((port) => [port.container, port.host])} />
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className='text-base'>{c('networks')}</CardTitle>
-        </CardHeader>
-        <CardContent className='space-y-4'>
-          {container.networks.length === 0
-            ? none
-            : container.networks.map((network) => (
-                <div key={network.name} className='space-y-1'>
-                  <p className='text-sm font-medium'>{network.name}</p>
-                  <Rows
-                    rows={[
-                      [c('ip'), network.ip],
-                      [c('gateway'), network.gateway],
-                      [c('mac'), network.mac]
-                    ]}
-                  />
-                </div>
-              ))}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className='text-base'>{c('networks')}</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            {container.networks.length === 0
+              ? none
+              : container.networks.map((network) => (
+                  <div key={network.name} className='space-y-1'>
+                    <p className='text-sm font-medium'>{network.name}</p>
+                    <Rows
+                      rows={[
+                        [c('ip'), network.ip],
+                        [c('gateway'), network.gateway],
+                        [c('mac'), network.mac]
+                      ]}
+                    />
+                  </div>
+                ))}
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
+      <Card className='xl:col-span-2'>
         <CardHeader className='flex flex-row items-center justify-between'>
           <CardTitle className='text-base'>{c('environment')}</CardTitle>
           <Button variant='outline' size='sm' onClick={() => setReveal((current) => !current)}>
@@ -111,7 +113,7 @@ export function ContainerInspect({ container }: { container: ContainerDetails })
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className='xl:col-span-2'>
         <CardHeader>
           <CardTitle className='text-base'>{c('labels')}</CardTitle>
         </CardHeader>

@@ -89,6 +89,14 @@ export const fil: MessageShape<typeof en> = {
       noOutput: 'Wala pang output.'
     },
     containers: {
+      searchPlaceholder: 'Maghanap ayon sa pangalan, image o ID',
+      runningOnly: 'Tumatakbo lang',
+      selected: '{count} ang napili',
+      selectAll: 'Piliin lahat',
+      actions: 'Mga aksyon',
+      noMatch: 'Walang tumutugmang container.',
+      deleteManyTitle: 'Burahin ang {count} container?',
+      portsMore: '+{count} pa',
       local: 'Ang makinang ito',
       localHint: 'Mga container sa makinang pinagtatakbuhan ng DevOne (mga project owner lang).',
       servers: 'Mga server',

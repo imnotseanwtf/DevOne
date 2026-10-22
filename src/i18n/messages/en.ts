@@ -85,6 +85,14 @@ export const en = {
       noOutput: 'No output yet.'
     },
     containers: {
+      searchPlaceholder: 'Search by name, image or ID',
+      runningOnly: 'Only running',
+      selected: '{count} selected',
+      selectAll: 'Select all',
+      actions: 'Actions',
+      noMatch: 'No containers match.',
+      deleteManyTitle: 'Delete {count} containers?',
+      portsMore: '+{count} more',
       local: 'This machine',
       localHint: 'Containers on the machine DevOne runs on (project owners only).',
       servers: 'Servers',
