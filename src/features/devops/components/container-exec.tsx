@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { Icons } from '@/components/icons';
 import { SshTerminal } from '@/features/devops/components/ssh-terminal';
 import { useT } from '@/i18n/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -88,7 +89,10 @@ export function ContainerExec({
         </p>
       )}
       {!session && connecting && (
-        <p className='text-muted-foreground text-sm'>{t('devops.containers.execStarting')}</p>
+        <div className='flex h-[60vh] min-h-80 items-center justify-center gap-2 rounded-md bg-[#0a0a0a] text-sm text-neutral-400'>
+          <Icons.spinner className='size-4 animate-spin' />
+          {t('devops.containers.execStarting')}
+        </div>
       )}
       {session && (
         <div className='h-[60vh] min-h-80 overflow-hidden rounded-md bg-[#0a0a0a] p-2'>

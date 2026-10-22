@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import { controlContainerAction, inspectContainerAction } from '@/features/devops/actions';
 import { ContainerLogs } from '@/features/devops/components/container-logs';
@@ -114,7 +115,7 @@ export function ContainerDetail({
           {details.error.message}
         </p>
       ) : !container ? (
-        <p className='text-muted-foreground text-sm'>{t('devops.containers.loading')}</p>
+        <DetailSkeleton />
       ) : (
         <>
           <div className='flex flex-wrap items-start justify-between gap-4'>
@@ -241,6 +242,35 @@ export function ContainerDetail({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+/** The page's shape while the first answer from Docker is on its way. */
+function DetailSkeleton() {
+  return (
+    <div className='space-y-4' aria-busy='true'>
+      <div className='flex flex-wrap items-start justify-between gap-4'>
+        <div className='space-y-2'>
+          <div className='flex items-center gap-2'>
+            <Skeleton className='h-7 w-64' />
+            <Skeleton className='h-5 w-16 rounded-full' />
+          </div>
+          <Skeleton className='h-4 w-80' />
+          <Skeleton className='h-3 w-96 max-w-full' />
+        </div>
+        <div className='flex gap-2'>
+          <Skeleton className='h-8 w-20' />
+          <Skeleton className='h-8 w-24' />
+          <Skeleton className='h-8 w-24' />
+        </div>
+      </div>
+      <div className='flex gap-5 border-b pb-2'>
+        {[10, 12, 20, 10, 12].map((width, index) => (
+          <Skeleton key={index} className='h-4' style={{ width: `${width * 4}px` }} />
+        ))}
+      </div>
+      <Skeleton className='h-[40vh] w-full' />
     </div>
   );
 }

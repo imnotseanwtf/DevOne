@@ -85,6 +85,9 @@ export const en = {
       noOutput: 'No output yet.'
     },
     containers: {
+      collecting: 'Collecting samples…',
+      statsLoading: 'Waiting for the first sample…',
+      statsLive: 'Live · updates every 3 seconds',
       showing: '{from}–{to} of {total}',
       perPage: 'Per page',
       pageOf: 'Page {page} of {count}',

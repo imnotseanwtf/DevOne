@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import { listContainersAction } from '@/features/devops/actions';
 import { ContainersTable } from '@/features/devops/components/containers-table';
@@ -145,7 +146,7 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
           {source === '' ? (
             <p className='text-muted-foreground text-sm'>{t('devops.containers.selectSource')}</p>
           ) : containers.isPending ? (
-            <p className='text-muted-foreground text-sm'>{t('devops.containers.loading')}</p>
+            <TableSkeleton />
           ) : containers.isError ? (
             <p role='alert' className='text-destructive text-sm'>
               {containers.error.message}
@@ -159,6 +160,35 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/** Rows the size of real ones, so the page doesn't jump when the list arrives (a server can take a second or two to answer). */
+function TableSkeleton() {
+  return (
+    <div className='space-y-3' aria-busy='true'>
+      <div className='flex items-center gap-3'>
+        <Skeleton className='h-9 w-64' />
+        <Skeleton className='h-5 w-28' />
+      </div>
+      <div className='divide-border divide-y'>
+        {Array.from({ length: 6 }, (_, index) => (
+          <div key={index} className='flex items-center gap-4 py-3'>
+            <Skeleton className='size-4' />
+            <div className='w-56 space-y-1.5'>
+              <Skeleton className='h-4 w-40' />
+              <Skeleton className='h-3 w-24' />
+            </div>
+            <Skeleton className='h-4 w-52' />
+            <div className='space-y-1.5'>
+              <Skeleton className='h-5 w-16 rounded-full' />
+              <Skeleton className='h-3 w-24' />
+            </div>
+            <Skeleton className='ml-auto h-6 w-24' />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

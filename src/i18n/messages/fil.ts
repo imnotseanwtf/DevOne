@@ -89,6 +89,9 @@ export const fil: MessageShape<typeof en> = {
       noOutput: 'Wala pang output.'
     },
     containers: {
+      collecting: 'Kumukuha ng mga sample…',
+      statsLoading: 'Hinihintay ang unang sample…',
+      statsLive: 'Live · nag-a-update kada 3 segundo',
       showing: '{from}–{to} sa {total}',
       perPage: 'Bawat page',
       pageOf: 'Page {page} sa {count}',

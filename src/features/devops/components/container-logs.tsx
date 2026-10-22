@@ -126,7 +126,17 @@ export function ContainerLogs({ projectId, source, containerId, active }: Contai
         }}
         className='h-[60vh] min-h-80 overflow-auto rounded-md bg-[#0a0a0a] p-3 font-mono text-xs break-all whitespace-pre-wrap text-neutral-200'
       >
-        {text || (status === 'live' ? t('devops.containers.noLogs') : '')}
+        {text ||
+          (status === 'connecting' ? (
+            <span className='flex items-center gap-2 text-neutral-400'>
+              <Icons.spinner className='size-4 animate-spin' />
+              {t('devops.containers.loadingLogs')}
+            </span>
+          ) : status === 'live' ? (
+            <span className='text-neutral-500'>{t('devops.containers.noLogs')}</span>
+          ) : (
+            ''
+          ))}
       </pre>
     </div>
   );
