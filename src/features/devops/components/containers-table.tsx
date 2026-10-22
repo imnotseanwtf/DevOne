@@ -14,16 +14,23 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Switch } from '@/components/ui/switch';
 import { Icons } from '@/components/icons';
 import { controlContainerAction } from '@/features/devops/actions';
 import { stateVariant } from '@/features/devops/components/container-state';
-import { compactPorts, shortImage } from '@/features/devops/container-format';
+import {
+  compactPorts,
+  PAGE_SIZES,
+  pageWindow,
+  shortImage
+} from '@/features/devops/container-format';
 import { useT } from '@/i18n/client';
 import type { ContainerAction, ContainerInfo } from '@/lib/docker/containers';
 import { cn } from '@/lib/utils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { parseAsInteger, useQueryStates } from 'nuqs';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -44,6 +51,12 @@ const PORTS_SHOWN = 3;
 export function ContainersTable({ projectId, source, containers }: ContainersTableProps) {
   const t = useT();
   const queryClient = useQueryClient();
+  // In the URL, so a reload or a shared link keeps the page.
+  const [paging, setPaging] = useQueryStates({
+    page: parseAsInteger.withDefault(1),
+    size: parseAsInteger.withDefault(PAGE_SIZES[0])
+  });
+  const size = PAGE_SIZES.some((option) => option === paging.size) ? paging.size : PAGE_SIZES[0];
   const [query, setQuery] = useState('');
   const [runningOnly, setRunningOnly] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -59,9 +72,15 @@ export function ContainersTable({ projectId, source, containers }: ContainersTab
     });
   }, [containers, query, runningOnly]);
 
+  const view = pageWindow(visible.length, paging.page, size);
+  const rows = visible.slice(view.start, view.end);
+
   // A container that went away (or is filtered out) can't stay selected.
   const chosen = visible.filter((container) => selected.has(container.id));
-  const allChosen = visible.length > 0 && chosen.length === visible.length;
+  // The header box is for the rows on screen; the selection itself can span pages.
+  const onPage = rows.filter((container) => selected.has(container.id)).length;
+  const allChosen = rows.length > 0 && onPage === rows.length;
+  const goTo = (page: number) => void setPaging({ page });
 
   const run = useMutation({
     // One at a time: each action opens its own connection to the server.
@@ -106,14 +125,24 @@ export function ContainersTable({ projectId, source, containers }: ContainersTab
           <Icons.search className='text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2' />
           <Input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              goTo(1);
+            }}
             placeholder={t('devops.containers.searchPlaceholder')}
             aria-label={t('devops.containers.searchPlaceholder')}
             className='pl-8'
           />
         </div>
         <label className='text-muted-foreground flex items-center gap-2 text-sm'>
-          <Switch size='sm' checked={runningOnly} onCheckedChange={setRunningOnly} />
+          <Switch
+            size='sm'
+            checked={runningOnly}
+            onCheckedChange={(on) => {
+              setRunningOnly(on);
+              goTo(1);
+            }}
+          />
           {t('devops.containers.runningOnly')}
         </label>
 
@@ -171,11 +200,16 @@ export function ContainersTable({ projectId, source, containers }: ContainersTab
                 <th className='w-8 py-2 pr-2'>
                   <Checkbox
                     checked={allChosen}
-                    indeterminate={chosen.length > 0 && !allChosen}
+                    indeterminate={onPage > 0 && !allChosen}
                     onCheckedChange={(on) =>
-                      setSelected(
-                        on ? new Set(visible.map((container) => container.id)) : new Set()
-                      )
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        for (const container of rows) {
+                          if (on) next.add(container.id);
+                          else next.delete(container.id);
+                        }
+                        return next;
+                      })
                     }
                     aria-label={t('devops.containers.selectAll')}
                   />
@@ -188,7 +222,7 @@ export function ContainersTable({ projectId, source, containers }: ContainersTab
               </tr>
             </thead>
             <tbody className='divide-border divide-y'>
-              {visible.map((container) => {
+              {rows.map((container) => {
                 const isRunning = container.state === 'running';
                 const working = busy.has(container.id);
                 const ports = compactPorts(container.ports);
@@ -308,6 +342,62 @@ export function ContainersTable({ projectId, source, containers }: ContainersTab
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {visible.length > PAGE_SIZES[0] && (
+        <div className='text-muted-foreground flex flex-wrap items-center justify-between gap-3 text-sm'>
+          <span>
+            {t('devops.containers.showing', {
+              from: String(view.start + 1),
+              to: String(view.end),
+              total: String(visible.length)
+            })}
+          </span>
+          <div className='flex items-center gap-3'>
+            <label className='flex items-center gap-2'>
+              {t('devops.containers.perPage')}
+              <NativeSelect
+                size='sm'
+                value={size}
+                onChange={(event) => void setPaging({ size: Number(event.target.value), page: 1 })}
+              >
+                {PAGE_SIZES.map((option) => (
+                  <NativeSelectOption key={option} value={option}>
+                    {option}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </label>
+            <span>
+              {t('devops.containers.pageOf', {
+                page: String(view.page),
+                count: String(view.pageCount)
+              })}
+            </span>
+            <div className='flex gap-1'>
+              <Button
+                variant='outline'
+                size='icon'
+                className='size-8'
+                disabled={view.page <= 1}
+                aria-label={t('devops.containers.previousPage')}
+                onClick={() => goTo(view.page - 1)}
+              >
+                <Icons.chevronLeft />
+              </Button>
+              <Button
+                variant='outline'
+                size='icon'
+                className='size-8'
+                disabled={view.page >= view.pageCount}
+                aria-label={t('devops.containers.nextPage')}
+                onClick={() => goTo(view.page + 1)}
+              >
+                <Icons.chevronRight />
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

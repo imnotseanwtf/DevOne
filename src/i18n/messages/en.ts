@@ -85,6 +85,11 @@ export const en = {
       noOutput: 'No output yet.'
     },
     containers: {
+      showing: '{from}–{to} of {total}',
+      perPage: 'Per page',
+      pageOf: 'Page {page} of {count}',
+      previousPage: 'Previous page',
+      nextPage: 'Next page',
       searchPlaceholder: 'Search by name, image or ID',
       runningOnly: 'Only running',
       selected: '{count} selected',

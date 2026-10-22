@@ -132,4 +132,15 @@ assert.equal(parseStats('garbage'), null);
   assert.deepEqual(compactPorts('0.0.0.0:6001-6002->6001-6002/tcp'), [{ label: '6001-6002:6001-6002', published: true }]);
 }
 
+{
+  const { pageWindow } = await import('@/features/devops/container-format');
+  assert.deepEqual(pageWindow(28, 1, 10), { page: 1, pageCount: 3, start: 0, end: 10 });
+  assert.deepEqual(pageWindow(28, 3, 10), { page: 3, pageCount: 3, start: 20, end: 28 });
+  assert.deepEqual(pageWindow(28, 9, 10), { page: 3, pageCount: 3, start: 20, end: 28 }, 'past the end lands on the last page');
+  assert.deepEqual(pageWindow(28, 0, 10), { page: 1, pageCount: 3, start: 0, end: 10 });
+  assert.deepEqual(pageWindow(28, Number.NaN, 10), { page: 1, pageCount: 3, start: 0, end: 10 });
+  assert.deepEqual(pageWindow(20, 2, 10), { page: 2, pageCount: 2, start: 10, end: 20 }, 'an exact multiple has no empty page');
+  assert.deepEqual(pageWindow(0, 1, 10), { page: 1, pageCount: 1, start: 0, end: 0 }, 'an empty list is one empty page');
+}
+
 console.log('containers: ok');

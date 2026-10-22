@@ -40,3 +40,22 @@ export function compactPorts(ports: string): PortMapping[] {
   }
   return [...seen.values()];
 }
+
+export const PAGE_SIZES = [10, 25, 50, 100] as const;
+
+export interface PageWindow {
+  /** 1-based, kept within the pages that exist. */
+  page: number;
+  pageCount: number;
+  /** Index range into the list: `list.slice(start, end)`. */
+  start: number;
+  end: number;
+}
+
+/** Where a page falls in a list; a page past the end (the list shrank) lands on the last one. */
+export function pageWindow(total: number, page: number, size: number): PageWindow {
+  const pageCount = Math.max(1, Math.ceil(total / size));
+  const current = Math.min(Math.max(1, Math.floor(page) || 1), pageCount);
+  const start = (current - 1) * size;
+  return { page: current, pageCount, start, end: Math.min(total, start + size) };
+}

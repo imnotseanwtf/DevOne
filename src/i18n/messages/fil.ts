@@ -89,6 +89,11 @@ export const fil: MessageShape<typeof en> = {
       noOutput: 'Wala pang output.'
     },
     containers: {
+      showing: '{from}–{to} sa {total}',
+      perPage: 'Bawat page',
+      pageOf: 'Page {page} sa {count}',
+      previousPage: 'Nakaraang page',
+      nextPage: 'Susunod na page',
       searchPlaceholder: 'Maghanap ayon sa pangalan, image o ID',
       runningOnly: 'Tumatakbo lang',
       selected: '{count} ang napili',
