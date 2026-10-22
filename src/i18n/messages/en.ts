@@ -162,6 +162,21 @@ export const en = {
       actionFailed: 'That didn’t work'
     },
     terminal: {
+      tools: {
+        helper: 'Command helper',
+        helperSearch: 'Search commands (e.g. logs, disk, port)',
+        helperHint: 'Click one to type it at the prompt. It isn’t run until you press Enter.',
+        noMatches: 'No commands match.',
+        risky: 'careful',
+        search: 'Search',
+        searchPlaceholder: 'Find in output',
+        previous: 'Previous match',
+        next: 'Next match',
+        noMatch: 'No match',
+        didYouMean: 'Did you mean',
+        insert: 'Type it',
+        dismiss: 'Dismiss'
+      },
       savedServers: 'Saved servers',
       savedHint: 'Tick “Save these credentials” when connecting to connect in one click next time.',
       newConnection: 'New connection',

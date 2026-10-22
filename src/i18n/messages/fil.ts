@@ -166,6 +166,22 @@ export const fil: MessageShape<typeof en> = {
       actionFailed: 'Hindi iyon gumana'
     },
     terminal: {
+      tools: {
+        helper: 'Command helper',
+        helperSearch: 'Maghanap ng command (hal. logs, disk, port)',
+        helperHint:
+          'I-click para i-type sa prompt. Hindi ito tatakbo hangga’t hindi mo pinipindot ang Enter.',
+        noMatches: 'Walang tumutugmang command.',
+        risky: 'ingat',
+        search: 'Hanapin',
+        searchPlaceholder: 'Hanapin sa output',
+        previous: 'Nakaraang tugma',
+        next: 'Susunod na tugma',
+        noMatch: 'Walang tugma',
+        didYouMean: 'Ang ibig mo bang sabihin ay',
+        insert: 'I-type',
+        dismiss: 'Isara'
+      },
       savedServers: 'Mga naka-save na server',
       savedHint:
         'Lagyan ng tsek ang “I-save ang mga credential na ito” para isang click na lang sa susunod.',

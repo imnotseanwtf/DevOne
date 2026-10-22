@@ -1,7 +1,20 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Icons } from '@/components/icons';
+import { TerminalHelperPanel } from '@/features/devops/components/terminal-helper-panel';
 import { useXterm } from '@/features/devops/components/use-xterm';
-import { useEffect, useRef } from 'react';
+import {
+  correctLine,
+  detectMistake,
+  LineTracker,
+  stripAnsi,
+  type Mistake
+} from '@/features/devops/terminal-helper/suggest';
+import { useT } from '@/i18n/client';
+import type { SearchAddon } from '@xterm/addon-search';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface SshTerminalProps {
   sessionId: string;
@@ -25,12 +38,69 @@ function decodeBase64(value: string): Uint8Array {
   return bytes;
 }
 
-/** A live SSH shell: output streams in over SSE, keystrokes go out as POSTs. */
+/** How much recent output is kept to look for a shell error in. */
+const TAIL_CHARS = 1000;
+
+/**
+ * A live SSH shell: output streams in over SSE, keystrokes go out as POSTs.
+ * Around it: search (Ctrl+Shift+F), clickable links, a command helper that types
+ * into the prompt, and a "did you mean" offer when the shell reports a typo.
+ */
 export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminal = useXterm(containerRef, { fontSize });
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const sendRef = useRef<(text: string) => void>(() => {});
+  const searchRef = useRef<SearchAddon | null>(null);
+  const lastLine = useRef('');
+  const [mistake, setMistake] = useState<Mistake | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [noMatch, setNoMatch] = useState(false);
+
+  const insert = useCallback(
+    (text: string) => {
+      sendRef.current(text);
+      terminal?.focus();
+    },
+    [terminal]
+  );
+
+  // Add-ons load after the terminal exists; they only touch the browser.
+  useEffect(() => {
+    if (!terminal) return;
+    let disposed = false;
+    void Promise.all([import('@xterm/addon-search'), import('@xterm/addon-web-links')]).then(
+      ([{ SearchAddon }, { WebLinksAddon }]) => {
+        if (disposed) return;
+        const search = new SearchAddon();
+        terminal.loadAddon(search);
+        terminal.loadAddon(new WebLinksAddon());
+        searchRef.current = search;
+      }
+    );
+    // Ctrl+F belongs to the shell (and the browser); Ctrl+Shift+F opens our search.
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type === 'keydown' && event.ctrlKey && event.shiftKey && event.key === 'F') {
+        setSearching(true);
+        return false;
+      }
+      return true;
+    });
+    return () => {
+      disposed = true;
+      searchRef.current = null;
+    };
+  }, [terminal]);
+
+  const find = (backwards: boolean) => {
+    const addon = searchRef.current;
+    if (!addon || !query) return;
+    const options = { caseSensitive: false };
+    setNoMatch(!(backwards ? addon.findPrevious(query, options) : addon.findNext(query, options)));
+  };
 
   useEffect(() => {
     if (!terminal) return;
@@ -47,7 +117,19 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     };
 
     const source = new EventSource(`/api/ssh/sessions/${sessionId}/stream`);
-    source.addEventListener('message', (event) => terminal.write(decodeBase64(event.data)));
+    const decoder = new TextDecoder();
+    let tail = '';
+    source.addEventListener('message', (event) => {
+      const bytes = decodeBase64(event.data);
+      terminal.write(bytes);
+      tail = (tail + stripAnsi(decoder.decode(bytes, { stream: true }))).slice(-TAIL_CHARS);
+      const found = detectMistake(tail);
+      if (found) {
+        // Look at each error once: the same line stays in view for a while.
+        tail = '';
+        setMistake(found);
+      }
+    });
     source.addEventListener('exit', (event) => {
       const { reason } = JSON.parse((event as MessageEvent<string>).data) as { reason: string };
       end(reason);
@@ -71,9 +153,18 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
       if (response?.status === 404) end('Session ended');
       else void flush();
     };
-    const input = terminal.onData((data) => {
-      pending += data;
+    const send = (text: string) => {
+      pending += text;
       void flush();
+    };
+    sendRef.current = send;
+    const typed = new LineTracker();
+    const input = terminal.onData((data) => {
+      typed.push(data);
+      lastLine.current = typed.last;
+      // Typing again means the offer is no longer about what is on screen.
+      setMistake(null);
+      send(data);
     });
 
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -98,5 +189,96 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     };
   }, [terminal, sessionId]);
 
-  return <div ref={containerRef} className='h-full w-full' />;
+  const correction = mistake
+    ? (correctLine(lastLine.current, mistake) ?? mistake.suggestion)
+    : null;
+
+  return (
+    <div className='flex h-full w-full flex-col'>
+      <div className='flex flex-wrap items-center gap-1 pb-1'>
+        <TerminalHelperPanel onInsert={insert} />
+        <Button
+          variant='ghost'
+          size='sm'
+          className='h-7 gap-1.5 text-neutral-300'
+          onClick={() => setSearching((current) => !current)}
+          title='Ctrl+Shift+F'
+        >
+          <Icons.search className='size-3.5' />
+          {t('devops.terminal.tools.search')}
+        </Button>
+        {searching && (
+          <div className='flex items-center gap-1'>
+            <Input
+              autoFocus
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setNoMatch(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') find(event.shiftKey);
+                if (event.key === 'Escape') {
+                  setSearching(false);
+                  searchRef.current?.clearDecorations();
+                  terminal?.focus();
+                }
+              }}
+              placeholder={t('devops.terminal.tools.searchPlaceholder')}
+              aria-label={t('devops.terminal.tools.search')}
+              aria-invalid={noMatch}
+              className='h-7 w-48 bg-neutral-900 text-xs text-neutral-100'
+            />
+            <Button
+              variant='ghost'
+              size='icon'
+              className='size-7 text-neutral-300'
+              aria-label={t('devops.terminal.tools.previous')}
+              onClick={() => find(true)}
+            >
+              <Icons.chevronUp className='size-4' />
+            </Button>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='size-7 text-neutral-300'
+              aria-label={t('devops.terminal.tools.next')}
+              onClick={() => find(false)}
+            >
+              <Icons.chevronDown className='size-4' />
+            </Button>
+            {noMatch && (
+              <span className='text-xs text-red-400'>{t('devops.terminal.tools.noMatch')}</span>
+            )}
+          </div>
+        )}
+        {mistake && correction && (
+          <div className='ml-auto flex items-center gap-2 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200'>
+            <span>{t('devops.terminal.tools.didYouMean')}</span>
+            <code className='font-mono'>{correction}</code>
+            <Button
+              size='sm'
+              variant='secondary'
+              className='h-6 px-2 text-xs'
+              onClick={() => {
+                setMistake(null);
+                insert(correction);
+              }}
+            >
+              {t('devops.terminal.tools.insert')}
+            </Button>
+            <button
+              type='button'
+              aria-label={t('devops.terminal.tools.dismiss')}
+              className='opacity-70 hover:opacity-100'
+              onClick={() => setMistake(null)}
+            >
+              <Icons.close className='size-3.5' />
+            </button>
+          </div>
+        )}
+      </div>
+      <div ref={containerRef} className='min-h-0 w-full flex-1' />
+    </div>
+  );
 }
