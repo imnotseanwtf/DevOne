@@ -202,3 +202,24 @@ export async function runCommand(target: SshTarget, command: string): Promise<Co
     });
   });
 }
+
+export interface ExecStream {
+  channel: ClientChannel;
+  client: Client;
+  fingerprint: string;
+}
+
+/** Starts a command with no terminal and leaves it running: the caller reads its output and ends it. */
+export async function openExecStream(target: SshTarget, command: string): Promise<ExecStream> {
+  const { client, fingerprint } = await connectClient(target);
+  return new Promise((resolve, reject) => {
+    client.exec(command, (error, channel) => {
+      if (error) {
+        client.end();
+        reject(new SshConnectError('The server refused to run the command', 'shell'));
+        return;
+      }
+      resolve({ channel, client, fingerprint });
+    });
+  });
+}

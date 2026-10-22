@@ -5,18 +5,26 @@ import { recordAudit } from '@/lib/audit/record';
 import { getPrisma } from '@/lib/db/prisma';
 import { matchesAnyGlob } from '@/lib/glob';
 import { decryptSecret, encryptSecret, getEncryptionKey } from '@/lib/encryption/secrets';
-import { openShell, runCommand, SshConnectError, type SshCredentials } from '@/lib/ssh/connection';
+import {
+  openExecStream,
+  openShell,
+  runCommand,
+  SshConnectError,
+  type SshCredentials
+} from '@/lib/ssh/connection';
 import {
   type ContainerInfo,
   DockerError,
   dockerFailure,
   controlArgs,
+  followLocalLogs,
+  followLogsArgs,
+  type LogStream,
   type ContainerAction,
   type ContainerDetails,
   type ContainerStats,
   inspectArgs,
   LIST_CONTAINERS_ARGS,
-  logsArgs,
   parseContainers,
   parseInspect,
   parseStats,
@@ -448,18 +456,6 @@ export async function inspectContainer(
   return details;
 }
 
-/** The container's last lines of output, stdout and stderr together. */
-export async function readContainerLogs(
-  userId: string,
-  projectId: string,
-  source: ContainerSource,
-  containerId: string
-): Promise<string> {
-  const result = await runDocker(userId, projectId, source, logsArgs(containerId));
-  if (result.code !== 0) throw dockerFailure(result.stdout + result.stderr, result.code);
-  return result.stdout + result.stderr;
-}
-
 export async function readContainerStats(
   userId: string,
   projectId: string,
@@ -525,4 +521,43 @@ export async function connectContainerShell(
     details: { server: host ? host.name : 'local' }
   });
   return { session, fingerprint: shell.fingerprint, hostId: host?.id ?? null };
+}
+
+/** Follows the container's logs live. The stream stays open until `close()` or the container goes away. */
+export async function followContainerLogs(
+  userId: string,
+  projectId: string,
+  source: ContainerSource,
+  containerId: string
+): Promise<LogStream> {
+  const host = await authorizeSource(userId, projectId, source);
+  if (!host) return followLocalLogs(containerId);
+
+  const { channel, client, fingerprint } = await openExecStream(
+    sshTarget(host),
+    `${remoteDockerCommand(followLogsArgs(containerId))} 2>&1`
+  );
+  if (!host.hostKeyFingerprint) {
+    await getPrisma()
+      .sshHost.update({ where: { id: host.id }, data: { hostKeyFingerprint: fingerprint } })
+      .catch(() => undefined);
+  }
+  let closed = false;
+  return {
+    onData: (listener) => {
+      channel.setEncoding('utf8');
+      channel.stderr.setEncoding('utf8');
+      channel.on('data', (chunk: string) => listener(chunk));
+      channel.stderr.on('data', (chunk: string) => listener(chunk));
+    },
+    onEnd: (listener) => {
+      const done = (reason: string) => listener(closed ? null : reason);
+      channel.on('close', () => done('The container stopped writing logs'));
+      client.on('error', (error: Error) => done(error.message));
+    },
+    close() {
+      closed = true;
+      client.end();
+    }
+  };
 }

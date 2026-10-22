@@ -14,23 +14,19 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
-import {
-  containerLogsAction,
-  controlContainerAction,
-  inspectContainerAction
-} from '@/features/devops/actions';
+import { controlContainerAction, inspectContainerAction } from '@/features/devops/actions';
+import { ContainerLogs } from '@/features/devops/components/container-logs';
 import { ContainerExec } from '@/features/devops/components/container-exec';
 import { ContainerInspect, ContainerMounts } from '@/features/devops/components/container-inspect';
 import { ContainerStatsPanel } from '@/features/devops/components/container-stats';
 import { stateVariant } from '@/features/devops/components/container-state';
 import { useT } from '@/i18n/client';
 import type { ContainerAction } from '@/lib/docker/containers';
-import { LOG_TAIL_LINES } from '@/lib/docker/limits';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface ContainerDetailProps {
@@ -190,7 +186,12 @@ export function ContainerDetail({
           </div>
 
           <div className={cn(tab !== 'logs' && 'hidden')}>
-            <ContainerLogs projectId={projectId} source={source} containerId={containerId} />
+            <ContainerLogs
+              projectId={projectId}
+              source={source}
+              containerId={containerId}
+              active={tab === 'logs'}
+            />
           </div>
           <div className={cn(tab !== 'inspect' && 'hidden')}>
             <ContainerInspect container={container} />
@@ -240,79 +241,6 @@ export function ContainerDetail({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function ContainerLogs({
-  projectId,
-  source,
-  containerId
-}: {
-  projectId: string;
-  source: string;
-  containerId: string;
-}) {
-  const t = useT();
-  const [follow, setFollow] = useState(true);
-  const box = useRef<HTMLPreElement>(null);
-
-  const logs = useQuery({
-    queryKey: ['devops', 'container-logs', projectId, source, containerId],
-    queryFn: async () => {
-      const result = await containerLogsAction({ projectId, source, containerId });
-      if (!result.ok) throw new Error(result.error);
-      return result.logs;
-    },
-    retry: false,
-    refetchInterval: follow ? 3000 : false
-  });
-
-  // Keep the newest line in view.
-  useEffect(() => {
-    box.current?.scrollTo({ top: box.current.scrollHeight });
-  }, [logs.data]);
-
-  return (
-    <div className='space-y-2'>
-      <div className='flex items-center justify-between gap-2'>
-        <p className='text-muted-foreground text-xs'>
-          {t('devops.containers.logHint', { lines: String(LOG_TAIL_LINES) })}
-        </p>
-        <div className='flex items-center gap-2'>
-          <Button
-            variant={follow ? 'secondary' : 'outline'}
-            size='sm'
-            aria-pressed={follow}
-            onClick={() => setFollow((current) => !current)}
-          >
-            {t('devops.containers.follow')}
-          </Button>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={logs.isFetching}
-            onClick={() => void logs.refetch()}
-          >
-            {logs.isFetching ? <Icons.spinner className='animate-spin' /> : <Icons.refresh />}
-            {t('devops.containers.refresh')}
-          </Button>
-        </div>
-      </div>
-      {logs.isPending ? (
-        <p className='text-muted-foreground text-sm'>{t('devops.containers.loadingLogs')}</p>
-      ) : logs.isError ? (
-        <p role='alert' className='text-destructive text-sm'>
-          {logs.error.message}
-        </p>
-      ) : (
-        <pre
-          ref={box}
-          className='h-[60vh] min-h-80 overflow-auto rounded-md bg-[#0a0a0a] p-3 font-mono text-xs break-all whitespace-pre-wrap text-neutral-200'
-        >
-          {logs.data || t('devops.containers.noLogs')}
-        </pre>
-      )}
     </div>
   );
 }

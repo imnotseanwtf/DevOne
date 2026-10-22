@@ -11,7 +11,6 @@ import {
   controlContainer,
   inspectContainer,
   listContainers,
-  readContainerLogs,
   readContainerStats,
   SshHostAccessError,
   TerminalPolicyError
@@ -159,23 +158,6 @@ export async function listContainersAction(
     return { ok: true, containers };
   } catch (error) {
     return containerFailure(error, 'Could not load the containers');
-  }
-}
-
-export async function containerLogsAction(input: unknown): Promise<Result<{ logs: string }>> {
-  const user = await requireUser();
-  const parsed = containerSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: 'Select a container' };
-  try {
-    const logs = await readContainerLogs(
-      user.id,
-      parsed.data.projectId,
-      sourceOf(parsed.data.source),
-      parsed.data.containerId
-    );
-    return { ok: true, logs };
-  } catch (error) {
-    return containerFailure(error, 'Could not load the logs');
   }
 }
 

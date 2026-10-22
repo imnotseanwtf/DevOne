@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { LOG_TAIL_LINES } from '@/lib/docker/limits';
 
 export interface ContainerInfo {
@@ -133,8 +133,9 @@ export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-export function logsArgs(containerId: string, tail = LOG_TAIL_LINES): string[] {
-  return ['logs', '--tail', String(tail), '--timestamps', containerId];
+/** `--follow` keeps the command running and prints new lines as the container writes them. */
+export function followLogsArgs(containerId: string, tail = LOG_TAIL_LINES): string[] {
+  return ['logs', '--follow', '--tail', String(tail), '--timestamps', containerId];
 }
 
 export function inspectArgs(containerId: string): string[] {
@@ -299,4 +300,46 @@ export function parseStats(output: string): ContainerStats | null {
 /** `docker` plus quoted arguments, as one line for the remote shell. */
 export function remoteDockerCommand(args: string[]): string {
   return ['docker', ...args.map(shellQuote)].join(' ');
+}
+
+export interface LogStream {
+  /** Output from stdout and stderr together, as it arrives. */
+  onData(listener: (chunk: string) => void): void;
+  /** Called once when the stream ends, with a reason when it was not by `close()`. */
+  onEnd(listener: (reason: string | null) => void): void;
+  close(): void;
+}
+
+/** `docker logs --follow` on the machine DevOne itself runs on. */
+export function followLocalLogs(containerId: string): LogStream {
+  const child = spawn('docker', followLogsArgs(containerId), { stdio: ['ignore', 'pipe', 'pipe'] });
+  const dataListeners: ((chunk: string) => void)[] = [];
+  const endListeners: ((reason: string | null) => void)[] = [];
+  let closed = false;
+  let ended = false;
+  const end = (reason: string | null) => {
+    if (ended) return;
+    ended = true;
+    for (const listener of endListeners) listener(closed ? null : reason);
+  };
+  const forward = (chunk: string) => {
+    for (const listener of dataListeners) listener(chunk);
+  };
+  // Decoding in the stream keeps a multi-byte character that spans two chunks whole.
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', forward);
+  child.stderr.on('data', forward);
+  child.on('error', (error: NodeJS.ErrnoException) =>
+    end(error.code === 'ENOENT' ? "Docker isn't installed on this machine" : 'Docker failed')
+  );
+  child.on('close', () => end('The container stopped writing logs'));
+  return {
+    onData: (listener) => void dataListeners.push(listener),
+    onEnd: (listener) => void endListeners.push(listener),
+    close() {
+      closed = true;
+      child.kill('SIGTERM');
+    }
+  };
 }

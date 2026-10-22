@@ -48,7 +48,7 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
     },
     enabled: policy.allowed && source !== '',
     retry: false,
-    refetchInterval: 15_000
+    refetchInterval: 5000
   });
 
   if (!policy.allowed) {
@@ -135,15 +135,12 @@ export function ContainersWorkspace({ projectId, hosts, policy }: ContainersWork
               </span>
             )}
           </CardTitle>
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={containers.isFetching || source === ''}
-            onClick={() => void containers.refetch()}
-          >
-            {containers.isFetching ? <Icons.spinner className='animate-spin' /> : <Icons.refresh />}
-            {t('devops.containers.refresh')}
-          </Button>
+          {containers.data && !containers.isError && (
+            <span className='text-muted-foreground flex items-center gap-2 text-xs'>
+              <span className='size-2 animate-pulse rounded-full bg-emerald-500' />
+              {t('devops.containers.liveList')}
+            </span>
+          )}
         </CardHeader>
         <CardContent>
           {source === '' ? (
