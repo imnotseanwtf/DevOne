@@ -210,13 +210,21 @@ export function stripAnsi(text: string): string {
 export class LineTracker {
   private line = '';
   last = '';
+  /** Lines submitted so far, newest first and without repeats. */
+  history: string[] = [];
 
   push(data: string) {
     // Arrow keys and other escape sequences move around in a line we can't see.
     if (data.startsWith('\u001b')) return;
     for (const char of data) {
       if (char === '\r' || char === '\n') {
-        if (this.line.trim()) this.last = this.line;
+        if (this.line.trim()) {
+          this.last = this.line;
+          this.history = [this.line, ...this.history.filter((entry) => entry !== this.line)].slice(
+            0,
+            200
+          );
+        }
         this.line = '';
       } else if (char === '\u007f' || char === '\b') {
         this.line = this.line.slice(0, -1);

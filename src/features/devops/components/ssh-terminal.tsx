@@ -3,7 +3,9 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Icons } from '@/components/icons';
+import { AutocompleteMenu } from '@/features/devops/components/autocomplete-menu';
 import { TerminalHelperPanel } from '@/features/devops/components/terminal-helper-panel';
+import { useAutocomplete } from '@/features/devops/components/use-autocomplete';
 import { useXterm } from '@/features/devops/components/use-xterm';
 import {
   correctLine,
@@ -55,10 +57,24 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
   const sendRef = useRef<(text: string) => void>(() => {});
   const searchRef = useRef<SearchAddon | null>(null);
   const lastLine = useRef('');
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const typedLines = useRef<readonly string[]>([]);
   const [mistake, setMistake] = useState<Mistake | null>(null);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [noMatch, setNoMatch] = useState(false);
+
+  const autocomplete = useAutocomplete(
+    terminal,
+    wrapperRef,
+    (text) => sendRef.current(text),
+    () => typedLines.current
+  );
+  // Read in handlers that must not re-run when the menu changes.
+  const autocompleteRef = useRef(autocomplete);
+  useEffect(() => {
+    autocompleteRef.current = autocomplete;
+  });
 
   const insert = useCallback(
     (text: string) => {
@@ -83,6 +99,7 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     );
     // Ctrl+F belongs to the shell (and the browser); Ctrl+Shift+F opens our search.
     terminal.attachCustomKeyEventHandler((event) => {
+      if (!autocompleteRef.current.handleKey(event)) return false;
       if (event.type === 'keydown' && event.ctrlKey && event.shiftKey && event.key === 'F') {
         setSearching(true);
         return false;
@@ -121,7 +138,7 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     let tail = '';
     source.addEventListener('message', (event) => {
       const bytes = decodeBase64(event.data);
-      terminal.write(bytes);
+      terminal.write(bytes, () => autocompleteRef.current.onOutput());
       tail = (tail + stripAnsi(decoder.decode(bytes, { stream: true }))).slice(-TAIL_CHARS);
       const found = detectMistake(tail);
       if (found) {
@@ -162,6 +179,8 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     const input = terminal.onData((data) => {
       typed.push(data);
       lastLine.current = typed.last;
+      typedLines.current = typed.history;
+      autocompleteRef.current.onInput(data);
       // Typing again means the offer is no longer about what is on screen.
       setMistake(null);
       send(data);
@@ -194,7 +213,7 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     : null;
 
   return (
-    <div className='flex h-full w-full flex-col'>
+    <div ref={wrapperRef} className='relative flex h-full w-full flex-col'>
       <div className='flex flex-wrap items-center gap-1 pb-1'>
         <TerminalHelperPanel onInsert={insert} />
         <Button
@@ -279,6 +298,9 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
         )}
       </div>
       <div ref={containerRef} className='min-h-0 w-full flex-1' />
+      {autocomplete.menu && (
+        <AutocompleteMenu menu={autocomplete.menu} onAccept={autocomplete.accept} />
+      )}
     </div>
   );
 }

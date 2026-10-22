@@ -163,6 +163,9 @@ export const en = {
     },
     terminal: {
       tools: {
+        suggestions: 'Suggestions',
+        fromHistory: 'history',
+        menuHint: 'Tab to accept · ↑↓ to choose · Esc to close',
         helper: 'Command helper',
         helperSearch: 'Search commands (e.g. logs, disk, port)',
         helperHint: 'Click one to type it at the prompt. It isn’t run until you press Enter.',

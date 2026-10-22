@@ -167,6 +167,9 @@ export const fil: MessageShape<typeof en> = {
     },
     terminal: {
       tools: {
+        suggestions: 'Mga suhestiyon',
+        fromHistory: 'history',
+        menuHint: 'Tab para tanggapin · ↑↓ para pumili · Esc para isara',
         helper: 'Command helper',
         helperSearch: 'Maghanap ng command (hal. logs, disk, port)',
         helperHint:
