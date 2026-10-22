@@ -49,8 +49,7 @@ export async function executeTarget(
       ? system
       : [{ type: 'text', text: CLAUDE_OAUTH_SYSTEM_PROMPT }, ...system];
   }
-  if (modelRejectsSampling(target.model))
-    for (const key of SAMPLING_FIELDS) delete body[key];
+  if (modelRejectsSampling(target.model)) for (const key of SAMPLING_FIELDS) delete body[key];
   const useOpenCodeRuntime = provider.providerType === 'opencode';
   const codexDefinition = provider.providerType === 'codex' ? getProviderDefinition('codex') : null;
   const codexLite =
