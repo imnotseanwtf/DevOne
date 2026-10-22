@@ -163,6 +163,7 @@ export const en = {
     },
     terminal: {
       tools: {
+        latencyHint: 'Time from a key press to it showing on screen',
         suggestions: 'Suggestions',
         fromHistory: 'history',
         menuHint: 'Tab to accept · ↑↓ to choose · Esc to close',

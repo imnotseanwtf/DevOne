@@ -1,4 +1,5 @@
 import { getCurrentUser } from '@/lib/auth/session';
+import { createCoalescer } from '@/lib/ssh/coalesce';
 import {
   attachSshSession,
   getSshSession,
@@ -40,10 +41,17 @@ function sessionStream(session: SshSession, signal: AbortSignal): ReadableStream
       stop = stopNow;
       signal.addEventListener('abort', stopNow);
 
+      // Output that arrives in the same tick goes out as one event, with no added wait.
+      const output = createCoalescer((data) => send(eventText({ type: 'data', data })));
+
       send(': connected\n\n');
       detach = attachSshSession(session, (event) => {
+        if (event.type === 'data') {
+          output.push(event.data);
+          return;
+        }
+        output.flush();
         send(eventText(event));
-        if (event.type !== 'exit') return;
         ended = true;
         stopNow();
         controller.close();

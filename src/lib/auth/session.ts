@@ -7,6 +7,11 @@ import {
   SESSION_MAX_AGE_SECONDS
 } from '@/lib/auth/session-token';
 import type { User } from '@/generated/prisma/client';
+import {
+  forgetSessionUser,
+  recallSessionUser,
+  rememberSessionUser
+} from '@/lib/auth/session-cache';
 import { readPreferences } from '@/features/account/preferences';
 import { LOCALE_COOKIE } from '@/i18n/config';
 import { cookies, headers } from 'next/headers';
@@ -93,6 +98,22 @@ export async function getCurrentUser(): Promise<User | null> {
   return session.user;
 }
 
+/**
+ * Like getCurrentUser, for requests that arrive in a stream (every terminal
+ * keystroke): the answer is reused for a few seconds instead of asking the
+ * database each time.
+ */
+export async function getCurrentUserCached(): Promise<User | null> {
+  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+  const key = hashSessionToken(token);
+  const known = recallSessionUser(key);
+  if (known) return known;
+  const user = await getCurrentUser();
+  if (user) rememberSessionUser(key, user);
+  return user;
+}
+
 export async function requireUser(): Promise<User> {
   const user = await getCurrentUser();
   if (!user) redirect('/login');
@@ -104,6 +125,7 @@ export async function deleteCurrentSession(): Promise<void> {
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (token) {
+    forgetSessionUser(hashSessionToken(token));
     await getPrisma().session.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
   }
 

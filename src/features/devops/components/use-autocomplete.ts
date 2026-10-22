@@ -133,6 +133,18 @@ export function useAutocomplete(
     setMenu((previous) => {
       const was = previous?.items[previous.index]?.label;
       const kept = items.findIndex((item) => item.label === was);
+      const top = fitsBelow ? below : null;
+      // Output arrives in many small chunks; an identical menu is not worth a re-render.
+      if (
+        previous &&
+        previous.left === left &&
+        previous.top === top &&
+        previous.items.length === items.length &&
+        previous.items.every((item, index) => item.label === items[index].label) &&
+        previous.index === Math.max(0, kept)
+      ) {
+        return previous;
+      }
       return {
         items,
         index: Math.max(0, kept),

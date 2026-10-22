@@ -1,5 +1,5 @@
 import { sessionMessageSchema } from '@/features/devops/schema';
-import { getCurrentUser } from '@/lib/auth/session';
+import { getCurrentUserCached } from '@/lib/auth/session';
 import { isSameOrigin } from '@/lib/http/same-origin';
 import {
   closeSshSession,
@@ -18,7 +18,7 @@ interface RouteContext {
 
 async function openSession(request: Request, { params }: RouteContext) {
   if (!isSameOrigin(request)) return { error: NextResponse.json({}, { status: 403 }) };
-  const user = await getCurrentUser();
+  const user = await getCurrentUserCached();
   if (!user) return { error: NextResponse.json({}, { status: 401 }) };
   const session = getSshSession((await params).sessionId, user.id);
   if (!session) return { error: NextResponse.json({ error: 'Session ended' }, { status: 404 }) };

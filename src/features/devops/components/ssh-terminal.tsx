@@ -43,6 +43,10 @@ function decodeBase64(value: string): Uint8Array {
 
 /** How much recent output is kept to look for a shell error in. */
 const TAIL_CHARS = 1000;
+/** Only these messages are worth running the typo detector on. */
+const MISTAKE_HINT = /not found|not a docker command/;
+/** How many recent keystroke-to-screen times the readout averages over. */
+const LATENCY_SAMPLES = 20;
 
 /**
  * A live SSH shell: output streams in over SSE, keystrokes go out as POSTs.
@@ -61,6 +65,7 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const typedLines = useRef<readonly string[]>([]);
   const [mistake, setMistake] = useState<Mistake | null>(null);
+  const [latency, setLatency] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [noMatch, setNoMatch] = useState(false);
@@ -145,11 +150,28 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     const source = new EventSource(`/api/ssh/sessions/${sessionId}/stream`);
     const decoder = new TextDecoder();
     let tail = '';
+    // Key press to first output after it: what the person feels as lag (network, server, SSH, echo).
+    let keyAt: number | null = null;
+    const samples: number[] = [];
+    let shownAt = 0;
+    const measure = () => {
+      if (keyAt === null) return;
+      samples.push(performance.now() - keyAt);
+      keyAt = null;
+      if (samples.length > LATENCY_SAMPLES) samples.shift();
+      // The readout is a median, redrawn at most once a second.
+      if (performance.now() - shownAt < 1000) return;
+      shownAt = performance.now();
+      const sorted = samples.toSorted((a, b) => a - b);
+      setLatency(Math.round(sorted[Math.floor(sorted.length / 2)]));
+    };
     source.addEventListener('message', (event) => {
+      measure();
       const bytes = decodeBase64(event.data);
       terminal.write(bytes, () => autocompleteRef.current.onOutput());
       tail = (tail + stripAnsi(decoder.decode(bytes, { stream: true }))).slice(-TAIL_CHARS);
-      const found = detectMistake(tail);
+      // Looking for an error is a regex over the tail; skip it unless the output could hold one.
+      const found = MISTAKE_HINT.test(tail) ? detectMistake(tail) : null;
       if (found) {
         // Look at each error once: the same line stays in view for a while.
         tail = '';
@@ -186,6 +208,8 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
     sendRef.current = send;
     const typed = new LineTracker();
     const input = terminal.onData((data) => {
+      // A single typed character is echoed straight back: time that, not pastes or escape keys.
+      if (keyAt === null && data.length === 1 && data >= ' ') keyAt = performance.now();
       typed.push(data);
       lastLine.current = typed.last;
       typedLines.current = typed.history;
@@ -280,8 +304,16 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
             )}
           </div>
         )}
+        {latency !== null && (
+          <span
+            className='ml-auto text-xs text-neutral-500 tabular-nums'
+            title={t('devops.terminal.tools.latencyHint')}
+          >
+            {latency} ms
+          </span>
+        )}
         {mistake && correction && (
-          <div className='ml-auto flex items-center gap-2 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200'>
+          <div className='ml-2 flex items-center gap-2 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200'>
             <span>{t('devops.terminal.tools.didYouMean')}</span>
             <code className='font-mono'>{correction}</code>
             <Button

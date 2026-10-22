@@ -114,6 +114,9 @@ function connectClient(target: SshTarget): Promise<{ client: Client; fingerprint
     client.on('ready', () => {
       if (settled) return;
       settled = true;
+      // ssh2 leaves Nagle's algorithm on, which holds back small packets (keystrokes) until the
+      // previous one is acknowledged. OpenSSH turns it off for interactive sessions, so do the same.
+      client.setNoDelay(true);
       resolve({ client, fingerprint });
     });
 

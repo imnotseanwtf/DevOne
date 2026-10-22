@@ -167,6 +167,7 @@ export const fil: MessageShape<typeof en> = {
     },
     terminal: {
       tools: {
+        latencyHint: 'Oras mula sa pagpindot ng key hanggang lumabas ito sa screen',
         suggestions: 'Mga suhestiyon',
         fromHistory: 'history',
         menuHint: 'Tab para tanggapin · ↑↓ para pumili · Esc para isara',
