@@ -96,4 +96,32 @@ history.push('docker ps\r');
 history.push('ls\r');
 assert.deepEqual(history.history, ['ls', 'docker ps']);
 
+const containers = [
+  { name: 'api', image: 'acme/api:1', state: 'running' },
+  { name: 'postgres', image: 'postgres:17', state: 'running' },
+  { name: 'old-worker', image: 'node:22', state: 'exited' }
+];
+const names = (input: string) => complete(input, [], containers).map((item) => item.label);
+
+assert.deepEqual(names('docker logs '), ['api', 'postgres', 'old-worker']);
+assert.deepEqual(names('docker logs p'), ['postgres']);
+assert.deepEqual(names('docker exec -it a'), ['api']);
+assert.deepEqual(names('docker exec -u root '), ['api', 'postgres', 'old-worker'], 'a flag value is not a container');
+assert.deepEqual(names('docker logs --tail 50 po'), ['postgres']);
+assert.deepEqual(names('docker logs -f ap'), ['api'], '-f is a flag here, not a value');
+assert.deepEqual(names('docker exec api '), [], 'after the container comes the command to run');
+assert.deepEqual(names('docker logs api '), []);
+assert.deepEqual(names('docker stop api po'), ['postgres'], 'stop takes several');
+assert.deepEqual(names('sudo docker restart o'), ['old-worker']);
+assert.deepEqual(names('docker ps a'), [], 'ps takes no container');
+assert.deepEqual(names('docker logs -'), ['-f', '--follow', '--tail', '--since', '-t', '--timestamps']);
+assert.deepEqual(complete('docker logs p', [], containers)[0], {
+  label: 'postgres',
+  insert: 'ostgres ',
+  description: 'postgres:17 · running',
+  kind: 'container'
+});
+assert.deepEqual(names('docker lo'), ['logs'], 'subcommands still work');
+assert.deepEqual(complete('docker logs ', [], []), [], 'no containers known yet');
+
 console.log('terminal-helper: ok');

@@ -72,7 +72,8 @@ export function openLocalContainerShell(
       resolve({
         client: client as unknown as Client,
         channel: channel as unknown as ClientChannel,
-        fingerprint: ''
+        fingerprint: '',
+        local: true
       })
     );
   });

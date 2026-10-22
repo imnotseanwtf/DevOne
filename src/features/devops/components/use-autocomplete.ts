@@ -3,7 +3,8 @@
 import {
   complete,
   inputAfterPrompt,
-  type Completion
+  type Completion,
+  type ContainerName
 } from '@/features/devops/terminal-helper/complete';
 import type { Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
@@ -23,6 +24,10 @@ const TYPING_WINDOW_MS = 1500;
 const ECHO_WAIT_MS = 120;
 const ROW_HEIGHT = 26;
 const MENU_WIDTH = 340;
+/** Container names are asked for again after this long: containers come and go. */
+const CONTAINERS_TTL_MS = 10_000;
+/** Only `docker …` lines can use container names, so only they cost a request. */
+const DOCKER_LINE = /^(?:sudo\s+)?docker\s/;
 
 /**
  * Suggestions as you type, the way inshellisense does it: find where the prompt
@@ -34,7 +39,9 @@ export function useAutocomplete(
   terminal: Terminal | null,
   wrapperRef: RefObject<HTMLElement | null>,
   send: (text: string) => void,
-  getHistory: () => readonly string[]
+  getHistory: () => readonly string[],
+  /** Names of the containers on the machine the terminal is on. */
+  loadContainers?: () => Promise<ContainerName[]>
 ) {
   const [menu, setMenu] = useState<AutocompleteMenu | null>(null);
   const menuRef = useRef<AutocompleteMenu | null>(null);
@@ -42,12 +49,21 @@ export function useAutocomplete(
   const echoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sendRef = useRef(send);
   const historyRef = useRef(getHistory);
+  const loadRef = useRef(loadContainers);
+  const containers = useRef<{ names: ContainerName[]; at: number; loading: boolean }>({
+    names: [],
+    at: 0,
+    loading: false
+  });
 
   useEffect(() => {
     menuRef.current = menu;
     sendRef.current = send;
     historyRef.current = getHistory;
+    loadRef.current = loadContainers;
   });
+
+  const refreshRef = useRef<() => void>(() => {});
 
   const refresh = useCallback(() => {
     const wrapper = wrapperRef.current;
@@ -70,7 +86,29 @@ export function useAutocomplete(
       return;
     }
     const input = inputAfterPrompt(before);
-    const items = input ? complete(input, historyRef.current()) : [];
+    // Names are fetched in the background; the menu redraws when they arrive.
+    const cache = containers.current;
+    if (
+      input &&
+      DOCKER_LINE.test(input) &&
+      loadRef.current &&
+      !cache.loading &&
+      Date.now() - cache.at > CONTAINERS_TTL_MS
+    ) {
+      cache.loading = true;
+      void loadRef
+        .current()
+        .then((names) => {
+          cache.names = names;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          cache.loading = false;
+          cache.at = Date.now();
+          refreshRef.current();
+        });
+    }
+    const items = input ? complete(input, historyRef.current(), cache.names) : [];
     if (!input || items.length === 0) {
       setMenu(null);
       return;
@@ -104,6 +142,10 @@ export function useAutocomplete(
       };
     });
   }, [terminal, wrapperRef]);
+
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   const accept = useCallback((item: Completion) => {
     // The echo of what is typed brings the next menu: "docker " goes on to its subcommands.

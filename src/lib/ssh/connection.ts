@@ -19,6 +19,8 @@ export interface OpenShell {
   client: Client;
   channel: ClientChannel;
   fingerprint: string;
+  /** A terminal on the machine DevOne runs on: `client` is then a stand-in, not an SSH connection. */
+  local?: boolean;
 }
 
 /** Why a connection failed, worded for the person at the terminal. */
@@ -168,24 +170,21 @@ export interface CommandResult {
 const COMMAND_TIMEOUT_MS = 20_000;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
-/** Runs one command on the server over its own connection and closes it afterwards. */
-export async function runCommand(target: SshTarget, command: string): Promise<CommandResult> {
-  const { client, fingerprint } = await connectClient(target);
+/** Runs one command on an already-connected client; the connection stays open. */
+export function execOnClient(
+  client: Client,
+  command: string,
+  timeoutMs = COMMAND_TIMEOUT_MS
+): Promise<Omit<CommandResult, 'fingerprint'>> {
   return new Promise((resolve, reject) => {
-    const finish = (action: () => void) => {
-      clearTimeout(timer);
-      client.end();
-      action();
-    };
     const timer = setTimeout(
-      () => finish(() => reject(new SshConnectError('The command took too long', 'timeout'))),
-      COMMAND_TIMEOUT_MS
+      () => reject(new SshConnectError('The command took too long', 'timeout')),
+      timeoutMs
     );
-    client.on('error', (error) => finish(() => reject(describe(error))));
-
     client.exec(command, (error, channel) => {
       if (error) {
-        finish(() => reject(new SshConnectError('The server refused to run the command', 'shell')));
+        clearTimeout(timer);
+        reject(new SshConnectError('The server refused to run the command', 'shell'));
         return;
       }
       let stdout = '';
@@ -196,11 +195,22 @@ export async function runCommand(target: SshTarget, command: string): Promise<Co
       channel.stderr.on('data', (data: Buffer) => {
         if (stderr.length < MAX_OUTPUT_BYTES) stderr += data.toString('utf8');
       });
-      channel.on('close', (code: number | null) =>
-        finish(() => resolve({ stdout, stderr, code, fingerprint }))
-      );
+      channel.on('close', (code: number | null) => {
+        clearTimeout(timer);
+        resolve({ stdout, stderr, code });
+      });
     });
   });
+}
+
+/** Runs one command on the server over its own connection and closes it afterwards. */
+export async function runCommand(target: SshTarget, command: string): Promise<CommandResult> {
+  const { client, fingerprint } = await connectClient(target);
+  try {
+    return { ...(await execOnClient(client, command)), fingerprint };
+  } finally {
+    client.end();
+  }
 }
 
 export interface ExecStream {

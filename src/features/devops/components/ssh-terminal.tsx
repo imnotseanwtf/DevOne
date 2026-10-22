@@ -14,6 +14,7 @@ import {
   stripAnsi,
   type Mistake
 } from '@/features/devops/terminal-helper/suggest';
+import type { ContainerName } from '@/features/devops/terminal-helper/complete';
 import { useT } from '@/i18n/client';
 import type { SearchAddon } from '@xterm/addon-search';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -64,11 +65,19 @@ export function SshTerminal({ sessionId, onExit, fontSize }: SshTerminalProps) {
   const [query, setQuery] = useState('');
   const [noMatch, setNoMatch] = useState(false);
 
+  // Asked over this terminal's own connection, so it works for servers that were never saved.
+  const loadContainers = useCallback(async (): Promise<ContainerName[]> => {
+    const response = await fetch(`/api/ssh/sessions/${sessionId}/containers`);
+    if (!response.ok) return [];
+    return ((await response.json()) as { containers: ContainerName[] }).containers;
+  }, [sessionId]);
+
   const autocomplete = useAutocomplete(
     terminal,
     wrapperRef,
     (text) => sendRef.current(text),
-    () => typedLines.current
+    () => typedLines.current,
+    loadContainers
   );
   // Read in handlers that must not re-run when the menu changes.
   const autocompleteRef = useRef(autocomplete);

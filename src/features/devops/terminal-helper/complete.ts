@@ -7,10 +7,47 @@ export interface Completion {
   /** What to type to accept it: the part the person has not typed yet. */
   insert: string;
   description?: string;
-  kind: 'command' | 'subcommand' | 'option' | 'history';
+  kind: 'command' | 'subcommand' | 'option' | 'container' | 'history';
+}
+
+/** What the autocomplete needs to know about a container. */
+export interface ContainerName {
+  name: string;
+  image: string;
+  state: string;
 }
 
 const MAX_ITEMS = 8;
+
+/** `docker <these> <container>`: they take container names, any number of them. */
+const MANY_CONTAINERS = new Set([
+  'stop',
+  'start',
+  'restart',
+  'rm',
+  'kill',
+  'pause',
+  'unpause',
+  'stats',
+  'inspect'
+]);
+/** These take one container, and for `exec` what follows it is the command to run. */
+const ONE_CONTAINER = new Set(['logs', 'exec', 'top', 'attach', 'port', 'diff', 'wait']);
+/** Options that take a value: the word after one is not a container. */
+const TAKES_VALUE = new Set([
+  '-u',
+  '-w',
+  '-e',
+  '--user',
+  '--workdir',
+  '--env',
+  '--tail',
+  '-n',
+  '--since',
+  '--until',
+  '--format',
+  '--filter'
+]);
 
 /**
  * Where the typed command starts on a terminal line: after the first `$ `, `# `,
@@ -35,7 +72,32 @@ function walk(done: string[]): CommandSpec | null {
   return node ?? null;
 }
 
-export function complete(input: string, history: readonly string[] = []): Completion[] {
+/** How many container names are already given after `docker <subcommand>`; null if not a container command. */
+function containerSlot(done: string[]): { given: number; many: boolean } | null {
+  if (done[0] !== 'docker') return null;
+  const sub = done[1];
+  if (!sub || !(MANY_CONTAINERS.has(sub) || ONE_CONTAINER.has(sub))) return null;
+  let given = 0;
+  for (let i = 2; i < done.length; i++) {
+    if (done[i].startsWith('-')) {
+      if (TAKES_VALUE.has(done[i])) i++;
+    } else {
+      given++;
+    }
+  }
+  return { given, many: MANY_CONTAINERS.has(sub) };
+}
+
+function wantsContainer(done: string[]): boolean {
+  const slot = containerSlot(done);
+  return !!slot && (slot.many || slot.given === 0);
+}
+
+export function complete(
+  input: string,
+  history: readonly string[] = [],
+  containers: readonly ContainerName[] = []
+): Completion[] {
   if (input.trim() === '') return [];
   const endsWithSpace = /\s$/.test(input);
   const words = input.trim().split(/\s+/);
@@ -51,6 +113,11 @@ export function complete(input: string, history: readonly string[] = []): Comple
 
   if (done.length === 0) {
     for (const name of KNOWN_COMMANDS) add(name, 'command', SPECS[name]?.description);
+  } else if (!current.startsWith('-') && wantsContainer(done)) {
+    // Running ones first: the list arrives that way.
+    for (const container of containers) {
+      add(container.name, 'container', `${container.image} · ${container.state}`);
+    }
   } else {
     const node = walk(done);
     if (node) {
