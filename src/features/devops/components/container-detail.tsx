@@ -16,7 +16,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import { controlContainerAction, inspectContainerAction } from '@/features/devops/actions';
+import { ContainerEvents } from '@/features/devops/components/container-events';
 import { ContainerLogs } from '@/features/devops/components/container-logs';
+import { ContainerRequests } from '@/features/devops/components/container-requests';
 import { ContainerExec } from '@/features/devops/components/container-exec';
 import { ContainerInspect, ContainerMounts } from '@/features/devops/components/container-inspect';
 import { ContainerStatsPanel } from '@/features/devops/components/container-stats';
@@ -41,6 +43,8 @@ interface ContainerDetailProps {
 
 const TAB_LABELS = {
   logs: 'tabLogs',
+  requests: 'tabRequests',
+  events: 'tabEvents',
   inspect: 'tabInspect',
   mounts: 'tabMounts',
   exec: 'tabExec',
@@ -192,6 +196,22 @@ export function ContainerDetail({
               source={source}
               containerId={containerId}
               active={tab === 'logs'}
+            />
+          </div>
+          <div className={cn(tab !== 'requests' && 'hidden')}>
+            <ContainerRequests
+              projectId={projectId}
+              source={source}
+              containerId={containerId}
+              active={tab === 'requests'}
+            />
+          </div>
+          <div className={cn(tab !== 'events' && 'hidden')}>
+            <ContainerEvents
+              projectId={projectId}
+              source={source}
+              containerId={containerId}
+              active={tab === 'events'}
             />
           </div>
           <div className={cn(tab !== 'inspect' && 'hidden')}>

@@ -22,7 +22,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "test": "bun scripts/check-devone-sections.ts && bun scripts/check-containers.ts && bun scripts/check-terminal-helper.ts && bun scripts/check-terminal-perf.ts && bun scripts/check-core.ts && bun scripts/check-engines.ts && bun scripts/check-docs-chat.ts && bun scripts/check-board-order.ts && bun scripts/check-docs.ts && bun run test:ai",
+    "test": "bun scripts/check-devone-sections.ts && bun scripts/check-containers.ts && bun scripts/check-terminal-helper.ts && bun scripts/check-terminal-perf.ts && bun scripts/check-observe.ts && bun scripts/check-core.ts && bun scripts/check-engines.ts && bun scripts/check-docs-chat.ts && bun scripts/check-board-order.ts && bun scripts/check-docs.ts && bun run test:ai",
     "test:ai": "bun scripts/check-ai-oauth.ts && bun scripts/check-ai-device-auth.ts && bun scripts/check-ai-protocols.ts && bun scripts/check-ai-claude-thinking.ts && bun scripts/check-ai-gateway.ts && bun scripts/check-ai-outbound.ts && bun scripts/check-ai-integration.mjs && bun scripts/check-ai-connect.mjs && bun scripts/check-ai-codex-loopback.ts && bun scripts/check-ai-catalog.ts && bun scripts/check-ai-opencode.ts && bun scripts/check-ai-opencode-runtime.ts && bun scripts/check-ai-connection-test.mjs",
     "test:ai:runtime:live": "bun scripts/probe-ai-opencode-runtime.ts",
     "test:db": "bun scripts/check-database.ts",

@@ -17,8 +17,10 @@ import {
   DockerError,
   dockerFailure,
   controlArgs,
-  followLocalLogs,
+  followEventsArgs,
+  followLocalDocker,
   followLogsArgs,
+  followRawLogsArgs,
   type LogStream,
   type ContainerAction,
   type ContainerDetails,
@@ -34,6 +36,7 @@ import {
   type DockerResult
 } from '@/lib/docker/containers';
 import { CONTAINER_SHELL_SCRIPT, openLocalContainerShell } from '@/lib/docker/local-shell';
+import { type TrafficTarget, trafficTarget } from '@/lib/docker/access-log';
 import { isDemoMode } from '@/lib/demo';
 import {
   countSshSessions,
@@ -524,18 +527,82 @@ export async function connectContainerShell(
 }
 
 /** Follows the container's logs live. The stream stays open until `close()` or the container goes away. */
-export async function followContainerLogs(
+export function followContainerLogs(
   userId: string,
   projectId: string,
   source: ContainerSource,
   containerId: string
 ): Promise<LogStream> {
+  return followContainerDocker(
+    userId,
+    projectId,
+    source,
+    followLogsArgs(containerId),
+    'The container stopped writing logs'
+  );
+}
+
+/** What happened to the container: the last day's events, then new ones live. */
+export function followContainerEvents(
+  userId: string,
+  projectId: string,
+  source: ContainerSource,
+  containerId: string
+): Promise<LogStream> {
+  return followContainerDocker(
+    userId,
+    projectId,
+    source,
+    followEventsArgs(containerId),
+    'Docker stopped sending events'
+  );
+}
+
+/**
+ * The reverse proxy's access log, live, with what identifies this container's
+ * traffic in it. The proxy is found by its image (Traefik); the container's own
+ * Traefik labels and addresses say which lines are its.
+ */
+export async function followContainerRequests(
+  userId: string,
+  projectId: string,
+  source: ContainerSource,
+  containerId: string
+): Promise<{ stream: LogStream; target: TrafficTarget; proxy: string }> {
+  const [details, containers] = await Promise.all([
+    inspectContainer(userId, projectId, source, containerId),
+    listContainers(userId, projectId, source)
+  ]);
+  const proxy = containers.find(
+    (entry) => entry.state === 'running' && /traefik/i.test(entry.image)
+  );
+  if (!proxy) {
+    throw new DockerError('No running Traefik proxy was found on this server', 'failed');
+  }
+  const stream = await followContainerDocker(
+    userId,
+    projectId,
+    source,
+    // Some history first, so the tab isn't empty until the next request arrives.
+    followRawLogsArgs(proxy.id, 2000),
+    'The proxy stopped writing logs'
+  );
+  return { stream, target: trafficTarget(details.labels, details.networks), proxy: proxy.name };
+}
+
+async function followContainerDocker(
+  userId: string,
+  projectId: string,
+  source: ContainerSource,
+  args: string[],
+  endedReason: string
+): Promise<LogStream> {
   const host = await authorizeSource(userId, projectId, source);
-  if (!host) return followLocalLogs(containerId);
+  if (!host) return followLocalDocker(args, endedReason);
 
   const { channel, client, fingerprint } = await openExecStream(
     sshTarget(host),
-    `${remoteDockerCommand(followLogsArgs(containerId))} 2>&1`
+    `${remoteDockerCommand(args)} 2>&1`
   );
   if (!host.hostKeyFingerprint) {
     await getPrisma()
@@ -552,7 +619,7 @@ export async function followContainerLogs(
     },
     onEnd: (listener) => {
       const done = (reason: string) => listener(closed ? null : reason);
-      channel.on('close', () => done('The container stopped writing logs'));
+      channel.on('close', () => done(endedReason));
       client.on('error', (error: Error) => done(error.message));
     },
     close() {

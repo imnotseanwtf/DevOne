@@ -138,6 +138,29 @@ export function followLogsArgs(containerId: string, tail = LOG_TAIL_LINES): stri
   return ['logs', '--follow', '--tail', String(tail), '--timestamps', containerId];
 }
 
+/**
+ * What happened to this container: history since `since` (a duration like "24h"),
+ * then each new event as it happens. Docker only keeps a limited backlog.
+ */
+export function followEventsArgs(containerId: string, since = '24h'): string[] {
+  return [
+    'events',
+    '--since',
+    since,
+    '--filter',
+    `container=${containerId}`,
+    '--filter',
+    'type=container',
+    '--format',
+    '{{json .}}'
+  ];
+}
+
+/** A container's output as it is, with no timestamp added in front of each line. */
+export function followRawLogsArgs(containerId: string, tail: number): string[] {
+  return ['logs', '--follow', '--tail', String(tail), containerId];
+}
+
 export function inspectArgs(containerId: string): string[] {
   return ['inspect', '--type', 'container', containerId];
 }
@@ -312,7 +335,12 @@ export interface LogStream {
 
 /** `docker logs --follow` on the machine DevOne itself runs on. */
 export function followLocalLogs(containerId: string): LogStream {
-  const child = spawn('docker', followLogsArgs(containerId), { stdio: ['ignore', 'pipe', 'pipe'] });
+  return followLocalDocker(followLogsArgs(containerId), 'The container stopped writing logs');
+}
+
+/** A long-running `docker <args>` on this machine, streamed as it prints. */
+export function followLocalDocker(args: string[], endedReason: string): LogStream {
+  const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
   const dataListeners: ((chunk: string) => void)[] = [];
   const endListeners: ((reason: string | null) => void)[] = [];
   let closed = false;
@@ -333,7 +361,7 @@ export function followLocalLogs(containerId: string): LogStream {
   child.on('error', (error: NodeJS.ErrnoException) =>
     end(error.code === 'ENOENT' ? "Docker isn't installed on this machine" : 'Docker failed')
   );
-  child.on('close', () => end('The container stopped writing logs'));
+  child.on('close', () => end(endedReason));
   return {
     onData: (listener) => void dataListeners.push(listener),
     onEnd: (listener) => void endListeners.push(listener),
