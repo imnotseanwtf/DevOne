@@ -30,6 +30,7 @@ const DEFAULT_PORT = 31337;
 let serverProcess = null;
 let database = null;
 let quitting = false;
+let choosingDatabase = false;
 
 function configPath() {
   return path.join(app.getPath('userData'), 'config.json');
@@ -59,6 +60,7 @@ function readConfig() {
     const template = {
       url: '',
       databaseUrl: '',
+      setupDone: false,
       port: DEFAULT_PORT,
       env: {}
     };
@@ -114,6 +116,20 @@ function secret(name) {
 // from the app's settings, else "databaseUrl" in config.json, else none.
 function customDatabaseUrl(config = readConfig()) {
   return readSealed('database-url') || config.databaseUrl || '';
+}
+
+// A new install asks where to keep its data before starting anything. An install
+// that already has a built-in database, or a database URL, has chosen.
+function needsDatabaseChoice(config) {
+  if (config.setupDone || customDatabaseUrl(config)) return false;
+  return !fs.existsSync(path.join(app.getPath('userData'), 'postgres', 'PG_VERSION'));
+}
+
+function markSetupDone() {
+  const config = readConfig();
+  if (!config.setupDone) {
+    fs.writeFileSync(configPath(), JSON.stringify({ ...config, setupDone: true }, null, 2));
+  }
 }
 
 function maskUrl(databaseUrl) {
@@ -239,12 +255,14 @@ function openDevOne(win, origin) {
 // The database connection settings: a small modal window (settings.html) that
 // talks to the handlers below through settings-preload.js.
 let settingsWindow = null;
+let settingsFirstRun = false;
 
-function openSettings() {
+function openSettings({ firstRun = false } = {}) {
   if (settingsWindow) {
     settingsWindow.focus();
     return new Promise((resolve) => settingsWindow.once('closed', resolve));
   }
+  settingsFirstRun = firstRun;
   const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   settingsWindow = new BrowserWindow({
     width: 560,
@@ -255,7 +273,7 @@ function openSettings() {
     minimizable: false,
     maximizable: false,
     autoHideMenuBar: true,
-    title: 'Database connection',
+    title: firstRun ? 'Welcome to DevOne' : 'Database connection',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'settings-preload.js'),
@@ -265,7 +283,9 @@ function openSettings() {
     }
   });
   settingsWindow.removeMenu();
-  settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  settingsWindow.loadFile(path.join(__dirname, 'settings.html'), {
+    query: firstRun ? { firstRun: '1' } : {}
+  });
   return new Promise((resolve) =>
     settingsWindow.once('closed', () => {
       settingsWindow = null;
@@ -281,7 +301,7 @@ function fromSettingsWindow(event) {
 ipcMain.handle('database:get', (event) => {
   if (!fromSettingsWindow(event)) return null;
   const url = customDatabaseUrl();
-  return { custom: Boolean(url), url: maskUrl(url), dataDir: app.getPath('userData') };
+  return { custom: Boolean(url), url: maskUrl(url), firstRun: settingsFirstRun };
 });
 
 ipcMain.handle('database:test', async (event, url) => {
@@ -313,11 +333,17 @@ ipcMain.handle('database:save', async (event, { mode, url }) => {
       fs.writeFileSync(configPath(), JSON.stringify({ ...config, databaseUrl: '' }, null, 2));
     }
     log(`Database connection changed to ${mode === 'custom' ? 'a custom PostgreSQL' : 'the built-in database'}`);
+    markSetupDone();
+    if (settingsFirstRun) {
+      // First launch: nothing is running yet, so carry on starting instead of restarting.
+      setImmediate(() => settingsWindow?.close());
+      return { ok: true, restart: false };
+    }
     setImmediate(() => {
       app.relaunch();
       app.quit();
     });
-    return { ok: true };
+    return { ok: true, restart: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -366,6 +392,12 @@ if (!gotLock) {
       config = readConfig();
       const remote = process.env.DEVONE_URL || config.url;
       buildMenu(!remote);
+      if (!remote && needsDatabaseChoice(config)) {
+        choosingDatabase = true;
+        await openSettings({ firstRun: true });
+        choosingDatabase = false;
+        config = readConfig();
+      }
       win = createWindow();
       const origin = remote ? remote.replace(/\/$/, '') : await startLocalServer(config);
 
@@ -399,6 +431,8 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => {
+    // The first-launch window is the only one until the app has started.
+    if (choosingDatabase) return;
     if (process.platform !== 'darwin') app.quit();
   });
 

@@ -55,6 +55,11 @@ hand from the Actions tab.
 
 ## Connect to your own database
 
+On first launch a new install asks where to keep its data, before it starts anything: **Use
+built-in**, or enter your own PostgreSQL URL and **Continue**. Installs that already have a
+built-in database or a configured URL aren't asked. Closing that window with the X starts the
+built-in database and asks again next launch. To change the choice later:
+
 **File > Database connection…** (on macOS, the File menu in the menu bar; on Windows and Linux press
 Alt if the menu bar is hidden) lets you choose between the built-in PostgreSQL and your own server:
 

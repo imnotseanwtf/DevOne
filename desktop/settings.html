@@ -29,8 +29,8 @@
     </style>
   </head>
   <body>
-    <h1>Database connection</h1>
-    <p>Choose where DevOne keeps its data.</p>
+    <h1 id="title">Database connection</h1>
+    <p id="intro">Choose where DevOne keeps its data.</p>
 
     <label class="option">
       <input type="radio" name="mode" value="builtin" />
@@ -45,7 +45,7 @@
       <div class="hint" id="hint">Add <code>?sslmode=require</code> if the server needs TLS. Tables are created and migrated automatically.</div>
     </div>
 
-    <div class="warn">Switching databases does not copy data. DevOne restarts and uses whatever is in the database you pick; your other database is left untouched.</div>
+    <div class="warn" id="warn">Switching databases does not copy data. DevOne restarts and uses whatever is in the database you pick; your other database is left untouched.</div>
 
     <div id="status"></div>
     <div class="actions">
@@ -68,7 +68,12 @@
 
       function busy(on) { for (const id of ['test', 'save', 'cancel']) $(id).disabled = on; if (!on) sync(); }
 
-      $('cancel').onclick = () => window.close();
+      let firstRun = false;
+      $('cancel').onclick = async () => {
+        // First launch: "Use built-in" is a choice, so remember it.
+        if (firstRun) await window.devone.saveDatabase({ mode: 'builtin' });
+        else window.close();
+      };
 
       $('test').onclick = async () => {
         const url = $('url').value.trim();
@@ -83,13 +88,21 @@
       $('save').onclick = async () => {
         busy(true); status(mode() === 'custom' ? 'Testing the connection…' : 'Saving…');
         const result = await window.devone.saveDatabase({ mode: mode(), url: $('url').value });
-        if (result.ok) return status('Saved. Restarting DevOne…', 'ok');
+        if (result.ok) return status(result.restart ? 'Saved. Restarting DevOne…' : 'Saved. Starting DevOne…', 'ok');
         busy(false); status(result.error, 'err');
       };
 
       (async () => {
         const current = await window.devone.getDatabase();
         hasSaved = Boolean(current && current.custom);
+        firstRun = Boolean(current && current.firstRun);
+        if (firstRun) {
+          $('title').textContent = 'Welcome to DevOne';
+          $('intro').textContent = 'Where should DevOne keep its data? You can change this later in File > Database connection….';
+          $('warn').hidden = true;
+          $('cancel').textContent = 'Use built-in';
+          $('save').textContent = 'Continue';
+        }
         document.querySelector(`input[value=${hasSaved ? 'custom' : 'builtin'}]`).checked = true;
         if (hasSaved) {
           $('url').placeholder = current.url;
