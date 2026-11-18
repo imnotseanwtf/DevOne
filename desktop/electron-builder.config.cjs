@@ -14,8 +14,9 @@ module.exports = {
   files: [
     'main.js',
     'database.js',
-    'settings.html',
     'settings-preload.js',
+    'splash-preload.js',
+    'ui/**',
     'icon.png',
     'package.json'
   ],

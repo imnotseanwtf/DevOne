@@ -15,6 +15,7 @@ const {
   dialog,
   ipcMain,
   Menu,
+  nativeTheme,
   safeStorage,
   shell,
   utilityProcess
@@ -31,6 +32,24 @@ let serverProcess = null;
 let database = null;
 let quitting = false;
 let choosingDatabase = false;
+
+// The boot screen (ui/splash.html) shows what the app is really doing. Stages are
+// kept so a screen that loads after the first one still gets them all.
+const splashStages = [];
+let mainWindow = null;
+
+function stage(id, label) {
+  const message = { id, label, at: Date.now() };
+  splashStages.push(message);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('splash:stage', message);
+}
+
+ipcMain.handle('splash:stages', (event) => {
+  return mainWindow && event.sender === mainWindow.webContents ? splashStages : [];
+});
+
+// Window background before the page paints, so there is no white flash.
+const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#0a0a0b' : '#f4f4f5');
 
 function configPath() {
   return path.join(app.getPath('userData'), 'config.json');
@@ -169,6 +188,7 @@ async function startLocalServer(config) {
     : path.join(__dirname, 'server');
 
   let databaseUrl = customDatabaseUrl(config);
+  stage('database', databaseUrl ? 'Connecting to database' : 'Starting database');
   if (!databaseUrl) {
     database = await startDatabase({
       dataDir: app.getPath('userData'),
@@ -177,7 +197,9 @@ async function startLocalServer(config) {
     });
     databaseUrl = database.url;
   }
+  stage('migrate');
   await migrate(databaseUrl, path.join(serverDir, 'prisma', 'migrations'));
+  stage('server');
 
   serverProcess = utilityProcess.fork(path.join(serverDir, 'server.js'), [], {
     cwd: serverDir,
@@ -213,12 +235,9 @@ async function startLocalServer(config) {
   });
 
   await waitForPort(port);
+  stage('open');
   return origin;
 }
-
-const SPLASH = `data:text/html;charset=utf-8,${encodeURIComponent(
-  '<!doctype html><title>DevOne</title><body style="margin:0;height:100vh;display:grid;place-items:center;font:15px system-ui;color:#666;background:#fafafa">Starting DevOne…</body>'
-)}`;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -230,7 +249,10 @@ function createWindow() {
     autoHideMenuBar: true,
     // The window and taskbar icon on Windows and Linux (macOS uses the app bundle's).
     icon: path.join(__dirname, 'icon.png'),
+    backgroundColor: windowBackground(),
     webPreferences: {
+      // Only the boot screen gets anything from this; see splash-preload.js.
+      preload: path.join(__dirname, 'splash-preload.js'),
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false
@@ -238,7 +260,7 @@ function createWindow() {
   });
 
   win.once('ready-to-show', () => win.show());
-  win.loadURL(SPLASH);
+  win.loadFile(path.join(__dirname, 'ui', 'splash.html'));
   return win;
 }
 
@@ -265,8 +287,10 @@ function openSettings({ firstRun = false } = {}) {
   settingsFirstRun = firstRun;
   const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   settingsWindow = new BrowserWindow({
-    width: 560,
-    height: 520,
+    width: 760,
+    height: 480,
+    useContentSize: true,
+    backgroundColor: windowBackground(),
     parent,
     modal: Boolean(parent),
     resizable: false,
@@ -274,6 +298,7 @@ function openSettings({ firstRun = false } = {}) {
     maximizable: false,
     autoHideMenuBar: true,
     title: firstRun ? 'Welcome to DevOne' : 'Database connection',
+    // The window's own title bar and frame follow the OS; the content is ours.
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'settings-preload.js'),
@@ -283,7 +308,7 @@ function openSettings({ firstRun = false } = {}) {
     }
   });
   settingsWindow.removeMenu();
-  settingsWindow.loadFile(path.join(__dirname, 'settings.html'), {
+  settingsWindow.loadFile(path.join(__dirname, 'ui', 'settings.html'), {
     query: firstRun ? { firstRun: '1' } : {}
   });
   return new Promise((resolve) =>
@@ -399,6 +424,8 @@ if (!gotLock) {
         config = readConfig();
       }
       win = createWindow();
+      mainWindow = win;
+      if (remote) stage('open', 'Opening DevOne');
       const origin = remote ? remote.replace(/\/$/, '') : await startLocalServer(config);
 
       openDevOne(win, origin);

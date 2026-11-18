@@ -55,8 +55,8 @@ hand from the Actions tab.
 
 ## Connect to your own database
 
-On first launch a new install asks where to keep its data, before it starts anything: **Use
-built-in**, or enter your own PostgreSQL URL and **Continue**. Installs that already have a
+On first launch a new install asks where to keep its data, before it starts anything: **Built-in
+database**, or **My own PostgreSQL** with its URL, then **Continue**. Installs that already have a
 built-in database or a configured URL aren't asked. Closing that window with the X starts the
 built-in database and asks again next launch. To change the choice later:
 
@@ -66,6 +66,10 @@ Alt if the menu bar is hidden) lets you choose between the built-in PostgreSQL a
 1. Pick **My own PostgreSQL** and enter a URL such as
    `postgresql://user:password@host:5432/database` (add `?sslmode=require` for TLS).
 2. **Test connection** checks it; **Save and restart** tests it again, saves it and restarts DevOne.
+
+The app's own screens (boot screen and this window) live in `desktop/ui/` and follow the system
+light or dark theme. The boot screen shows the real startup stages (database, migrations, server)
+with how long each took.
 
 The URL is stored with the OS keychain (`database-url.bin`, or a user-only `.txt` file without a
 keyring), not in `config.json`. Prisma migrations are applied to that database on every start, so the
