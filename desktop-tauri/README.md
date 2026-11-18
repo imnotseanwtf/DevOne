@@ -46,15 +46,27 @@ The shell is tiny, but the Node binary, the server and Postgres are the same wei
 shell. Dropping Electron saves its runtime (Chromium, roughly 100 MB or more), not the rest. I did
 not build the Electron `.deb` for a side-by-side number.
 
+## Features
+
+Same as the Electron app: first launch asks which database to use, **File > Database connection…**
+changes it (test, save, restart), a second launch focuses the running app, and the boot screen shows
+the real startup stages. The URL is saved in `database-url.txt` in the app data folder, readable only
+by the user (Electron seals it with the OS keychain; the `keyring` crate would do that here).
+
+## CI
+
+`.github/workflows/desktop-tauri.yml` builds on Linux (`.deb`), macOS (`.dmg`) and Windows (NSIS) for
+pull requests that touch this folder, uploads the installers as artifacts and publishes nothing. On
+Linux it also installs the package and runs `smoke-test.sh` under `xvfb`: the server must answer, and
+after the shell is killed with `SIGKILL` no `postgres` or supervisor process may remain.
+
 ## Not verified
 
-- **Running it.** It compiles and packages, but I did not launch it: Postgres needs a non-root user
-  and creating one was blocked in the session. Launch it once on a normal machine and check that the
-  boot screen advances, the server page loads, and quitting leaves no `postgres` or `node` process.
-- Windows and macOS builds, and WebKitGTK / WKWebView rendering of the DevOne UI.
+- **A run.** It compiles and packages on Linux, and the connection check works, but I have not
+  launched the app or run `smoke-test.sh`: PostgreSQL needs a non-root user and creating one was
+  blocked in the session. The first CI run is the first real test of all of it.
+- macOS and Windows builds, and how WebKitGTK / WKWebView render the DevOne UI.
 
-## Left out of the spike
+## Left out
 
-First-run database choice and File > Database connection (the Electron app has them; here
-`DEVONE_DATABASE_URL` is the only override), OS-keychain secrets (the spike keeps them in
-user-only files), single-instance lock, app menu, signing and the release workflow.
+OS-keychain secrets, signing and notarization, and a release workflow that publishes installers.

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The boot screen may use events and commands. The DevOne server page it navigates to gets nothing.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "The boot screen and the database window may use events, commands and close themselves. The DevOne server page the main window navigates to gets nothing.",
+  "windows": ["main", "settings"],
+  "permissions": ["core:default", "core:window:allow-close"]
 }

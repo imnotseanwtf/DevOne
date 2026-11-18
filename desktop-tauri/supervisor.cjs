@@ -9,7 +9,8 @@
 // Logs go to stderr, which the shell writes to devone.log.
 //
 // Environment: DEVONE_DATA_DIR, DEVONE_SERVER_DIR, DEVONE_PORT (31337),
-// DEVONE_DATABASE_URL (use this PostgreSQL instead of the built-in one).
+// DEVONE_DATABASE_URL (use this PostgreSQL instead of the built-in one; a URL saved from
+// the app's settings, database-url.txt in the data folder, wins).
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -77,7 +78,12 @@ async function shutdown(code = 0) {
 async function main() {
   fs.mkdirSync(dataDir, { recursive: true });
 
-  let databaseUrl = process.env.DEVONE_DATABASE_URL || '';
+  // The URL saved from the app's database settings, else the environment override.
+  const savedUrlFile = path.join(dataDir, 'database-url.txt');
+  let databaseUrl =
+    (fs.existsSync(savedUrlFile) && fs.readFileSync(savedUrlFile, 'utf8').trim()) ||
+    process.env.DEVONE_DATABASE_URL ||
+    '';
   stage('database', databaseUrl ? 'Connecting to database' : 'Starting database');
   if (!databaseUrl) {
     database = await startDatabase({ dataDir, secret, log: (m) => log(`[postgres] ${m}`) });

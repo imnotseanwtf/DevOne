@@ -14,7 +14,25 @@ const electron = path.join(here, '..', 'desktop');
 const ui = path.join(here, 'ui');
 fs.rmSync(ui, { recursive: true, force: true });
 fs.cpSync(path.join(electron, 'ui'), ui, { recursive: true });
-fs.rmSync(path.join(ui, 'settings.html'));
+
+const stripCsp = (html) => html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '');
+
+const settingsShim = `<script>
+(() => {
+  const tauri = window.__TAURI__;
+  const invoke = tauri.core.invoke;
+  window.devone = {
+    getDatabase: () => invoke('get_database'),
+    testDatabase: (url) => invoke('test_database', { url }),
+    saveDatabase: ({ mode, url }) => invoke('save_database', { mode, url: url ?? '' })
+  };
+  window.close = () => tauri.window.getCurrentWindow().close();
+})();
+</script>
+`;
+let settings = stripCsp(fs.readFileSync(path.join(ui, 'settings.html'), 'utf8'));
+settings = settings.replace('<script>', `${settingsShim}<script>`);
+fs.writeFileSync(path.join(ui, 'settings.html'), settings);
 
 const shim = `<script>
 (() => {
@@ -35,7 +53,7 @@ const shim = `<script>
 </script>
 `;
 let html = fs.readFileSync(path.join(ui, 'splash.html'), 'utf8');
-html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '');
+html = stripCsp(html);
 html = html.replace('<script>', `${shim}<script>`);
 fs.writeFileSync(path.join(ui, 'index.html'), html);
 fs.rmSync(path.join(ui, 'splash.html'));
@@ -56,12 +74,19 @@ if (process.env.PREPARE_RUNTIME === '1') {
   const exe = process.platform === 'win32' ? 'node.exe' : 'node';
   fs.copyFileSync(process.execPath, path.join(runtime, exe));
 
-  fs.copyFileSync(path.join(here, 'supervisor.cjs'), path.join(runtime, 'supervisor.cjs'));
+  for (const file of ['supervisor.cjs', 'dbtest.cjs']) {
+    fs.copyFileSync(path.join(here, file), path.join(runtime, file));
+  }
   fs.copyFileSync(path.join(electron, 'database.js'), path.join(runtime, 'database.js'));
   const { dependencies } = JSON.parse(fs.readFileSync(path.join(electron, 'package.json'), 'utf8'));
   fs.writeFileSync(
     path.join(runtime, 'package.json'),
     JSON.stringify({ name: 'devone-runtime', private: true, dependencies }, null, 2)
   );
-  execFileSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], { cwd: runtime, stdio: 'inherit' });
+  // npm is a .cmd file on Windows, which needs a shell to run.
+  execFileSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], {
+    cwd: runtime,
+    stdio: 'inherit',
+    shell: process.platform === 'win32'
+  });
 }
