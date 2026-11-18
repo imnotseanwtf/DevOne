@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <title>Database connection</title>
+    <style>
+      :root { color-scheme: light dark; --muted: #6b7280; --border: #d1d5db; --accent: #2563eb; --bad: #dc2626; --good: #16a34a; }
+      body { margin: 0; padding: 24px; font: 14px/1.45 system-ui, sans-serif; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p { margin: 0 0 16px; color: var(--muted); }
+      label.option { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+      label.option b { display: block; }
+      label.option span { color: var(--muted); font-size: 13px; }
+      input[type='text'] { box-sizing: border-box; width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font: 13px ui-monospace, monospace; background: transparent; color: inherit; }
+      input[type='text']:disabled { opacity: 0.5; }
+      #custom { margin: 4px 0 12px 28px; }
+      .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+      .warn { font-size: 12px; margin: 12px 0; padding: 8px 10px; border-radius: 6px; background: rgba(234, 179, 8, 0.15); }
+      #status { min-height: 20px; margin: 8px 0; font-size: 13px; white-space: pre-wrap; }
+      #status.ok { color: var(--good); } #status.err { color: var(--bad); }
+      .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+      button { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button:disabled { opacity: 0.5; cursor: default; }
+    </style>
+  </head>
+  <body>
+    <h1>Database connection</h1>
+    <p>Choose where DevOne keeps its data.</p>
+
+    <label class="option">
+      <input type="radio" name="mode" value="builtin" />
+      <div><b>Built-in database</b><span>A PostgreSQL that runs inside the app, on this computer only.</span></div>
+    </label>
+    <label class="option">
+      <input type="radio" name="mode" value="custom" />
+      <div><b>My own PostgreSQL</b><span>Connect to a server you run, such as your team's database.</span></div>
+    </label>
+    <div id="custom">
+      <input id="url" type="text" spellcheck="false" autocomplete="off" placeholder="postgresql://user:password@host:5432/database" />
+      <div class="hint" id="hint">Add <code>?sslmode=require</code> if the server needs TLS. Tables are created and migrated automatically.</div>
+    </div>
+
+    <div class="warn">Switching databases does not copy data. DevOne restarts and uses whatever is in the database you pick; your other database is left untouched.</div>
+
+    <div id="status"></div>
+    <div class="actions">
+      <button id="test">Test connection</button>
+      <button id="cancel">Cancel</button>
+      <button id="save" class="primary">Save and restart</button>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const status = (text, kind = '') => { $('status').textContent = text; $('status').className = kind; };
+      const mode = () => document.querySelector('input[name=mode]:checked').value;
+      let hasSaved = false;
+
+      function sync() {
+        $('url').disabled = mode() !== 'custom';
+        $('test').disabled = mode() !== 'custom';
+      }
+      document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', sync));
+
+      function busy(on) { for (const id of ['test', 'save', 'cancel']) $(id).disabled = on; if (!on) sync(); }
+
+      $('cancel').onclick = () => window.close();
+
+      $('test').onclick = async () => {
+        const url = $('url').value.trim();
+        if (!url && !hasSaved) return status('Enter a connection URL first.', 'err');
+        if (!url) return status('Type a URL to test it; the saved one is already in use.', 'err');
+        busy(true); status('Connecting…');
+        const result = await window.devone.testDatabase(url);
+        busy(false);
+        result.ok ? status('Connected successfully.', 'ok') : status(result.error, 'err');
+      };
+
+      $('save').onclick = async () => {
+        busy(true); status(mode() === 'custom' ? 'Testing the connection…' : 'Saving…');
+        const result = await window.devone.saveDatabase({ mode: mode(), url: $('url').value });
+        if (result.ok) return status('Saved. Restarting DevOne…', 'ok');
+        busy(false); status(result.error, 'err');
+      };
+
+      (async () => {
+        const current = await window.devone.getDatabase();
+        hasSaved = Boolean(current && current.custom);
+        document.querySelector(`input[value=${hasSaved ? 'custom' : 'builtin'}]`).checked = true;
+        if (hasSaved) {
+          $('url').placeholder = current.url;
+          $('hint').textContent = 'Current: ' + current.url + ' — leave blank to keep it, or type a new URL.';
+        }
+        sync();
+      })();
+    </script>
+  </body>
+</html>

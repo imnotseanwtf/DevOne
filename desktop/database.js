@@ -202,4 +202,24 @@ async function migrate(databaseUrl, migrationsDir) {
   }
 }
 
-module.exports = { startDatabase, migrate };
+/** Checks that `databaseUrl` is a PostgreSQL URL the app can connect to. Throws a readable Error. */
+async function testConnection(databaseUrl) {
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error('That is not a valid URL. Expected postgresql://user:password@host:5432/database');
+  }
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('The URL must start with postgresql:// or postgres://');
+  }
+  const client = new Client({ connectionString: databaseUrl, connectionTimeoutMillis: 8000 });
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+module.exports = { startDatabase, migrate, testConnection };

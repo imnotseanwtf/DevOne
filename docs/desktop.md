@@ -53,6 +53,24 @@ publishes them as the GitHub Release `v<version>`. Pushes that keep the version 
 nothing; pull requests that touch `desktop/` build the Linux packages only. It can also be run by
 hand from the Actions tab.
 
+## Connect to your own database
+
+**File > Database connection…** (on macOS, the File menu in the menu bar; on Windows and Linux press
+Alt if the menu bar is hidden) lets you choose between the built-in PostgreSQL and your own server:
+
+1. Pick **My own PostgreSQL** and enter a URL such as
+   `postgresql://user:password@host:5432/database` (add `?sslmode=require` for TLS).
+2. **Test connection** checks it; **Save and restart** tests it again, saves it and restarts DevOne.
+
+The URL is stored with the OS keychain (`database-url.bin`, or a user-only `.txt` file without a
+keyring), not in `config.json`. Prisma migrations are applied to that database on every start, so the
+database must exist and the user needs permission to create tables. Choose **Built-in database** to
+go back.
+
+Switching databases doesn't copy data: DevOne uses whatever is in the database you point it at, and
+the other one is left untouched. If a saved database can't be reached at launch, the error dialog
+offers **Database connection…** so you can fix or replace the URL.
+
 ## Data and settings
 
 Everything the app keeps is in its data folder:
@@ -67,6 +85,7 @@ Everything the app keeps is in its data folder:
 - `encryption-key.*`: `DEVONE_ENCRYPTION_KEY`, generated on first launch. It protects stored
   provider tokens and SSH credentials; back it up with the database, since losing it makes them
   unrecoverable.
+- `database-url.*`: your own database's URL, if you set one in the app.
 - `database-password.*`: the local database's password, generated on first launch.
 - `devone.log`: what the database and server printed during the last launch. If DevOne can't
   start, the error dialog shows PostgreSQL's own message and points to this file.
@@ -86,7 +105,7 @@ a keyring (gnome-keyring or KWallet) they are stored as `.txt` files readable on
 ```
 
 - `databaseUrl`: use this PostgreSQL instead of the built-in one. The app applies the migrations to
-  it on start.
+  it on start. Prefer the in-app setting above, which keeps the URL (and its password) encrypted.
 - `port`: the local server listens on `http://127.0.0.1:<port>`, which is also its
   `DEVONE_APP_URL`. Register `http://127.0.0.1:31337/api/auth/<provider>/callback` with GitHub or
   GitLab if you want OAuth sign-in; personal access tokens work without it.

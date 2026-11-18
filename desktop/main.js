@@ -7,12 +7,23 @@
 // uses this against `bun dev` on localhost:3000.
 //
 // Settings live in config.json in the app's user data folder; see docs/desktop.md.
-const { app, BrowserWindow, dialog, safeStorage, shell, utilityProcess } = require('electron');
+// The database connection can also be changed in the app (File > Database
+// connection…); that URL is kept sealed like the other secrets.
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  safeStorage,
+  shell,
+  utilityProcess
+} = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
-const { migrate, startDatabase } = require('./database');
+const { migrate, startDatabase, testConnection } = require('./database');
 
 const DEFAULT_PORT = 31337;
 
@@ -62,19 +73,57 @@ function readConfig() {
 // kept with the OS keychain-backed safeStorage, never in the database or in
 // config.json. Linux without a keyring (no gnome-keyring or KWallet) has no
 // safeStorage, so they fall back to files only the user can read.
-function secret(name) {
-  const sealed = path.join(app.getPath('userData'), `${name}.bin`);
-  const plain = path.join(app.getPath('userData'), `${name}.txt`);
+function sealedPaths(name) {
+  const dir = app.getPath('userData');
+  return { sealed: path.join(dir, `${name}.bin`), plain: path.join(dir, `${name}.txt`) };
+}
+
+function readSealed(name) {
+  const { sealed, plain } = sealedPaths(name);
   if (fs.existsSync(sealed)) return safeStorage.decryptString(fs.readFileSync(sealed));
   if (fs.existsSync(plain)) return fs.readFileSync(plain, 'utf8').trim();
+  return null;
+}
 
-  const value = crypto.randomBytes(32).toString('base64');
+function writeSealed(name, value) {
+  const { sealed, plain } = sealedPaths(name);
+  fs.mkdirSync(path.dirname(sealed), { recursive: true });
+  removeSealed(name);
   if (safeStorage.isEncryptionAvailable()) {
     fs.writeFileSync(sealed, safeStorage.encryptString(value), { mode: 0o600 });
   } else {
     fs.writeFileSync(plain, value, { mode: 0o600 });
   }
+}
+
+function removeSealed(name) {
+  const { sealed, plain } = sealedPaths(name);
+  fs.rmSync(sealed, { force: true });
+  fs.rmSync(plain, { force: true });
+}
+
+function secret(name) {
+  const existing = readSealed(name);
+  if (existing) return existing;
+  const value = crypto.randomBytes(32).toString('base64');
+  writeSealed(name, value);
   return value;
+}
+
+// The PostgreSQL the app should use instead of its built-in one: the URL saved
+// from the app's settings, else "databaseUrl" in config.json, else none.
+function customDatabaseUrl(config = readConfig()) {
+  return readSealed('database-url') || config.databaseUrl || '';
+}
+
+function maskUrl(databaseUrl) {
+  try {
+    const url = new URL(databaseUrl);
+    if (url.password) url.password = '****';
+    return url.toString();
+  } catch {
+    return '';
+  }
 }
 
 function waitForPort(port, timeoutMs = 30_000) {
@@ -103,7 +152,7 @@ async function startLocalServer(config) {
     ? path.join(process.resourcesPath, 'server')
     : path.join(__dirname, 'server');
 
-  let databaseUrl = config.databaseUrl;
+  let databaseUrl = customDatabaseUrl(config);
   if (!databaseUrl) {
     database = await startDatabase({
       dataDir: app.getPath('userData'),
@@ -187,6 +236,117 @@ function openDevOne(win, origin) {
   win.loadURL(origin);
 }
 
+// The database connection settings: a small modal window (settings.html) that
+// talks to the handlers below through settings-preload.js.
+let settingsWindow = null;
+
+function openSettings() {
+  if (settingsWindow) {
+    settingsWindow.focus();
+    return new Promise((resolve) => settingsWindow.once('closed', resolve));
+  }
+  const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  settingsWindow = new BrowserWindow({
+    width: 560,
+    height: 520,
+    parent,
+    modal: Boolean(parent),
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    autoHideMenuBar: true,
+    title: 'Database connection',
+    icon: path.join(__dirname, 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'settings-preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false
+    }
+  });
+  settingsWindow.removeMenu();
+  settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  return new Promise((resolve) =>
+    settingsWindow.once('closed', () => {
+      settingsWindow = null;
+      resolve();
+    })
+  );
+}
+
+function fromSettingsWindow(event) {
+  return Boolean(settingsWindow) && event.sender === settingsWindow.webContents;
+}
+
+ipcMain.handle('database:get', (event) => {
+  if (!fromSettingsWindow(event)) return null;
+  const url = customDatabaseUrl();
+  return { custom: Boolean(url), url: maskUrl(url), dataDir: app.getPath('userData') };
+});
+
+ipcMain.handle('database:test', async (event, url) => {
+  if (!fromSettingsWindow(event)) return { ok: false, error: 'Not allowed' };
+  try {
+    await testConnection(String(url).trim());
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// mode "builtin" goes back to the app's own PostgreSQL; "custom" uses `url`, or the
+// URL already saved when `url` is empty. Either way the app restarts to apply it.
+ipcMain.handle('database:save', async (event, { mode, url }) => {
+  if (!fromSettingsWindow(event)) return { ok: false, error: 'Not allowed' };
+  try {
+    if (mode === 'custom') {
+      const next = String(url ?? '').trim() || customDatabaseUrl();
+      if (!next) return { ok: false, error: 'Enter a PostgreSQL connection URL.' };
+      await testConnection(next);
+      writeSealed('database-url', next);
+    } else {
+      removeSealed('database-url');
+    }
+    // A databaseUrl in config.json would otherwise still apply.
+    const config = readConfig();
+    if (config.databaseUrl) {
+      fs.writeFileSync(configPath(), JSON.stringify({ ...config, databaseUrl: '' }, null, 2));
+    }
+    log(`Database connection changed to ${mode === 'custom' ? 'a custom PostgreSQL' : 'the built-in database'}`);
+    setImmediate(() => {
+      app.relaunch();
+      app.quit();
+    });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+function buildMenu(canEditDatabase) {
+  const isMac = process.platform === 'darwin';
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(isMac ? [{ role: 'appMenu' }] : []),
+      {
+        label: 'File',
+        submenu: [
+          {
+            label: 'Database connection…',
+            enabled: canEditDatabase,
+            click: () => void openSettings()
+          },
+          { type: 'separator' },
+          isMac ? { role: 'close' } : { role: 'quit' }
+        ]
+      },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+      { role: 'windowMenu' }
+    ])
+  );
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -200,10 +360,13 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    let win = null;
+    let config = null;
     try {
-      const config = readConfig();
-      const win = createWindow();
+      config = readConfig();
       const remote = process.env.DEVONE_URL || config.url;
+      buildMenu(!remote);
+      win = createWindow();
       const origin = remote ? remote.replace(/\/$/, '') : await startLocalServer(config);
 
       openDevOne(win, origin);
@@ -213,7 +376,24 @@ if (!gotLock) {
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       log(`Startup failed: ${error instanceof Error ? error.stack : detail}`);
-      dialog.showErrorBox('DevOne could not start', `${detail}\n\nFull log: ${logPath()}`);
+      const message = `${detail}\n\nFull log: ${logPath()}`;
+      const remote = process.env.DEVONE_URL || config?.url;
+      if (!remote && win) {
+        // Let the person fix the database connection (a wrong URL, a server that
+        // is down) without editing config.json by hand.
+        const { response } = await dialog.showMessageBox(win, {
+          type: 'error',
+          title: 'DevOne could not start',
+          message: 'DevOne could not start',
+          detail: message,
+          buttons: ['Database connection…', 'Quit'],
+          defaultId: 0,
+          cancelId: 1
+        });
+        if (response === 0) await openSettings();
+      } else {
+        dialog.showErrorBox('DevOne could not start', message);
+      }
       app.quit();
     }
   });
