@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The boot screen may use events and commands. The DevOne server page it navigates to gets nothing.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
