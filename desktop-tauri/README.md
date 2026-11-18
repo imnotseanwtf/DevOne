@@ -78,7 +78,27 @@ a little high): about 517 MB in total.
 | WebKit network process | 56 |
 | Node (supervisor and Next.js server) | 51 |
 
-I did not measure the Electron app, so there is no comparison number yet.
+### Compared with Electron
+
+The Electron app (`desktop/`, run unpackaged with `--no-sandbox`) under the same conditions: same
+virtual display, fresh data folder, same server, 12 seconds after the sign-in page loaded, two runs
+each.
+
+| | Electron | Tauri |
+| --- | --- | --- |
+| Total RSS | 694 and 699 MB | 517 and 517 MB |
+| Shell and webview | about 608 MB (all `electron` processes, which include the server) | 138 (shell) + 184 (WebKit) + 56 (WebKit network) |
+| Next.js server | inside the `electron` figure | 51 MB (Node) |
+| PostgreSQL | 86 MB | 88 MB |
+
+So Tauri used about 180 MB (26%) less here. Postgres is the same under either shell; the saving is
+Chromium against the system WebKit. Caveats: software rendering on a virtual display, an idle page,
+and RSS counts shared pages once per process, so treat the absolute numbers loosely and the
+difference as the useful part. I did not build the Electron installer, so there is no installer-size
+comparison (its unpacked runtime alone is about 250 MB).
+
+Electron also left Postgres running when it was sent `SIGTERM` (its cleanup runs on a normal quit,
+and it stops a leftover server on the next start); the Tauri shell's `SIGKILL` test left nothing.
 
 Running it found two bugs the build did not: Node's `cpSync` turns relative symlinks into absolute
 paths on the build machine, and Tauri's bundler drops symlinks entirely. Together they left the
