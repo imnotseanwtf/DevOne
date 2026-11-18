@@ -4,6 +4,17 @@ All notable changes to DevOne are listed here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-18
+
+### Added
+
+- **Desktop app, your own database**: File > Database connection… connects the app to your own PostgreSQL instead of the built-in one, with a connection test. The URL is stored encrypted with the OS keychain, and the app restarts to apply it. If a saved database can't be reached at launch, the error dialog offers to fix the connection.
+- **Desktop app, first launch**: a new install now asks whether to use the built-in database or your own before it starts anything.
+
+### Changed
+
+- **Desktop app boot screen and database window**: redesigned. The boot screen shows the real startup steps (database, migrations, server) with how long each took, and both screens follow the system light or dark theme. See [docs/desktop.md](docs/desktop.md).
+
 ## [1.1.1] - 2026-10-03
 
 ### Fixed
