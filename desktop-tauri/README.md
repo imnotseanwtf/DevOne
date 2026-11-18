@@ -60,12 +60,37 @@ pull requests that touch this folder, uploads the installers as artifacts and pu
 Linux it also installs the package and runs `smoke-test.sh` under `xvfb`: the server must answer, and
 after the shell is killed with `SIGKILL` no `postgres` or supervisor process may remain.
 
+## Verified on Linux
+
+Built the `.deb`, installed it, and ran `smoke-test.sh` under `xvfb` as a non-root user (inside an
+`unshare` user namespace, since the container only had root): a first launch, then a second launch
+where the server answered (HTTP 307 to the sign-in page), and `kill -9` of the shell left no
+`postgres` or supervisor process behind. The window showed DevOne's sign-in page.
+
+Memory with the app idle on the sign-in page (summed RSS, shared pages counted once per process, so
+a little high): about 517 MB in total.
+
+| Process | MB |
+| --- | --- |
+| WebKit web process | 185 |
+| Tauri shell | 138 |
+| PostgreSQL | 88 |
+| WebKit network process | 56 |
+| Node (supervisor and Next.js server) | 51 |
+
+I did not measure the Electron app, so there is no comparison number yet.
+
+Running it found two bugs the build did not: Node's `cpSync` turns relative symlinks into absolute
+paths on the build machine, and Tauri's bundler drops symlinks entirely. Together they left the
+packaged server without `pg` and `@prisma/client`. `prepare.mjs` now copies the few symlinks the
+server relies on as real directories.
+
 ## Not verified
 
-- **A run.** It compiles and packages on Linux, and the connection check works, but I have not
-  launched the app or run `smoke-test.sh`: PostgreSQL needs a non-root user and creating one was
-  blocked in the session. The first CI run is the first real test of all of it.
-- macOS and Windows builds, and how WebKitGTK / WKWebView render the DevOne UI.
+- macOS and Windows builds, and how WKWebView / WebView2 render the DevOne UI.
+- The first-launch window and File > Database connection (the smoke test seeds the first-launch
+  choice instead of clicking through it).
+- GitHub Actions itself; the workflow has not run.
 
 ## Left out
 

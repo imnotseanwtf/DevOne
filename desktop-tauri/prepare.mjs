@@ -68,7 +68,25 @@ if (process.env.PREPARE_RUNTIME === '1') {
   if (!fs.existsSync(path.join(server, 'server.js'))) {
     execFileSync('node', [path.join(electron, 'prepare-server.mjs')], { stdio: 'inherit' });
   }
-  fs.cpSync(server, path.join(runtime, 'server'), { recursive: true, dereference: true });
+  // verbatimSymlinks keeps the server's relative links (.next/node_modules/pg-<hash> -> ../../node_modules/pg).
+  // Without it Node rewrites them to absolute paths on this machine, which don't exist once installed.
+  fs.cpSync(server, path.join(runtime, 'server'), { recursive: true, verbatimSymlinks: true });
+
+  // Tauri's bundler drops symlinks, so turn the few the server relies on into real
+  // copies (Next's Turbopack links pg, @prisma/client... into .next/node_modules).
+  const realize = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        const target = fs.realpathSync(file);
+        fs.rmSync(file);
+        fs.cpSync(target, file, { recursive: true });
+      } else if (entry.isDirectory()) {
+        realize(file);
+      }
+    }
+  };
+  realize(path.join(runtime, 'server'));
 
   // The Node binary that runs the supervisor and the server. Tauri has no Node of its own.
   const exe = process.platform === 'win32' ? 'node.exe' : 'node';
