@@ -1,7 +1,17 @@
 /* Shared by the desktop app's own windows (boot screen, database settings).
    Corner rule: containers 12px, controls 8px. One accent, used everywhere. */
-@font-face { font-family: 'Geist'; src: url('fonts/Geist-Variable.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: 'Geist Mono'; src: url('fonts/GeistMono-Variable.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face {
+  font-family: 'Geist';
+  src: url('fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
 
 :root {
   color-scheme: dark;
@@ -36,22 +46,46 @@
     --bad: #b42323;
   }
 }
-* { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
 body {
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 'Geist', system-ui, sans-serif;
+  font:
+    14px/1.5 'Geist',
+    system-ui,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   user-select: none;
   overflow: hidden;
 }
-.mono { font-family: 'Geist Mono', ui-monospace, monospace; }
-.ico { width: 18px; height: 18px; flex: none; }
+.mono {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+}
+.ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
 
 /* The DevOne mark (src/app/icon.svg), with a hairline so its black tile reads on a dark window. */
-.mark { display: block; border-radius: 22%; box-shadow: 0 0 0 1px var(--line-strong); }
+.mark {
+  display: block;
+  border-radius: 22%;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

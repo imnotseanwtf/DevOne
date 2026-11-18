@@ -208,7 +208,9 @@ async function testConnection(databaseUrl) {
   try {
     parsed = new URL(databaseUrl);
   } catch {
-    throw new Error('That is not a valid URL. Expected postgresql://user:password@host:5432/database');
+    throw new Error(
+      'That is not a valid URL. Expected postgresql://user:password@host:5432/database'
+    );
   }
   if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
     throw new Error('The URL must start with postgresql:// or postgres://');

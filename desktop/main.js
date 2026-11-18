@@ -357,7 +357,9 @@ ipcMain.handle('database:save', async (event, { mode, url }) => {
     if (config.databaseUrl) {
       fs.writeFileSync(configPath(), JSON.stringify({ ...config, databaseUrl: '' }, null, 2));
     }
-    log(`Database connection changed to ${mode === 'custom' ? 'a custom PostgreSQL' : 'the built-in database'}`);
+    log(
+      `Database connection changed to ${mode === 'custom' ? 'a custom PostgreSQL' : 'the built-in database'}`
+    );
     markSetupDone();
     if (settingsFirstRun) {
       // First launch: nothing is running yet, so carry on starting instead of restarting.

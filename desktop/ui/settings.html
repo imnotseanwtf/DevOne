@@ -1,205 +1,530 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src file: 'unsafe-inline'; font-src file:; script-src 'unsafe-inline'" />
-<title>Database connection</title>
-<link rel="stylesheet" href="shared.css" />
-<style>
-  body { display: grid; grid-template-columns: 264px 1fr; }
-  aside { background: var(--surface); border-right: 1px solid var(--line); padding: 32px 28px; display: flex; flex-direction: column; gap: 20px; }
-  aside .mark { width: 40px; height: 40px; animation: pop 600ms var(--ease) both; }
-  aside h1 { margin: 12px 0 0; font-size: 26px; line-height: 1.1; letter-spacing: -0.035em; font-weight: 600; }
-  aside p { margin: 0; color: var(--muted); max-width: 26ch; }
-  aside .note { margin-top: auto; font-size: 12.5px; color: var(--muted); padding-top: 16px; border-top: 1px solid var(--line); }
-  main { padding: 32px 32px 24px; display: flex; flex-direction: column; min-width: 0; }
-  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .tile { position: relative; display: grid; grid-template-columns: 36px 1fr 18px; gap: 14px; align-items: center; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-box); background: var(--raised); cursor: pointer; transition: border-color 200ms var(--ease), background 200ms var(--ease), transform 120ms var(--ease); }
-  .tile:hover { border-color: var(--line-strong); }
-  .tile:active { transform: scale(0.992); }
-  .tile input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
-  .tile:has(input:checked) { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--raised); }
-  .tile:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .tile .badge { width: 36px; height: 36px; border-radius: var(--r-ctl); display: grid; place-items: center; background: var(--surface); color: var(--muted); transition: color 200ms var(--ease); }
-  .tile:has(input:checked) .badge { color: var(--accent); }
-  .tile b { display: block; font-weight: 600; letter-spacing: -0.01em; }
-  .tile small { display: block; color: var(--muted); font-size: 13px; line-height: 1.4; }
-  .tile .tick { color: var(--accent); opacity: 0; transform: scale(0.6); transition: opacity 200ms var(--ease), transform 300ms var(--ease); }
-  .tile:has(input:checked) .tick { opacity: 1; transform: none; }
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src file: 'unsafe-inline'; font-src file:; script-src 'unsafe-inline'"
+    />
+    <title>Database connection</title>
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      body {
+        display: grid;
+        grid-template-columns: 264px 1fr;
+      }
+      aside {
+        background: var(--surface);
+        border-right: 1px solid var(--line);
+        padding: 32px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      aside .mark {
+        width: 40px;
+        height: 40px;
+        animation: pop 600ms var(--ease) both;
+      }
+      aside h1 {
+        margin: 12px 0 0;
+        font-size: 26px;
+        line-height: 1.1;
+        letter-spacing: -0.035em;
+        font-weight: 600;
+      }
+      aside p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 26ch;
+      }
+      aside .note {
+        margin-top: auto;
+        font-size: 12.5px;
+        color: var(--muted);
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+      main {
+        padding: 32px 32px 24px;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      fieldset {
+        border: 0;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .tile {
+        position: relative;
+        display: grid;
+        grid-template-columns: 36px 1fr 18px;
+        gap: 14px;
+        align-items: center;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-box);
+        background: var(--raised);
+        cursor: pointer;
+        transition:
+          border-color 200ms var(--ease),
+          background 200ms var(--ease),
+          transform 120ms var(--ease);
+      }
+      .tile:hover {
+        border-color: var(--line-strong);
+      }
+      .tile:active {
+        transform: scale(0.992);
+      }
+      .tile input {
+        position: absolute;
+        opacity: 0;
+        inset: 0;
+        cursor: pointer;
+      }
+      .tile:has(input:checked) {
+        border-color: var(--accent);
+        background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--raised);
+      }
+      .tile:has(input:focus-visible) {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .tile .badge {
+        width: 36px;
+        height: 36px;
+        border-radius: var(--r-ctl);
+        display: grid;
+        place-items: center;
+        background: var(--surface);
+        color: var(--muted);
+        transition: color 200ms var(--ease);
+      }
+      .tile:has(input:checked) .badge {
+        color: var(--accent);
+      }
+      .tile b {
+        display: block;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .tile small {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .tile .tick {
+        color: var(--accent);
+        opacity: 0;
+        transform: scale(0.6);
+        transition:
+          opacity 200ms var(--ease),
+          transform 300ms var(--ease);
+      }
+      .tile:has(input:checked) .tick {
+        opacity: 1;
+        transform: none;
+      }
 
-  .reveal { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 350ms var(--ease); }
-  .reveal > div { overflow: hidden; min-height: 0; }
-  .reveal.open { grid-template-rows: 1fr; }
-  .field { padding: 14px 2px 2px; display: grid; gap: 8px; }
-  .field label { font-size: 13px; font-weight: 500; }
-  input[type='text'] { width: 100%; height: 40px; padding: 0 12px; border-radius: var(--r-ctl); border: 1px solid var(--line-strong); background: var(--raised); color: var(--text); font: 13px 'Geist Mono', ui-monospace, monospace; user-select: text; }
-  input[type='text']::placeholder { color: var(--muted); }
-  input[type='text']:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
-  .help { font-size: 12.5px; color: var(--muted); }
-  .help code { font-family: 'Geist Mono', ui-monospace, monospace; color: var(--text); }
-  .status { min-height: 20px; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
-  .status .ico { width: 16px; height: 16px; margin-top: 2px; }
-  .status.ok { color: var(--accent); }
-  .status.err { color: var(--bad); }
-  .status.busy { color: var(--muted); }
-  .scan { position: relative; height: 2px; overflow: hidden; border-radius: 2px; margin-top: -4px; opacity: 0; transition: opacity 200ms; }
-  .scan.on { opacity: 1; }
-  .scan::after { content: ''; position: absolute; inset: 0; width: 40%; background: var(--accent); animation: scan 1s var(--ease) infinite; }
+      .reveal {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 350ms var(--ease);
+      }
+      .reveal > div {
+        overflow: hidden;
+        min-height: 0;
+      }
+      .reveal.open {
+        grid-template-rows: 1fr;
+      }
+      .field {
+        padding: 14px 2px 2px;
+        display: grid;
+        gap: 8px;
+      }
+      .field label {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      input[type='text'] {
+        width: 100%;
+        height: 40px;
+        padding: 0 12px;
+        border-radius: var(--r-ctl);
+        border: 1px solid var(--line-strong);
+        background: var(--raised);
+        color: var(--text);
+        font:
+          13px 'Geist Mono',
+          ui-monospace,
+          monospace;
+        user-select: text;
+      }
+      input[type='text']::placeholder {
+        color: var(--muted);
+      }
+      input[type='text']:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+        border-color: transparent;
+      }
+      .help {
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .help code {
+        font-family: 'Geist Mono', ui-monospace, monospace;
+        color: var(--text);
+      }
+      .status {
+        min-height: 20px;
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-size: 13px;
+      }
+      .status .ico {
+        width: 16px;
+        height: 16px;
+        margin-top: 2px;
+      }
+      .status.ok {
+        color: var(--accent);
+      }
+      .status.err {
+        color: var(--bad);
+      }
+      .status.busy {
+        color: var(--muted);
+      }
+      .scan {
+        position: relative;
+        height: 2px;
+        overflow: hidden;
+        border-radius: 2px;
+        margin-top: -4px;
+        opacity: 0;
+        transition: opacity 200ms;
+      }
+      .scan.on {
+        opacity: 1;
+      }
+      .scan::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        width: 40%;
+        background: var(--accent);
+        animation: scan 1s var(--ease) infinite;
+      }
 
-  .actions { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
-  .actions .spacer { margin-right: auto; }
-  button { height: 38px; padding: 0 16px; border-radius: var(--r-ctl); border: 1px solid var(--line-strong); background: transparent; color: var(--text); font: inherit; font-weight: 500; white-space: nowrap; cursor: pointer; transition: transform 120ms var(--ease), background 200ms var(--ease), opacity 200ms; }
-  button:hover:not(:disabled) { background: var(--accent-soft); }
-  button:active:not(:disabled) { transform: scale(0.98); }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button:disabled { opacity: 0.45; cursor: default; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
-  [hidden] { display: none !important; }
-  @keyframes pop { from { opacity: 0; transform: scale(0.85) translateY(4px); } to { opacity: 1; transform: none; } }
-  @keyframes scan { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
-</style>
-</head>
-<body>
-  <aside>
-    <svg class="mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
-  <g transform="translate(9.8 9.8) scale(1.85)" fill="#fafafa">
-    <path fill-rule="evenodd" d="M6 7.7H11.3V5.027A1.5 1.5 0 1 1 12.7 5.027V7.7H18A3 3 0 0 1 21 10.7V12.6H22A.8 .8 0 0 1 22.8 13.4V16A.8 .8 0 0 1 22 16.8H21V18.7A3 3 0 0 1 18 21.7H6A3 3 0 0 1 3 18.7V16.8H2A.8 .8 0 0 1 1.2 16V13.4A.8 .8 0 0 1 2 12.6H3V10.7A3 3 0 0 1 6 7.7ZM7.198 12.762L8.998 14.262A0.7 0.7 0 0 1 8.998 15.338L7.198 16.838A0.7 0.7 0 0 1 6.302 15.762L7.457 14.8L6.302 13.838A0.7 0.7 0 0 1 7.198 12.762ZM11.983 13.304L13.283 12.504A0.7 0.7 0 0 1 14.35 13.1L14.35 16.3A0.7 0.7 0 0 1 12.95 16.3L12.95 14.353L12.717 14.496A0.7 0.7 0 0 1 11.983 13.304ZM15.85 15.6h1.2a0.7 0.7 0 0 1 0 1.4h-1.2a0.7 0.7 0 0 1 0 -1.4Z"/>
-  </g>
-</svg>
-    <h1 id="title">Database connection</h1>
-    <p id="intro">Choose where DevOne keeps its data.</p>
-    <div class="note" id="note">Switching databases does not copy data. DevOne restarts and uses whatever is in the one you pick.</div>
-  </aside>
-
-  <main>
-    <fieldset>
-      <legend class="mono" style="position:absolute;opacity:0">Database</legend>
-      <label class="tile">
-        <input type="radio" name="mode" value="builtin" />
-        <span class="badge"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-  <path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10" />
-  <path d="M7 20h10" />
-  <path d="M9 16v4" />
-  <path d="M15 16v4" />
-</svg></span>
-        <span><b>Built-in database</b><small>Runs inside the app, on this computer only.</small></span>
-        <span class="tick"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-  <path d="M5 12l5 5l10 -10" />
-</svg></span>
-      </label>
-      <label class="tile">
-        <input type="radio" name="mode" value="custom" />
-        <span class="badge"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-  <path d="M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0" />
-  <path d="M4 6v6a8 3 0 0 0 16 0v-6" />
-  <path d="M4 12v6a8 3 0 0 0 16 0v-6" />
-</svg></span>
-        <span><b>My own PostgreSQL</b><small>Connect to a server you run, such as your team's.</small></span>
-        <span class="tick"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-  <path d="M5 12l5 5l10 -10" />
-</svg></span>
-      </label>
-    </fieldset>
-
-    <div class="reveal" id="reveal"><div>
-      <div class="field">
-        <label for="url">Connection URL</label>
-        <input id="url" type="text" spellcheck="false" autocomplete="off" placeholder="postgresql://user:password@host:5432/database" />
-        <div class="scan" id="scan"></div>
-        <div class="help" id="help">Add <code>?sslmode=require</code> if the server needs TLS. Tables are created automatically.</div>
-        <div class="status" id="status" aria-live="polite"></div>
+      .actions {
+        margin-top: auto;
+        padding-top: 16px;
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+      .actions .spacer {
+        margin-right: auto;
+      }
+      button {
+        height: 38px;
+        padding: 0 16px;
+        border-radius: var(--r-ctl);
+        border: 1px solid var(--line-strong);
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-weight: 500;
+        white-space: nowrap;
+        cursor: pointer;
+        transition:
+          transform 120ms var(--ease),
+          background 200ms var(--ease),
+          opacity 200ms;
+      }
+      button:hover:not(:disabled) {
+        background: var(--accent-soft);
+      }
+      button:active:not(:disabled) {
+        transform: scale(0.98);
+      }
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 600;
+      }
+      button.primary:hover:not(:disabled) {
+        background: var(--accent);
+        filter: brightness(1.08);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: scale(0.85) translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes scan {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(260%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <svg class="mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+        <rect width="64" height="64" rx="14" fill="#0a0a0a" />
+        <g transform="translate(9.8 9.8) scale(1.85)" fill="#fafafa">
+          <path
+            fill-rule="evenodd"
+            d="M6 7.7H11.3V5.027A1.5 1.5 0 1 1 12.7 5.027V7.7H18A3 3 0 0 1 21 10.7V12.6H22A.8 .8 0 0 1 22.8 13.4V16A.8 .8 0 0 1 22 16.8H21V18.7A3 3 0 0 1 18 21.7H6A3 3 0 0 1 3 18.7V16.8H2A.8 .8 0 0 1 1.2 16V13.4A.8 .8 0 0 1 2 12.6H3V10.7A3 3 0 0 1 6 7.7ZM7.198 12.762L8.998 14.262A0.7 0.7 0 0 1 8.998 15.338L7.198 16.838A0.7 0.7 0 0 1 6.302 15.762L7.457 14.8L6.302 13.838A0.7 0.7 0 0 1 7.198 12.762ZM11.983 13.304L13.283 12.504A0.7 0.7 0 0 1 14.35 13.1L14.35 16.3A0.7 0.7 0 0 1 12.95 16.3L12.95 14.353L12.717 14.496A0.7 0.7 0 0 1 11.983 13.304ZM15.85 15.6h1.2a0.7 0.7 0 0 1 0 1.4h-1.2a0.7 0.7 0 0 1 0 -1.4Z"
+          />
+        </g>
+      </svg>
+      <h1 id="title">Database connection</h1>
+      <p id="intro">Choose where DevOne keeps its data.</p>
+      <div class="note" id="note">
+        Switching databases does not copy data. DevOne restarts and uses whatever is in the one you
+        pick.
       </div>
-    </div></div>
+    </aside>
 
-    <div class="actions">
-      <button id="test" class="spacer" hidden>Test connection</button>
-      <button id="cancel">Cancel</button>
-      <button id="save" class="primary">Save and restart</button>
-    </div>
-  </main>
+    <main>
+      <fieldset>
+        <legend class="mono" style="position: absolute; opacity: 0">Database</legend>
+        <label class="tile">
+          <input type="radio" name="mode" value="builtin" />
+          <span class="badge"
+            ><svg
+              class="ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+              <path
+                d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10"
+              />
+              <path d="M7 20h10" />
+              <path d="M9 16v4" />
+              <path d="M15 16v4" /></svg
+          ></span>
+          <span
+            ><b>Built-in database</b
+            ><small>Runs inside the app, on this computer only.</small></span
+          >
+          <span class="tick"
+            ><svg
+              class="ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+              <path d="M5 12l5 5l10 -10" /></svg
+          ></span>
+        </label>
+        <label class="tile">
+          <input type="radio" name="mode" value="custom" />
+          <span class="badge"
+            ><svg
+              class="ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+              <path d="M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0" />
+              <path d="M4 6v6a8 3 0 0 0 16 0v-6" />
+              <path d="M4 12v6a8 3 0 0 0 16 0v-6" /></svg
+          ></span>
+          <span
+            ><b>My own PostgreSQL</b
+            ><small>Connect to a server you run, such as your team's.</small></span
+          >
+          <span class="tick"
+            ><svg
+              class="ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+              <path d="M5 12l5 5l10 -10" /></svg
+          ></span>
+        </label>
+      </fieldset>
 
-<script>
-  const ICON_OK = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <div class="reveal" id="reveal">
+        <div>
+          <div class="field">
+            <label for="url">Connection URL</label>
+            <input
+              id="url"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="postgresql://user:password@host:5432/database"
+            />
+            <div class="scan" id="scan"></div>
+            <div class="help" id="help">
+              Add <code>?sslmode=require</code> if the server needs TLS. Tables are created
+              automatically.
+            </div>
+            <div class="status" id="status" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="test" class="spacer" hidden>Test connection</button>
+        <button id="cancel">Cancel</button>
+        <button id="save" class="primary">Save and restart</button>
+      </div>
+    </main>
+
+    <script>
+      const ICON_OK = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
   <path stroke="none" d="M0 0h24v24H0z" fill="none" />
   <path d="M5 12l5 5l10 -10" />
 </svg>`;
-  const ICON_BAD = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      const ICON_BAD = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
   <path stroke="none" d="M0 0h24v24H0z" fill="none" />
   <path d="M18 6l-12 12" />
   <path d="M6 6l12 12" />
 </svg>`;
-  const $ = (id) => document.getElementById(id);
-  const mode = () => document.querySelector('input[name=mode]:checked').value;
-  let hasSaved = false;
-  let firstRun = false;
+      const $ = (id) => document.getElementById(id);
+      const mode = () => document.querySelector('input[name=mode]:checked').value;
+      let hasSaved = false;
+      let firstRun = false;
 
-  function status(text, kind = '') {
-    const el = $('status');
-    el.className = 'status ' + kind;
-    el.replaceChildren();
-    if (!text) return;
-    el.insertAdjacentHTML('beforeend', kind === 'ok' ? ICON_OK : kind === 'err' ? ICON_BAD : '');
-    const span = document.createElement('span');
-    span.textContent = text;
-    el.append(span);
-  }
+      function status(text, kind = '') {
+        const el = $('status');
+        el.className = 'status ' + kind;
+        el.replaceChildren();
+        if (!text) return;
+        el.insertAdjacentHTML(
+          'beforeend',
+          kind === 'ok' ? ICON_OK : kind === 'err' ? ICON_BAD : ''
+        );
+        const span = document.createElement('span');
+        span.textContent = text;
+        el.append(span);
+      }
 
-  function sync() {
-    const custom = mode() === 'custom';
-    $('reveal').classList.toggle('open', custom);
-    $('test').hidden = !custom;
-    if (custom) setTimeout(() => $('url').focus(), 250);
-    status('');
-  }
-  document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', sync));
+      function sync() {
+        const custom = mode() === 'custom';
+        $('reveal').classList.toggle('open', custom);
+        $('test').hidden = !custom;
+        if (custom) setTimeout(() => $('url').focus(), 250);
+        status('');
+      }
+      document
+        .querySelectorAll('input[name=mode]')
+        .forEach((r) => r.addEventListener('change', sync));
 
-  function busy(on) {
-    for (const id of ['test', 'save', 'cancel']) $(id).disabled = on;
-    $('scan').classList.toggle('on', on);
-  }
+      function busy(on) {
+        for (const id of ['test', 'save', 'cancel']) $(id).disabled = on;
+        $('scan').classList.toggle('on', on);
+      }
 
-  $('cancel').onclick = () => window.close();
+      $('cancel').onclick = () => window.close();
 
-  $('test').onclick = async () => {
-    const url = $('url').value.trim();
-    if (!url) return status(hasSaved ? 'Type a URL to test it. The saved one is already in use.' : 'Enter a connection URL first.', 'err');
-    busy(true); status('Connecting', 'busy');
-    const result = await window.devone.testDatabase(url);
-    busy(false);
-    result.ok ? status('Connected. This database is reachable.', 'ok') : status(result.error, 'err');
-  };
+      $('test').onclick = async () => {
+        const url = $('url').value.trim();
+        if (!url)
+          return status(
+            hasSaved
+              ? 'Type a URL to test it. The saved one is already in use.'
+              : 'Enter a connection URL first.',
+            'err'
+          );
+        busy(true);
+        status('Connecting', 'busy');
+        const result = await window.devone.testDatabase(url);
+        busy(false);
+        result.ok
+          ? status('Connected. This database is reachable.', 'ok')
+          : status(result.error, 'err');
+      };
 
-  $('save').onclick = async () => {
-    busy(true); status(mode() === 'custom' ? 'Testing the connection' : 'Saving', 'busy');
-    const result = await window.devone.saveDatabase({ mode: mode(), url: $('url').value });
-    if (result.ok) return status(result.restart ? 'Saved. Restarting DevOne.' : 'Saved. Starting DevOne.', 'ok');
-    busy(false); status(result.error, 'err');
-  };
+      $('save').onclick = async () => {
+        busy(true);
+        status(mode() === 'custom' ? 'Testing the connection' : 'Saving', 'busy');
+        const result = await window.devone.saveDatabase({ mode: mode(), url: $('url').value });
+        if (result.ok)
+          return status(
+            result.restart ? 'Saved. Restarting DevOne.' : 'Saved. Starting DevOne.',
+            'ok'
+          );
+        busy(false);
+        status(result.error, 'err');
+      };
 
-  (async () => {
-    const current = await window.devone.getDatabase();
-    hasSaved = Boolean(current && current.custom);
-    firstRun = Boolean(current && current.firstRun);
-    document.querySelector(`input[value=${hasSaved ? 'custom' : 'builtin'}]`).checked = true;
-    if (firstRun) {
-      $('title').textContent = 'Where should DevOne keep your data?';
-      $('intro').textContent = 'Pick the database that ships with the app, or connect your own. You can change it later in File, Database connection.';
-      $('note').hidden = true;
-      $('cancel').hidden = true;
-      $('save').textContent = 'Continue';
-    }
-    if (hasSaved) {
-      $('url').placeholder = current.url;
-      $('help').textContent = 'Saved: ' + current.url + '. Leave blank to keep it, or type a new URL.';
-    }
-    sync();
-  })();
-</script>
-</body>
+      (async () => {
+        const current = await window.devone.getDatabase();
+        hasSaved = Boolean(current && current.custom);
+        firstRun = Boolean(current && current.firstRun);
+        document.querySelector(`input[value=${hasSaved ? 'custom' : 'builtin'}]`).checked = true;
+        if (firstRun) {
+          $('title').textContent = 'Where should DevOne keep your data?';
+          $('intro').textContent =
+            'Pick the database that ships with the app, or connect your own. You can change it later in File, Database connection.';
+          $('note').hidden = true;
+          $('cancel').hidden = true;
+          $('save').textContent = 'Continue';
+        }
+        if (hasSaved) {
+          $('url').placeholder = current.url;
+          $('help').textContent =
+            'Saved: ' + current.url + '. Leave blank to keep it, or type a new URL.';
+        }
+        sync();
+      })();
+    </script>
+  </body>
 </html>
